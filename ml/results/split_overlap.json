@@ -1,0 +1,216 @@
+{
+ "dataset_revision": "004b46cc181ecdcabd715753c2c5346d869c0044",
+ "train_images": 51446,
+ "test_images": 2625,
+ "test_names_also_in_train": 0,
+ "test_exact_byte_duplicates_in_train": 0,
+ "test_near_duplicates_dhash": {
+  "max_hamming": 4,
+  "count": 78,
+  "fraction": 0.029714285714285714
+ },
+ "test_min_hamming_histogram": {
+  "0": 10,
+  "1": 9,
+  "2": 12,
+  "3": 17,
+  "4": 30,
+  "5": 54,
+  "6": 84,
+  "7": 114,
+  "8": 134,
+  "9": 178,
+  "10": 197,
+  ">10": 1786
+ },
+ "sequence_prefixes": {
+  "test": {
+   "VS_P": 2625
+  },
+  "train_count_for_test_prefixes": {
+   "VS_P": 0
+  }
+ },
+ "near_duplicate_examples": [
+  {
+   "test_image_id": 23,
+   "test_path": "VS_P7808.jpg",
+   "train_path": "pos_G3P61640.jpg",
+   "hamming": 3
+  },
+  {
+   "test_image_id": 41,
+   "test_path": "VS_P7954.jpg",
+   "train_path": "pos_G3P57221.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 125,
+   "test_path": "VS_P7969.jpg",
+   "train_path": "pos_G3P54874.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 142,
+   "test_path": "VS_P756.jpg",
+   "train_path": "pos_G3P54725.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 183,
+   "test_path": "VS_P7374.jpg",
+   "train_path": "pos_G3P49566.jpg",
+   "hamming": 3
+  },
+  {
+   "test_image_id": 185,
+   "test_path": "VS_P5577.jpg",
+   "train_path": "pos_G3P49528.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 215,
+   "test_path": "VS_P5775.jpg",
+   "train_path": "pos_G3P25878.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 217,
+   "test_path": "VS_P6485.jpg",
+   "train_path": "pos_G3P69722.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 306,
+   "test_path": "VS_P6484.jpg",
+   "train_path": "5054.jpg",
+   "hamming": 0
+  },
+  {
+   "test_image_id": 330,
+   "test_path": "VS_P7188.jpg",
+   "train_path": "3525.jpg",
+   "hamming": 2
+  },
+  {
+   "test_image_id": 360,
+   "test_path": "VS_P6709.jpg",
+   "train_path": "pos_G3P68601.jpg",
+   "hamming": 3
+  },
+  {
+   "test_image_id": 370,
+   "test_path": "VS_P6721.jpg",
+   "train_path": "pos_G3P8876.jpg",
+   "hamming": 0
+  },
+  {
+   "test_image_id": 391,
+   "test_path": "VS_P6537.jpg",
+   "train_path": "pos_G3P8876.jpg",
+   "hamming": 0
+  },
+  {
+   "test_image_id": 400,
+   "test_path": "VS_P7946.jpg",
+   "train_path": "pos_G3P59851.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 467,
+   "test_path": "VS_P5639.jpg",
+   "train_path": "pos_G3P55649.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 499,
+   "test_path": "VS_P2817.jpg",
+   "train_path": "pos_G3P8734.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 503,
+   "test_path": "VS_P6536.jpg",
+   "train_path": "5054.jpg",
+   "hamming": 0
+  },
+  {
+   "test_image_id": 523,
+   "test_path": "VS_P6720.jpg",
+   "train_path": "5257.jpg",
+   "hamming": 0
+  },
+  {
+   "test_image_id": 535,
+   "test_path": "VS_P6708.jpg",
+   "train_path": "3801.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 548,
+   "test_path": "VS_P4684.jpg",
+   "train_path": "pos_G3P64955.jpg",
+   "hamming": 3
+  },
+  {
+   "test_image_id": 550,
+   "test_path": "VS_P7366.jpg",
+   "train_path": "5247.jpg",
+   "hamming": 1
+  },
+  {
+   "test_image_id": 554,
+   "test_path": "VS_P7372.jpg",
+   "train_path": "pos_G3P8778.jpg",
+   "hamming": 3
+  },
+  {
+   "test_image_id": 643,
+   "test_path": "VS_P6694.jpg",
+   "train_path": "pos_G3P8752.jpg",
+   "hamming": 0
+  },
+  {
+   "test_image_id": 673,
+   "test_path": "VS_P7788.jpg",
+   "train_path": "pos_G3P62285.jpg",
+   "hamming": 3
+  },
+  {
+   "test_image_id": 715,
+   "test_path": "VS_P7373.jpg",
+   "train_path": "pos_G3P53824.jpg",
+   "hamming": 1
+  },
+  {
+   "test_image_id": 824,
+   "test_path": "VS_P5660.jpg",
+   "train_path": "pos_G3P59463.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 832,
+   "test_path": "VS_P4542.jpg",
+   "train_path": "pos_G3P23722.jpg",
+   "hamming": 0
+  },
+  {
+   "test_image_id": 852,
+   "test_path": "VS_P7842.jpg",
+   "train_path": "pos_G3P54053.jpg",
+   "hamming": 4
+  },
+  {
+   "test_image_id": 877,
+   "test_path": "VS_P7459.jpg",
+   "train_path": "pos_G3P25908.jpg",
+   "hamming": 2
+  },
+  {
+   "test_image_id": 885,
+   "test_path": "VS_P7465.jpg",
+   "train_path": "pos_G3P44661.jpg",
+   "hamming": 1
+  }
+ ]
+}

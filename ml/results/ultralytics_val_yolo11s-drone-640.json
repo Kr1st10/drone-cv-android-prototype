@@ -1,0 +1,13 @@
+{
+  "weights": "yolo11s-drone-640.onnx",
+  "dataset": "pathikg test split (2625 images)",
+  "imgsz": 640,
+  "conf": 0.001,
+  "iou_nms": 0.7,
+  "metrics/precision(B)": 0.9175452379768028,
+  "metrics/recall(B)": 0.8550924725289925,
+  "metrics/mAP50(B)": 0.9044484795041179,
+  "metrics/mAP50-95(B)": 0.4592484393068489,
+  "fitness": 0.4592484393068489,
+  "note": "Ultralytics P/R are reported at the confidence that maximises F1, not at 0.25."
+}

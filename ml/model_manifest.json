@@ -1,0 +1,27 @@
+{
+  "name": "yolo11s-drone",
+  "source": {
+    "repo": "https://huggingface.co/sapoepsilon/yolov11s-drone-detector",
+    "revision": "58897d6d6fadda9dfec979fd5dd7ad9040e73365",
+    "file": "best.pt",
+    "url": "https://huggingface.co/sapoepsilon/yolov11s-drone-detector/resolve/58897d6d6fadda9dfec979fd5dd7ad9040e73365/best.pt",
+    "size_bytes": 19160211,
+    "sha256": "337390e1018eaf815474c02e172a224425095466d4a5cd2dbd11301b0aa01b78"
+  },
+  "license": {
+    "model_card": "Apache-2.0",
+    "checkpoint_metadata": "AGPL-3.0 (https://ultralytics.com/license)",
+    "project_policy": "Treat as AGPL-3.0 until clarified. Weights are NOT committed to this repository; use ml/scripts/fetch_and_export.py."
+  },
+  "export": {
+    "format": "onnx",
+    "imgsz": 640,
+    "opset": 17,
+    "simplify": true,
+    "dynamic": false,
+    "half": false,
+    "nms": false,
+    "output_file": "ml/weights/yolo11s-drone-640.onnx"
+  },
+  "classes": {"0": "drone"}
+}

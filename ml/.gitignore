@@ -1,0 +1,5 @@
+# Third-party weights and datasets are downloaded by scripts, never committed.
+weights/
+data/
+*.onnx
+*.pt
