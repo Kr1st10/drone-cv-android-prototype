@@ -3,26 +3,24 @@ package ru.university.dronecv.detection
 import android.graphics.Bitmap
 
 /**
- * Контракт детектора объектов для будущего подключения YOLO (этап 2).
+ * Контракт детектора объектов. Реализация — [ru.university.dronecv.detection.onnx.OnnxDroneDetector]
+ * (YOLO11s, ONNX Runtime, локально на устройстве).
  *
- * На текущем этапе реализаций нет: инференс не выполняется и
- * фиктивные обнаружения не создаются.
- *
- * Ожидания к реализации:
- * - [detect] вызывается с фонового потока (например, из ImageAnalysis.Analyzer)
- *   и не должен вызываться с главного потока;
- * - вызовы последовательные, по одному кадру за раз;
- * - [close] освобождает ресурсы модели (интерпретатор, делегаты GPU/NPU).
+ * Требования к использованию:
+ * - [detect] — блокирующий вызов; не вызывать с главного потока (реализация бросает IllegalStateException);
+ * - вызовы сериализуются внутри реализации, по одному кадру за раз;
+ * - [close] освобождает ресурсы модели (сессию ONNX Runtime); после него [detect] бросает IllegalStateException.
  */
 interface ObjectDetector : AutoCloseable {
 
     /**
      * Выполняет обнаружение на одном кадре.
      *
-     * @param frame кадр с камеры в исходной ориентации сенсора.
-     * @param rotationDegrees поворот (0/90/180/270), который нужно применить к кадру,
+     * @param frame кадр/фото в исходной ориентации (ARGB_8888; другие конфигурации конвертируются).
+     * @param rotationDegrees поворот по часовой стрелке (0/90/180/270), который нужно применить к кадру,
      *        чтобы он совпал с ориентацией экрана (ImageInfo.rotationDegrees в CameraX).
-     * @return список обнаружений; пустой список, если объектов нет.
+     * @return список обнаружений в координатах повёрнутого кадра; пустой список, если объектов нет.
+     * @throws ru.university.dronecv.detection.yolo.DetectorException при ошибке инференса.
      */
     fun detect(frame: Bitmap, rotationDegrees: Int): List<Detection>
 }
@@ -33,11 +31,13 @@ interface ObjectDetector : AutoCloseable {
  * @param label имя класса (например, "drone").
  * @param confidence уверенность модели в диапазоне [0, 1].
  * @param box прямоугольник в нормализованных координатах повёрнутого кадра.
+ * @param classId индекс класса модели.
  */
 data class Detection(
     val label: String,
     val confidence: Float,
     val box: NormalizedBox,
+    val classId: Int = 0,
 ) {
     init {
         require(confidence in 0f..1f) { "confidence must be in [0, 1], was $confidence" }
@@ -57,4 +57,8 @@ data class NormalizedBox(
         }
         require(left <= right && top <= bottom) { "Invalid box: left > right or top > bottom" }
     }
+
+    /** Перевод в пиксели изображения размером [width] x [height]. */
+    fun toPixels(width: Int, height: Int): FloatArray =
+        floatArrayOf(left * width, top * height, right * width, bottom * height)
 }
