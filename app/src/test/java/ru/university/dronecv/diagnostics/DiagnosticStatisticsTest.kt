@@ -6,9 +6,10 @@ import org.junit.Test
 class DiagnosticStatisticsTest {
     @Test fun summaryAndPercentile() {
         assertNull(durationSummary(emptyList()))
+        assertNull(durationSummary(listOf(1.0, 2.0))!!.p95)
         val s = durationSummary((1..20).map(Int::toDouble))!!
         assertEquals(10.5, s.mean, 0.0); assertEquals(10.5, s.median, 0.0)
-        assertEquals(19.0, s.p95, 0.0); assertEquals(1.0, s.min, 0.0); assertEquals(20.0, s.max, 0.0)
+        assertEquals(19.0, s.p95!!, 0.0); assertEquals(1.0, s.min, 0.0); assertEquals(20.0, s.max, 0.0)
     }
     @Test fun sessionTokensAndBoundedStorage() {
         val store = DiagnosticFrames(1)

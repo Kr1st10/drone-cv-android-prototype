@@ -7,7 +7,7 @@ data class DurationSummary(
     val count: Int,
     val mean: Double,
     val median: Double,
-    val p95: Double,
+    val p95: Double?,
     val min: Double,
     val max: Double,
 )
@@ -18,7 +18,7 @@ fun durationSummary(values: List<Double>): DurationSummary? {
     val sorted = values.sorted()
     val n = sorted.size
     val median = if (n % 2 == 1) sorted[n / 2] else (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
-    return DurationSummary(n, sorted.average(), median, sorted[ceil(.95 * n).toInt() - 1], sorted.first(), sorted.last())
+    return DurationSummary(n, sorted.average(), median, if (n >= 20) sorted[ceil(.95 * n).toInt() - 1] else null, sorted.first(), sorted.last())
 }
 
 /** The monotonic frame duration excludes time between capture and analyzer entry and display. */

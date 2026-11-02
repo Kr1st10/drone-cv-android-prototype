@@ -89,7 +89,7 @@ class LiveController<Frame : AutoCloseable>(
                 else { busy = true; generation to confidence }
             } ?: return
             val token = diagnostics?.currentToken()
-            if (token != null) diagnostics.received(token)
+            if (token != null) diagnostics?.received(token)
             try {
                 val start = nanoTime()
                 val result = backend.infer(frame, request.second)

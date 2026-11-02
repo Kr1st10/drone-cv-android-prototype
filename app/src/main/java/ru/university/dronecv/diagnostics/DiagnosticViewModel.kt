@@ -40,7 +40,12 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
         sampler = viewModelScope.launch(Dispatchers.Default) {
             while (true) {
                 val sample = sampleResources(startedNs)
-                synchronized(lock) { if (token == id) resources.add(sample) }
+                synchronized(lock) {
+                    if (token == id) {
+                        resources.add(sample)
+                        mutableUi.value = mutableUi.value.copy(elapsedSeconds = sample.offsetNanos / 1_000_000_000L)
+                    }
+                }
                 delay(5_000)
             }
         }
@@ -54,6 +59,13 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             snapshot, resources.toList())
         report = result
         mutableUi.value = DiagnosticUi(recording = false, report = result)
+        viewModelScope.launch(Dispatchers.Default) {
+            val pipeline = durationSummary(snapshot.frames.map { it.pipelineMs })
+            val ort = durationSummary(snapshot.frames.map { it.inferenceMs })
+            synchronized(lock) {
+                if (report === result && token == null) mutableUi.value = mutableUi.value.copy(pipeline = pipeline, ort = ort)
+            }
+        }
     }
     fun export(uri: Uri) {
         val saved = synchronized(lock) { report } ?: return
@@ -85,4 +97,5 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     override fun onCleared() { stop(true, "ViewModel destroyed"); super.onCleared() }
 }
 
-data class DiagnosticUi(val recording: Boolean = false, val report: DiagnosticReport? = null, val exportStatus: String? = null)
+data class DiagnosticUi(val recording: Boolean = false, val report: DiagnosticReport? = null, val exportStatus: String? = null,
+                        val pipeline: DurationSummary? = null, val ort: DurationSummary? = null, val elapsedSeconds: Long = 0)

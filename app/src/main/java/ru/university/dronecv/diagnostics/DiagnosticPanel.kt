@@ -21,7 +21,7 @@ fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: 
     }
     Text("Диагностика", style = MaterialTheme.typography.titleSmall)
     if (ui.recording) {
-        Text("Сессия идёт. При фоне или выключении экрана она будет помечена прерванной.", style = MaterialTheme.typography.bodySmall)
+        Text("Сессия: ${ui.elapsedSeconds} с. При фоне или выключении экрана она будет помечена прерванной.", style = MaterialTheme.typography.bodySmall)
         Button(onClick = { model.stop() }, modifier = Modifier.fillMaxWidth().testTag("diagnostic-stop")) { Text("Завершить сессию") }
     } else {
         Button(onClick = { model.start(confidence) }, enabled = liveReady,
@@ -33,8 +33,15 @@ fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: 
         val fps = f.processedFps?.let { String.format(Locale.US, "%.2f", it) } ?: "—"
         Text("${if (f.interrupted) "Прервана: ${f.reason}" else "Завершена"} · ${f.completedFrames} кадров · $fps FPS\nДлительность: ${f.durationNanos / 1_000_000_000} с; отброшенные камерой неизвестны.",
             style = MaterialTheme.typography.bodySmall)
+        ui.pipeline?.let { stat ->
+            Text("Цикл: среднее ${fmt(stat.mean)}, медиана ${fmt(stat.median)}, p95 ${stat.p95?.let(::fmt) ?: "—"} мс",
+                style = MaterialTheme.typography.bodySmall)
+        }
+        ui.ort?.let { Text("ORT: среднее ${fmt(it.mean)}, медиана ${fmt(it.median)} мс", style = MaterialTheme.typography.bodySmall) }
         Button(onClick = { save.launch("drone-performance-${report.startEpochMs}.json") },
             modifier = Modifier.fillMaxWidth().testTag("diagnostic-export")) { Text("Экспорт JSON") }
     }
     ui.exportStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }
+
+private fun fmt(value: Double) = String.format(Locale.US, "%.1f", value)

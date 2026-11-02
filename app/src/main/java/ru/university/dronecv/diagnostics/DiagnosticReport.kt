@@ -26,7 +26,7 @@ private fun summary(values: List<Double>): String {
 fun DiagnosticReport.toJson(): String = buildString {
     val f = frames
     append("{\"schema_version\":1,\"started_epoch_ms\":$startEpochMs,\"device\":${q(device)},\"android_release\":${q(androidRelease)},\"android_sdk\":$sdk,\"app_version\":${q(appVersion)},")
-    append("\"model\":{\"name\":\"YOLO11s\",\"asset\":${q(modelAsset)},\"sha256\":${q(modelSha256)},\"input_width\":640,\"input_height\":640,\"backend\":\"ONNX Runtime CPU, intra-op 2, inter-op 1\",\"confidence\":$confidence},")
+    append("\"model\":{\"name\":\"YOLO11s\",\"asset\":${q(modelAsset)},\"sha256\":${q(modelSha256)},\"input_width\":640,\"input_height\":640,\"backend\":\"ONNX Runtime CPU, intra-op 2, inter-op 1\",\"confidence\":$confidence,\"nms_iou\":0.7},")
     append("\"duration_ms\":${f.durationNanos / 1_000_000.0},\"interrupted\":${f.interrupted},\"reason\":${f.reason?.let(::q) ?: "null"},")
     append("\"analyzer_callbacks_accepted\":${f.analyzerCallbacks},\"completed_frames\":${f.completedFrames},\"unstored_frames\":${f.unstoredFrames},\"processed_fps_session\":${num(f.processedFps)},")
     append("\"camera_frames_dropped\":null,\"frame_to_display_latency_ms\":null,")
@@ -34,6 +34,9 @@ fun DiagnosticReport.toJson(): String = buildString {
     append("\"conversion\":${summary(f.frames.map { it.conversionMs })},\"preprocessing\":${summary(f.frames.map { it.preprocessMs })},")
     append("\"ort_including_tensor_copy\":${summary(f.frames.map { it.inferenceMs })},\"postprocessing_nms\":${summary(f.frames.map { it.postprocessMs })},\"analyzer_pipeline\":${summary(f.frames.map { it.pipelineMs })}},")
     append("\"notes\":[\"CameraX KEEP_ONLY_LATEST upstream drops are not observable and are not inferred from callback counts.\",\"Pipeline excludes camera acquisition and UI display; ORT timing includes input/output copies.\",\"Summaries cover stored samples only; unstored_frames reports truncation.\",\"PSS is process proportional set size in kB; battery temperature is not CPU temperature.\"],")
+    val pss = resources.mapNotNull { it.pssKb }
+    val delta = if (pss.size >= 2) pss.last() - pss.first() else null
+    append("\"pss_first_to_last_sample_delta_kb\":${num(delta)},")
     append("\"frames\":[")
     f.frames.forEachIndexed { i, x ->
         if (i > 0) append(',')
