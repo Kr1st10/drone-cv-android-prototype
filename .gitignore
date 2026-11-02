@@ -10,3 +10,7 @@
 .cxx/
 *.apk
 *.aab
+# ONNX-модель ставится скриптом ml/scripts/install_android_model.py, в git не хранится.
+/app/src/main/assets/models/
+__pycache__/
+*.pyc

@@ -21,7 +21,14 @@
     "dynamic": false,
     "half": false,
     "nms": false,
-    "output_file": "ml/weights/yolo11s-drone-640.onnx"
+    "output_file": "ml/weights/yolo11s-drone-640.onnx",
+    "expected_onnx_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+    "expected_onnx_sha256_note": "Valid for the pinned versions in ml/requirements.txt (torch 2.6.0+cpu, ultralytics 8.4.197, onnx 1.23.2, onnxslim 0.1.98)."
   },
-  "classes": {"0": "drone"}
+  "classes": {"0": "drone"},
+  "android": {
+    "asset_path": "models/yolo11s-drone-640.onnx",
+    "onnx_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+    "install": "python ml/scripts/install_android_model.py"
+  }
 }

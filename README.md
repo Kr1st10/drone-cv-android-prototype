@@ -4,7 +4,7 @@
 локально обнаруживать небольшие дроны нейросетью (YOLO) и выделять их рамками.
 Целевое устройство — Xiaomi 17 Pro; на первом этапе тестируем на обычных Android-устройствах.
 
-## Этап 1 (текущий)
+## Реализовано
 
 - Kotlin + Jetpack Compose, один экран с полноэкранным видеопревью CameraX.
 - Запрос разрешения `CAMERA`, экран объяснения, переход в настройки при «больше не спрашивать».
@@ -12,7 +12,8 @@
   (с кнопкой «Повторить»), временные — «камера занята».
 - Жизненный цикл: Preview привязан к `LifecycleOwner` (камера освобождается в фоне),
   разрешение перепроверяется при `onResume`.
-- Интерфейс `ObjectDetector` (`detection/ObjectDetector.kt`) — только контракт, инференса нет.
+- `OnnxDroneDetector` реализует `ObjectDetector`: YOLO11s, ONNX Runtime CPU, поворот/letterbox, NMS и нормализованные рамки.
+- Детектор пока не подключён к экрану или CameraX. UI, галерея и live-инференс — следующий этап.
 
 ## Требования
 
@@ -31,18 +32,44 @@
 
 ### Командная строка
 
-`gradle-wrapper.jar` (бинарный файл) в репозиторий пока не добавлен. Один раз сгенерируйте wrapper
-установленным Gradle (8.9+) и закоммитьте результат:
+Wrapper Gradle 8.11.1 включён в репозиторий, дистрибутив проверяется по SHA-256.
+Укажите `JAVA_HOME` (JDK 17), `ANDROID_HOME` или локальный `local.properties` с `sdk.dir=...`.
+Установите SDK platform 35 и build-tools 34.0.0; примите лицензии SDK.
+
+Модель сторонняя и не хранится в git. Получить **точный готовый ONNX** можно из artifact
+`verified-onnx-model` успешного запуска workflow Android build этой ветки (GitHub → Actions).
+Распакуйте файл в `ml/weights/yolo11s-drone-640.onnx`, затем:
 
 ```bash
-gradle wrapper --gradle-version 8.11.1
-./gradlew assembleDebug
-./gradlew installDebug   # установка на подключённое устройство
+python3 ml/scripts/install_android_model.py
+./gradlew --no-daemon assembleDebug testDebugUnitTest
+python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`.
+Установщик принимает и внешний файл: `python3 ml/scripts/install_android_model.py --onnx /path/model.onnx`.
+Для JVM-тестов положите тот же файл в `ml/weights/yolo11s-drone-640.onnx`.
+Установка, Gradle и runtime проверяют SHA-256 из `ml/model_manifest.json`;
+сборка без модели или с другим хешем завершается ошибкой. Проверка APK проверяет наличие,
+хеш и отсутствие сжатия asset.
 
-CI (GitHub Actions, `.github/workflows/android-build.yml`) собирает `assembleDebug` на каждый push/PR.
+Если готового файла нет, воспроизведите существующий экспорт на **Linux x86_64, Python 3.13**
+в отдельном venv (версии закреплены, см. `ml/README.md`):
+
+```bash
+python -m pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r ml/requirements.txt
+python ml/scripts/fetch_and_export.py
+python ml/scripts/install_android_model.py
+```
+
+CI использует этот путь только при отсутствии cache, затем всегда перепроверяет SHA-256,
+негативные случаи отсутствующей/повреждённой модели, `assembleDebug`, `testDebugUnitTest` и модель в APK.
+Отчёты unit-тестов, APK и проверенный ONNX сохраняются как artifacts.
+Чистые Kotlin-тесты и smoke-тесты реального ORT-инференса обязательны;
+два сравнения с Python требуют `ml/data/android_parity/` (см. `ml/scripts/make_android_reference.py`),
+без этих локальных fixtures они явно пропускаются. Это не оценка точности и не проверка на телефоне.
+
+APK: `app/build/outputs/apk/debug/app-debug.apk`. Отчёт: `app/build/reports/tests/testDebugUnitTest/index.html`.
 
 ## Структура
 
@@ -58,6 +85,6 @@ app/src/main/java/ru/university/dronecv/
 ## Этап 2 (план)
 
 - Добавить `ImageAnalysis` (STRATEGY_KEEP_ONLY_LATEST) и передавать кадры в `ObjectDetector`.
-- Реализация YOLO (TFLite/LiteRT или ONNX Runtime) с GPU/NNAPI-делегатом.
+- Подключить существующий ONNX-детектор; ускорители — только после отдельных замеров.
 - Отрисовка рамок поверх превью с учётом поворота и `FILL_CENTER`-масштабирования.
 - Замер FPS/задержки на целевом устройстве.
