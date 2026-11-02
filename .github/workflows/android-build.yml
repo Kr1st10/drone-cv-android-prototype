@@ -74,3 +74,39 @@ jobs:
         with:
           name: device-tests
           path: app/build/outputs/apk/androidTest/debug/*.apk
+
+  connected-tests:
+    needs: assemble-debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-debug
+          path: device-apks/app
+      - uses: actions/download-artifact@v4
+        with:
+          name: device-tests
+          path: device-apks/test
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run real ORT, photo and CameraX UI integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front none -memory 2048
+          script: bash scripts/run-device-tests.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: connected-test-results
+          path: |
+            instrumentation.txt
+            instrumentation-logcat.txt
