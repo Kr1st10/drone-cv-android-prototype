@@ -100,7 +100,7 @@ def report():
  examples=[]
  for mode in MODES:
   recs=raw[mode]['records']
-  for category,arr in [('missed_drone',[r for r in recs if r['fn']]),('bird_fp',[r for r in recs if r['group']=='bird' and r['fp']]),('airplane_fp',[r for r in recs if r['group']=='airplane' and r['fp']])]:
+  for category,arr in [('missed_drone',[r for r in recs if r['fn'] and r['group']!='lt16']),('uncertain_tiny_label',[r for r in recs if r['fn'] and r['group']=='lt16']),('bird_fp',[r for r in recs if r['group']=='bird' and r['fp']]),('airplane_fp',[r for r in recs if r['group']=='airplane' and r['fp']])]:
    for r in arr[:2]:
     meta=lookup[(r['split'],r['id'])]
     examples.append({'mode':mode,'kind':category,'file':r['file'],'split':r['split'],'sequence':meta['sequence'],'annotations':meta['annotations'],'predictions':r['predictions']})

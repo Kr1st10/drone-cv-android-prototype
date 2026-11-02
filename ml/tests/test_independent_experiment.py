@@ -31,3 +31,17 @@ def test_recall_denominator_and_negative_fp():
  s=summarize({'records':records,'peak_rss_kib':1,'model_sha256':'x'},rows)
  assert s['recall_by_size']['<16']=={'n':1,'tp':0,'recall':0.0}
  assert s['fp_negative']==1 and s['groups']['bird']['images_with_fp']==1 and s['precision']==0.0
+
+def test_selection_enforces_sequence_and_visual_dedup():
+ import cv2
+ from independent_prepare import choose
+ # AOD-like image bytes: same uniform image under different sequence IDs is rejected.
+ images={'a':np.full((30,30,3),10,np.uint8),'b':np.full((30,30,3),10,np.uint8), 'c':np.full((30,30,3),100,np.uint8), 'd':np.full((30,30,3),200,np.uint8)}
+ class Archive:
+  def read(self,path):return cv2.imencode('.png',images[path.split('/')[-1]])[1].tobytes()
+ def row(file,seq):return {'split':'test','file':file,'group':'lt16','sequence':seq}
+ selected=choose([row('a','A'),row('b','B'),row('c','A'),row('d','D')],Archive())
+ assert len({r['sequence'] for r in selected})==len(selected)
+ # At most one of visually identical a and b can survive, regardless of hash ordering.
+ assert len({'a','b'} & {r['file'] for r in selected})<=1
+ assert 'd' in {r['file'] for r in selected}

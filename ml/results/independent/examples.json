@@ -2,6 +2,78 @@
  {
   "mode": "640",
   "kind": "missed_drone",
+  "file": "20190925_194211_1_5_226_jpg.rf.3f6cee0a668394249eec4caa61874d01.jpg",
+  "split": "train",
+  "sequence": "anti-uav:20190925_194211_1_5",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     406,
+     415,
+     16.5,
+     22
+    ]
+   }
+  ],
+  "predictions": []
+ },
+ {
+  "mode": "640",
+  "kind": "missed_drone",
+  "file": "yt-CwqG3k5FKFU-0005_jpg.rf.22a6a4623321d7b399e614fd91fb95c1.jpg",
+  "split": "train",
+  "sequence": "youtube:CwqG3k5FKFU",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     498,
+     276,
+     27.5,
+     20
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     516,
+     532,
+     24,
+     20
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    512.608,
+    529.734,
+    544.374,
+    555.827,
+    0.695,
+    true
+   ],
+   [
+    494.294,
+    271.956,
+    529.516,
+    303.61,
+    0.643,
+    false
+   ],
+   [
+    495.58,
+    746.929,
+    522.756,
+    769.141,
+    0.612,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "640",
+  "kind": "uncertain_tiny_label",
   "file": "20190925_143900_1_5_005_jpg.rf.4e0a30d068af292a4ecea0de520577cd.jpg",
   "split": "train",
   "sequence": "anti-uav:20190925_143900_1_5",
@@ -20,7 +92,7 @@
  },
  {
   "mode": "640",
-  "kind": "missed_drone",
+  "kind": "uncertain_tiny_label",
   "file": "yt-Sm87F_SF9kg-0183_jpg.rf.2e57305fae807012af2998d0daddc97f.jpg",
   "split": "train",
   "sequence": "youtube:Sm87F_SF9kg",
@@ -215,6 +287,259 @@
  {
   "mode": "960",
   "kind": "missed_drone",
+  "file": "20190925_194211_1_5_226_jpg.rf.3f6cee0a668394249eec4caa61874d01.jpg",
+  "split": "train",
+  "sequence": "anti-uav:20190925_194211_1_5",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     406,
+     415,
+     16.5,
+     22
+    ]
+   }
+  ],
+  "predictions": []
+ },
+ {
+  "mode": "960",
+  "kind": "missed_drone",
+  "file": "yt-Ov1O5AzpMB0-0220_jpg.rf.2b0763a435664c763d77fa374d2fbe18.jpg",
+  "split": "train",
+  "sequence": "youtube:Ov1O5AzpMB0",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     87,
+     29,
+     45,
+     56
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     253,
+     6,
+     36,
+     56.5
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     472,
+     309,
+     25.5,
+     68.5
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     798,
+     411,
+     43.5,
+     55.5
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     648,
+     520,
+     26.5,
+     35.5
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     490,
+     501,
+     21,
+     47
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     120,
+     516,
+     44,
+     80
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     305,
+     541,
+     28,
+     50
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     345,
+     491,
+     31,
+     71.5
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     360,
+     664,
+     33,
+     46.5
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     488,
+     660,
+     27.5,
+     36
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     611,
+     640,
+     20,
+     28.5
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     430,
+     0,
+     80,
+     43
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     666,
+     0,
+     24,
+     64
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     618,
+     472,
+     24,
+     47
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    259.572,
+    26.947,
+    287.497,
+    58.294,
+    0.745,
+    false
+   ],
+   [
+    93.714,
+    40.75,
+    119.898,
+    68.734,
+    0.744,
+    false
+   ],
+   [
+    125.437,
+    544.191,
+    151.205,
+    568.418,
+    0.687,
+    false
+   ],
+   [
+    661.816,
+    0.128,
+    685.091,
+    23.574,
+    0.679,
+    false
+   ],
+   [
+    486.672,
+    513.616,
+    506.794,
+    535.062,
+    0.656,
+    false
+   ],
+   [
+    813.871,
+    416.028,
+    835.874,
+    440.319,
+    0.612,
+    false
+   ],
+   [
+    475.027,
+    325.984,
+    493.293,
+    348.344,
+    0.602,
+    false
+   ],
+   [
+    618.136,
+    483.677,
+    634.791,
+    503.227,
+    0.583,
+    false
+   ],
+   [
+    344.849,
+    518.86,
+    362.388,
+    538.127,
+    0.566,
+    false
+   ],
+   [
+    457.717,
+    0.08,
+    483.866,
+    23.026,
+    0.524,
+    false
+   ],
+   [
+    651.915,
+    522.816,
+    670.624,
+    541.957,
+    0.512,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "960",
+  "kind": "uncertain_tiny_label",
   "file": "20190925_143900_1_5_005_jpg.rf.4e0a30d068af292a4ecea0de520577cd.jpg",
   "split": "train",
   "sequence": "anti-uav:20190925_143900_1_5",
@@ -233,7 +558,7 @@
  },
  {
   "mode": "960",
-  "kind": "missed_drone",
+  "kind": "uncertain_tiny_label",
   "file": "yt-Sm87F_SF9kg-0183_jpg.rf.2e57305fae807012af2998d0daddc97f.jpg",
   "split": "train",
   "sequence": "youtube:Sm87F_SF9kg",
@@ -428,6 +753,78 @@
  {
   "mode": "sahi416",
   "kind": "missed_drone",
+  "file": "20190925_194211_1_5_226_jpg.rf.3f6cee0a668394249eec4caa61874d01.jpg",
+  "split": "train",
+  "sequence": "anti-uav:20190925_194211_1_5",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     406,
+     415,
+     16.5,
+     22
+    ]
+   }
+  ],
+  "predictions": []
+ },
+ {
+  "mode": "sahi416",
+  "kind": "missed_drone",
+  "file": "yt-CwqG3k5FKFU-0005_jpg.rf.22a6a4623321d7b399e614fd91fb95c1.jpg",
+  "split": "train",
+  "sequence": "youtube:CwqG3k5FKFU",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     498,
+     276,
+     27.5,
+     20
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     516,
+     532,
+     24,
+     20
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    512.608,
+    529.466,
+    544.374,
+    556.134,
+    0.695,
+    true
+   ],
+   [
+    494.294,
+    271.956,
+    529.516,
+    303.61,
+    0.643,
+    false
+   ],
+   [
+    495.485,
+    746.929,
+    522.756,
+    769.141,
+    0.612,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "sahi416",
+  "kind": "uncertain_tiny_label",
   "file": "20190925_143900_1_5_005_jpg.rf.4e0a30d068af292a4ecea0de520577cd.jpg",
   "split": "train",
   "sequence": "anti-uav:20190925_143900_1_5",
@@ -446,7 +843,7 @@
  },
  {
   "mode": "sahi416",
-  "kind": "missed_drone",
+  "kind": "uncertain_tiny_label",
   "file": "yt-Sm87F_SF9kg-0183_jpg.rf.2e57305fae807012af2998d0daddc97f.jpg",
   "split": "train",
   "sequence": "youtube:Sm87F_SF9kg",
