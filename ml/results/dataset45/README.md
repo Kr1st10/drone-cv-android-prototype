@@ -25,13 +25,21 @@ AOD 4: Vama Soni, Dhruval Shah, Jeel Joshi, DOI 10.17632/cd5z895tr2.1, https://d
 ```bash
 export OPENBLAS_NUM_THREADS=1
 python ml/scripts/independent_prepare.py --archive /path/to/AOD4.zip
-# Альтернатива получения архива из документированного источника: --download
+# Альтернатива: python ml/scripts/independent_prepare.py --download
 python -m ml.dataset45.aod_pilot --images ml/data/independent/images --output ml/data/dataset45-pilot/manifest.json
 cmp ml/data/dataset45-pilot/manifest.json ml/results/dataset45/pilot_manifest.json
 python -m ml.dataset45.cli validate --manifest ml/data/dataset45-pilot/manifest.json > ml/data/dataset45-pilot/validation.json
 python -m ml.dataset45.cli duplicates --manifest ml/data/dataset45-pilot/manifest.json
 python -m ml.dataset45.cli visualize --manifest ml/data/dataset45-pilot/manifest.json --out ml/data/dataset45-pilot/overlays
 python -m pytest ml/tests -q
+```
+
+В проверенном окружении `--download` через Python/urllib вернул HTTP 403 от пути загрузки Mendeley, хотя получение через curl с уникальным query-параметром сработало. Если это повторится, скачайте архив ниже, обязательно сверьте SHA, а затем передайте его в `--archive`; это не меняет проверку целостности или состав данных:
+
+```bash
+curl -fL --retry 2 "https://data.mendeley.com/public-files/datasets/cd5z895tr2/files/fb36418a-ca4d-4628-8e42-c6e5b2575ac2/file_downloaded?cache_bust=$(date +%s)" -o /path/to/AOD4.zip
+printf '%s  %s\n' 'fac56b9c0494312bcd4c63dfefcbcd8ed07ab55d4b00584131c0b55273d24518' /path/to/AOD4.zip | sha256sum -c
+python ml/scripts/independent_prepare.py --archive /path/to/AOD4.zip
 ```
 
 `aod_pilot` проверяет SHA всех четырёх сохранённых манифестов 4.3 и каждого JPEG, конвертирует COCO xywh в xyxy без исправлений и выбирает фиксированные индексы. `cmp` подтверждает соответствие опубликованному манифесту при тех же версиях зависимостей. `split` на этом пилоте должен завершиться ошибкой quarantine; не меняйте флаги, чтобы принудительно его разрешить.
