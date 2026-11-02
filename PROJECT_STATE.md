@@ -1,6 +1,19 @@
 # PROJECT_STATE.md
 
-_Обновлено: 2026-11-02. Живая детекция, ветка `feature/live-drone-detection`._
+_Обновлено: 2026-11-02. Исследование SAHI (этап 4.1), ветка `research/sahi-4.1` от `main` @ `95e907e`._
+
+## Этап 4.1 — исследование SAHI (2026-11-02, Draft PR #8)
+
+- Только Python: `ml/scripts/sahi_experiment.py`, `sahi_examples.py`, тесты `ml/tests/test_sahi_merge.py`,
+  результаты `ml/results/sahi/` (REPORT.md, REPORT_TABLES.md, summary.json, examples.json, subset.json, pip_freeze.txt).
+  Android, CameraX, модель и экспорт не менялись; `sahi==0.14.0` добавлен только в `ml/requirements.txt`.
+- Проверено в Linux sandbox (Xeon 2 vCPU, Python 3.13.15, ORT 1.31.1 CPU): повторный экспорт дал прежний ONNX SHA-256
+  `b4867481…`; `python -m pytest ml/tests -q` — **16 passed**; полный прогон 560 изображений × 5 режимов × 2 порога.
+- Итог: слайс 416 + full-frame — R 0.755 → 0.812 при P 0.934 на позитивных кадрах и P 0.694 по всей выборке (baseline 0.929 и 0.775; conf 0.5, 383 GT, не независимый набор), но
+  негативы с ложной детекцией 37 → 60 (hard) и 17 → 37 (random) из 100; время ×5.09 относительно baseline прогона 2 при conf 0.25 на CPU. SAHI в Android не внедряется.
+- Уточнены знаменатель задержек (baseline прогона 2) и precision на позитивах / всей выборке; генератор таблиц обновлён. Локально `python -m unittest discover -s ml/tests -p test_sahi_reporting.py -v` — 3 passed без повторного инференса.
+- Не выполнено: независимые снимки с телефона, замеры на телефоне, высокое разрешение, Android-реализация (вне этапа).
+- PR #7 к этому моменту уже влит в `main` (merge-коммит `95e907e`); ниже — состояние живой детекции без изменений.
 
 ## Локальная интеграция и проверка на телефоне — 2026-11-02
 
@@ -8,7 +21,7 @@ _Обновлено: 2026-11-02. Живая детекция, ветка `featur
 - На macOS arm64 с Temurin 17.0.21 и Android SDK 35 / Build-Tools 34.0.0 выполнены `assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug` — BUILD SUCCESSFUL. JVM: 98 tests, 96 passed, 2 skipped (отсутствуют только Python parity fixtures). Lint: 0 ошибок, 44 предупреждения версий зависимостей/target SDK и прежнего backup manifest.
 - APK установлен на физический телефон `2602EPTC0G`, Android API 36, arm64-v8a. Все 9 Android-тестов passed, 0 skipped, `OK (9 tests)`, 18.317 с. Проверены настоящий CameraX → ORT → UI с несколькими последовательными кадрами, confidence, Stop/restart, смена вкладки, фон/возврат, recreation и обе альбомные ориентации, а также ORT и photo decoder/EXIF.
 - `verify_apk_model.py` подтвердил ожидаемую несжатую модель в APK. APK: 124 822 782 байта, SHA-256 `b84bcf8060a68dd6c1ea9ae4887e00503af92fad287d632d382b86b95c729c81`. Временный APK тестов после проверки удалён; основное приложение оставлено установленным и запущенным.
-- Это локальные проверки физического телефона; результаты прежнего CI указаны отдельно ниже. Полная ручная приёмка на реальных дронах, физическое совмещение рамок и длительные замеры FPS/нагрева ещё требуются по `docs/LIVE_QA.md`. PR #7 не объединён.
+- Это локальные проверки физического телефона; результаты прежнего CI указаны отдельно ниже. Полная ручная приёмка на реальных дронах, физическое совмещение рамок и длительные замеры FPS/нагрева ещё требуются по `docs/LIVE_QA.md`. На момент локальной проверки PR #7 ещё не был объединён; впоследствии он влит в main.
 
 ## База и версия
 
@@ -57,8 +70,8 @@ _Обновлено: 2026-11-02. Живая детекция, ветка `featur
 - Первый emulator run обнаружил layout/thread regression. UI collection закреплена на Main, размер панели
   стабилен относительно окна, добавлен непрерывный regression. Повторный run выше passed без layout crash;
   bind-log показывает ожидаемые переходы `1080×734/rotation 0` → `1164×753/rotation 1/3`.
-- PR: [#7](https://github.com/Kr1st10/drone-cv-android-prototype/pull/7), не объединён. Последующие изменения
-  после `478f2b7` меняют документацию и исключают двойной push/PR запуск CI (push только main, все PR проверяются).
+- PR: [#7](https://github.com/Kr1st10/drone-cv-android-prototype/pull/7), впоследствии объединён. Последующие изменения
+  после `478f2b7` меняли документацию и исключают двойной push/PR запуск CI (push только main, все PR проверяются).
   Код приложения/тестов не меняется; актуальный статус head — в checks PR.
 - `verify_apk_model.py`: модель несжатая, 37 927 788 байт, SHA-256
   `b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7`.

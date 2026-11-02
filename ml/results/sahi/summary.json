@@ -1,0 +1,632 @@
+{
+ "baseline": {
+  "0.25": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 316,
+   "fp": 34,
+   "fn": 67,
+   "precision": 0.9028571428571428,
+   "recall": 0.825065274151436,
+   "f1": 0.8622100954979536,
+   "dup_fp_on_matched_gt": 3,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.788135593220339
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.8472222222222222
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.7254901960784313
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.8170731707317073
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.9666666666666667
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 0,
+    "gt_lost": 0,
+    "gained_median_px": null,
+    "lost_median_px": null
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 51,
+     "detections": 66
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 36,
+     "detections": 41
+    }
+   },
+   "latency_ms": {
+    "mean": 102.71308928571429,
+    "p50": 101.58500000000001,
+    "p90": 104.824,
+    "mean_pos_640x480": 102.28125
+   },
+   "inferences_per_image": {
+    "mean": 1.0,
+    "min": 1,
+    "max": 1
+   }
+  },
+  "0.5": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 289,
+   "fp": 22,
+   "fn": 94,
+   "precision": 0.9292604501607717,
+   "recall": 0.7545691906005222,
+   "f1": 0.8328530259365994,
+   "dup_fp_on_matched_gt": 2,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.6949152542372882
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.7916666666666666
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.6666666666666666
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.7439024390243902
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.9166666666666666
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 0,
+    "gt_lost": 0,
+    "gained_median_px": null,
+    "lost_median_px": null
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 37,
+     "detections": 43
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 17,
+     "detections": 19
+    }
+   },
+   "latency_ms": {
+    "mean": 102.95226785714287,
+    "p50": 101.93,
+    "p90": 105.312,
+    "mean_pos_640x480": 103.01827777777778
+   },
+   "inferences_per_image": {
+    "mean": 1.0,
+    "min": 1,
+    "max": 1
+   }
+  }
+ },
+ "sahi_320_ov0.2_full": {
+  "0.25": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 329,
+   "fp": 87,
+   "fn": 54,
+   "precision": 0.7908653846153846,
+   "recall": 0.8590078328981723,
+   "f1": 0.8235294117647057,
+   "dup_fp_on_matched_gt": 12,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.8135593220338984
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.8611111111111112
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.8431372549019608
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.8658536585365854
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.95
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 19,
+    "gt_lost": 6,
+    "gained_median_px": 29.29,
+    "lost_median_px": 46.275000000000006
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 91,
+     "detections": 159
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 73,
+     "detections": 121
+    }
+   },
+   "latency_ms": {
+    "mean": 762.2059642857142,
+    "p50": 749.53,
+    "p90": 845.658,
+    "mean_pos_640x480": 789.2453055555555
+   },
+   "inferences_per_image": {
+    "mean": 6.871428571428571,
+    "min": 1,
+    "max": 10
+   }
+  },
+  "0.5": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 309,
+   "fp": 42,
+   "fn": 74,
+   "precision": 0.8803418803418803,
+   "recall": 0.8067885117493473,
+   "f1": 0.8419618528610354,
+   "dup_fp_on_matched_gt": 9,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.7627118644067796
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.7916666666666666
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.7254901960784313
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.8414634146341463
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.9333333333333333
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 21,
+    "gt_lost": 1,
+    "gained_median_px": 29.73,
+    "lost_median_px": 121.13
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 68,
+     "detections": 92
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 49,
+     "detections": 56
+    }
+   },
+   "latency_ms": {
+    "mean": 749.578125,
+    "p50": 751.98,
+    "p90": 810.177,
+    "mean_pos_640x480": 756.2434444444444
+   },
+   "inferences_per_image": {
+    "mean": 6.871428571428571,
+    "min": 1,
+    "max": 10
+   }
+  }
+ },
+ "sahi_320_ov0.2_tiles": {
+  "0.25": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 300,
+   "fp": 125,
+   "fn": 83,
+   "precision": 0.7058823529411765,
+   "recall": 0.783289817232376,
+   "f1": 0.7425742574257426,
+   "dup_fp_on_matched_gt": 24,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.7542372881355932
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.8055555555555556
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.8235294117647058
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.8048780487804879
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.75
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 19,
+    "gt_lost": 35,
+    "gained_median_px": 28.5,
+    "lost_median_px": 42.71
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 90,
+     "detections": 158
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 70,
+     "detections": 114
+    }
+   },
+   "latency_ms": {
+    "mean": 622.6169107142856,
+    "p50": 633.62,
+    "p90": 647.365,
+    "mean_pos_640x480": 634.672861111111
+   },
+   "inferences_per_image": {
+    "mean": 5.873214285714286,
+    "min": 1,
+    "max": 9
+   }
+  },
+  "0.5": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 281,
+   "fp": 77,
+   "fn": 102,
+   "precision": 0.7849162011173184,
+   "recall": 0.7336814621409922,
+   "f1": 0.7584345479082321,
+   "dup_fp_on_matched_gt": 18,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.7033898305084746
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.7361111111111112
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.7254901960784313
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.7804878048780488
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.7333333333333333
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 22,
+    "gt_lost": 30,
+    "gained_median_px": 28.215,
+    "lost_median_px": 63.05500000000001
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 63,
+     "detections": 91
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 45,
+     "detections": 53
+    }
+   },
+   "latency_ms": {
+    "mean": 653.1194642857143,
+    "p50": 633.145,
+    "p90": 755.0290000000001,
+    "mean_pos_640x480": 642.7763888888888
+   },
+   "inferences_per_image": {
+    "mean": 5.873214285714286,
+    "min": 1,
+    "max": 9
+   }
+  }
+ },
+ "sahi_416_ov0.2_full": {
+  "0.25": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 328,
+   "fp": 41,
+   "fn": 55,
+   "precision": 0.8888888888888888,
+   "recall": 0.856396866840731,
+   "f1": 0.8723404255319149,
+   "dup_fp_on_matched_gt": 0,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.8050847457627118
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.8611111111111112
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.803921568627451
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.8902439024390244
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.95
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 19,
+    "gt_lost": 7,
+    "gained_median_px": 29.29,
+    "lost_median_px": 23.37
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 82,
+     "detections": 111
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 60,
+     "detections": 79
+    }
+   },
+   "latency_ms": {
+    "mean": 523.2364285714286,
+    "p50": 529.255,
+    "p90": 587.547,
+    "mean_pos_640x480": 549.2336666666666
+   },
+   "inferences_per_image": {
+    "mean": 4.817857142857143,
+    "min": 1,
+    "max": 5
+   }
+  },
+  "0.5": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 311,
+   "fp": 22,
+   "fn": 72,
+   "precision": 0.933933933933934,
+   "recall": 0.8120104438642297,
+   "f1": 0.8687150837988827,
+   "dup_fp_on_matched_gt": 0,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.7372881355932204
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.8055555555555556
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.7450980392156863
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.8536585365853658
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.9666666666666667
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 24,
+    "gt_lost": 2,
+    "gained_median_px": 31.615000000000002,
+    "lost_median_px": 20.405
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 60,
+     "detections": 72
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 37,
+     "detections": 43
+    }
+   },
+   "latency_ms": {
+    "mean": 516.4182857142857,
+    "p50": 527.98,
+    "p90": 555.974,
+    "mean_pos_640x480": 536.241388888889
+   },
+   "inferences_per_image": {
+    "mean": 4.817857142857143,
+    "min": 1,
+    "max": 5
+   }
+  }
+ },
+ "sahi_416_ov0.2_full_iou": {
+  "0.25": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 333,
+   "fp": 104,
+   "fn": 50,
+   "precision": 0.7620137299771167,
+   "recall": 0.8694516971279374,
+   "f1": 0.8121951219512195,
+   "dup_fp_on_matched_gt": 61,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.8050847457627118
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.8888888888888888
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.803921568627451
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.9024390243902439
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.9833333333333333
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 18,
+    "gt_lost": 1,
+    "gained_median_px": 29.509999999999998,
+    "lost_median_px": 4.47
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 82,
+     "detections": 140
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 60,
+     "detections": 104
+    }
+   },
+   "latency_ms": {
+    "mean": 514.3010714285714,
+    "p50": 525.335,
+    "p90": 552.261,
+    "mean_pos_640x480": 537.8306666666666
+   },
+   "inferences_per_image": {
+    "mean": 4.817857142857143,
+    "min": 1,
+    "max": 5
+   }
+  },
+  "0.5": {
+   "pos_images": 360,
+   "gt": 383,
+   "tp": 313,
+   "fp": 62,
+   "fn": 70,
+   "precision": 0.8346666666666667,
+   "recall": 0.8172323759791122,
+   "f1": 0.8258575197889182,
+   "dup_fp_on_matched_gt": 40,
+   "recall_by_size": {
+    "<16px": {
+     "n_gt": 118,
+     "recall": 0.7372881355932204
+    },
+    "16-24px": {
+     "n_gt": 72,
+     "recall": 0.8333333333333334
+    },
+    "24-32px": {
+     "n_gt": 51,
+     "recall": 0.7450980392156863
+    },
+    "32-96px": {
+     "n_gt": 82,
+     "recall": 0.8536585365853658
+    },
+    ">=96px": {
+     "n_gt": 60,
+     "recall": 0.9666666666666667
+    }
+   },
+   "vs_baseline": {
+    "gt_gained": 24,
+    "gt_lost": 0,
+    "gained_median_px": 31.615000000000002,
+    "lost_median_px": null
+   },
+   "negatives": {
+    "hard": {
+     "images": 100,
+     "images_with_detections": 60,
+     "detections": 81
+    },
+    "random": {
+     "images": 100,
+     "images_with_detections": 37,
+     "detections": 52
+    }
+   },
+   "latency_ms": {
+    "mean": 512.0891428571429,
+    "p50": 524.665,
+    "p90": 547.3,
+    "mean_pos_640x480": 528.6957777777777
+   },
+   "inferences_per_image": {
+    "mean": 4.817857142857143,
+    "min": 1,
+    "max": 5
+   }
+  }
+ }
+}
