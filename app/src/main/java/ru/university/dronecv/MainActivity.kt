@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import ru.university.dronecv.camera.CameraScreen
 import ru.university.dronecv.ui.theme.DroneCvTheme
 
 class MainActivity : ComponentActivity() {
@@ -13,7 +12,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             DroneCvTheme {
-                CameraScreen()
+                DroneApp()
             }
         }
     }
