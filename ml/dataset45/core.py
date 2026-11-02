@@ -109,7 +109,6 @@ def ingest_pixels(image: Image.Image, metadata: dict, root: Path, source_sha: st
     sha=sha256_bytes(data); root.mkdir(parents=True,exist_ok=True); (root/'images').mkdir(exist_ok=True)
     dest=root/'images'/f'{sha}.png'
     if dest.exists() and sha256_bytes(dest.read_bytes())!=sha: raise ValueError('existing destination hash mismatch')
-    if not dest.exists(): dest.write_bytes(data)
     # Preserve caller's provenance values, but do not accept pre-approval at ingestion.
     keep=('source_url','license','rights_note','source_group','sequence_id','scene','independence','independence_evidence','usage_history','annotations','video_sha256','frame_index','frame_time_seconds','source_group_verified','origin_dataset','origin_file','origin_split','origin_id','origin_annotation_format')
     record={k:metadata[k] for k in keep if k in metadata}
@@ -119,6 +118,7 @@ def ingest_pixels(image: Image.Image, metadata: dict, root: Path, source_sha: st
                    'review_status':'unreviewed', **fingerprints(image)})
     errors,_=validate_record(record)
     if errors: raise ValueError('; '.join(errors))
+    if not dest.exists(): dest.write_bytes(data)
     return record
 
 

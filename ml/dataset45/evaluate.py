@@ -12,7 +12,7 @@ from collections import Counter
 from pathlib import Path
 import numpy as np
 from ml.scripts.evaluate import match
-from .core import load_manifest
+from .core import load_manifest, sha256_bytes
 from .cli import check
 from .splits import make_split
 
@@ -70,6 +70,8 @@ def main(argv=None):
     if any('ms' in x for x in pred['records']) and not str(config.get('timing_conditions','')).strip():raise ValueError('timing_conditions required')
     result=evaluate_records(selected,pred['records'],config['confidence'],config.get('matching_iou',.5))
     result.update({'split':a.split,'purpose':a.purpose,'config':config,'test_frozen':lock['test_frozen'], 'reference_sha256':lock.get('reference_sha256',[]),
+                   'manifest_sha256':sha256_bytes(a.manifest.read_bytes()), 'lock_sha256':sha256_bytes(a.lock.read_bytes()),
+                   'predictions_sha256':sha256_bytes(a.predictions.read_bytes()),
                    'limitation':'Predictions and timing are supplied externally, not verified inference. Independence depends on provenance evidence and prior-use declarations.'})
     a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(result,ensure_ascii=False,indent=2));return 0

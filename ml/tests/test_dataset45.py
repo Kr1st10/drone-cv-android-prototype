@@ -185,3 +185,20 @@ def test_end_to_end_final_eval_requires_frozen_holdout(tmp_path):
     assert evaluate_main(['--manifest',str(manifest),'--lock',str(lock_path),'--predictions',str(pred),'--split','test','--purpose','final','--output',str(output)])==0
     result=json.loads(output.read_text());assert result['counts']['fn']==len(test) and result['test_frozen'] and result['timing_ms'] is None
     with pytest.raises(ValueError,match='requires purpose'):evaluate_main(['--manifest',str(manifest),'--lock',str(lock_path),'--predictions',str(pred),'--split','test','--purpose','development','--output',str(output)])
+
+def test_invalid_import_does_not_write_image(tmp_path):
+    p=tmp_path/'source.png';Image.new('RGB',(32,32),'red').save(p)
+    m=metadata();m['annotations']=[{'class':'drone','xyxy':[-1,0,5,5]}]
+    with pytest.raises(ValueError):ingest_image(p,m,tmp_path/'dataset')
+    assert not list((tmp_path/'dataset'/'images').glob('*.png'))
+
+def test_cli_split_blocks_reference_and_locks_reference_set(tmp_path):
+    rows=[record(tmp_path,i) for i in range(30)]
+    manifest=tmp_path/'dataset'/'manifest.json';save_manifest(manifest,rows)
+    reference=tmp_path/'dataset'/'reference.json';save_manifest(reference,[rows[0]])
+    out=tmp_path/'out.json'
+    with pytest.raises(ValueError,match='potential conflicts'):main(['split','--manifest',str(manifest),'--reference',str(reference),'--out',str(out)])
+    assert not out.exists()
+    distinct=record(tmp_path,999);save_manifest(reference,[distinct])
+    assert main(['split','--manifest',str(manifest),'--reference',str(reference),'--out',str(out)])==0
+    with pytest.raises(ValueError,match='reference manifest set'):main(['split','--manifest',str(manifest),'--lock',str(out),'--out',str(tmp_path/'later.json')])
