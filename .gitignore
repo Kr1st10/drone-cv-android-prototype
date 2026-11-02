@@ -14,3 +14,6 @@
 /app/src/main/assets/models/
 __pycache__/
 *.pyc
+
+# Kotlin compiler session cache
+.kotlin/

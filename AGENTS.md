@@ -6,8 +6,9 @@
 Целевое устройство — Xiaomi 17 Pro; пока тестируем на обычных Android-устройствах.
 
 ## Архитектура и модули
-Один модуль `:app`, один экран, без DI и сложных слоёв.
-- `app/src/main/java/ru/university/dronecv/MainActivity.kt` — вход, edge-to-edge, Compose.
+Один модуль `:app`, режимы «Фото» и «Камера», без DI и сложных слоёв.
+- `app/src/main/java/ru/university/dronecv/MainActivity.kt` — вход, edge-to-edge, Compose; `DroneApp.kt` — переключение режимов.
+- `photo/` — Photo Picker, ограниченное декодирование/EXIF, Activity-scoped ViewModel и последовательный фоновый контроллер; общая геометрия Fit для фото и рамок.
 - `camera/CameraScreen.kt` — разрешение CAMERA, состояния экрана, ошибки.
 - `camera/CameraPreview.kt` — `PreviewView` + `ProcessCameraProvider`, привязка к lifecycle.
 - `detection/ObjectDetector.kt` — контракт детектора (`ObjectDetector`, `Detection`, `NormalizedBox`).
@@ -27,6 +28,7 @@ python3 ml/scripts/install_android_model.py # после получения пр
 ./gradlew installDebug                    # установка на устройство
 ./gradlew lint                            # статический анализ
 ```
+Для Android-специфичных изменений также `./gradlew assembleDebugAndroidTest lintDebug` (компиляция device-тестов не доказывает их выполнение).
 JVM-тесты включают реальный ORT-инференс; модель обязательна. Python parity fixtures — отдельные локальные данные, их отсутствие видно как skipped. Инструментальные тесты требуют Android-устройства. Нужен `local.properties` с `sdk.dir=...` (не коммитить).
 
 ## Правила изменений
@@ -49,3 +51,9 @@ JVM-тесты включают реальный ORT-инференс; моде�
 - Не дублировать большие отчёты и логи в контекстных документах.
 - Делегировать независимое исследование или review только при реальной пользе от параллельной работы.
 - Завершать задачу кратким отчётом: изменения, проверки, оставшиеся ограничения.
+
+## Владение ресурсами фото
+- Фото и результаты живут в `PhotoViewModel` до уничтожения Activity; поворот и переключение режимов их сохраняют. `PhotoController.close()` инвалидирует запросы и закрывает детектор после завершения нативного вызова, не блокируя UI.
+- Только один worker вызывает backend; одна ожидающая команда заменяется более новой. Проверять generation перед публикацией как результатов, так и ошибок.
+- Не вызывать `Bitmap.recycle()` для изображения, уже переданного Compose/render thread. Такие Bitmap освобождаются GC после снятия ссылок; явно утилизировать можно только неопубликованные/временные Bitmap.
+- В инференс передаётся тот же upright bitmap, который рисуется. Фото и рамки используют один `PhotoViewport`, без независимого округления размеров.

@@ -50,8 +50,8 @@ jobs:
           fi
           grep -F 'Model SHA-256 mismatch' "$RUNNER_TEMP/corrupt.log"
           mv "$RUNNER_TEMP/verified-model.onnx" "$model"
-      - name: Build APK and run Kotlin unit tests
-        run: ./gradlew --no-daemon assembleDebug testDebugUnitTest
+      - name: Build APK, compile device tests, run unit tests and lint
+        run: ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug
       - name: Verify model packaged in APK
         run: python ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
@@ -61,6 +61,7 @@ jobs:
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.*
       - uses: actions/upload-artifact@v4
         with:
           name: app-debug
@@ -69,3 +70,7 @@ jobs:
         with:
           name: verified-onnx-model
           path: ml/weights/yolo11s-drone-640.onnx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: device-tests
+          path: app/build/outputs/apk/androidTest/debug/*.apk
