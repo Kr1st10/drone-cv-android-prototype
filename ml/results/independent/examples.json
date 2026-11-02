@@ -1,0 +1,657 @@
+[
+ {
+  "mode": "640",
+  "kind": "missed_drone",
+  "file": "20190925_143900_1_5_005_jpg.rf.4e0a30d068af292a4ecea0de520577cd.jpg",
+  "split": "train",
+  "sequence": "anti-uav:20190925_143900_1_5",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     169,
+     140,
+     11.5,
+     15
+    ]
+   }
+  ],
+  "predictions": []
+ },
+ {
+  "mode": "640",
+  "kind": "missed_drone",
+  "file": "yt-Sm87F_SF9kg-0183_jpg.rf.2e57305fae807012af2998d0daddc97f.jpg",
+  "split": "train",
+  "sequence": "youtube:Sm87F_SF9kg",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     423,
+     394,
+     256,
+     220
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     677,
+     631,
+     7,
+     13
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    420.702,
+    417.512,
+    674.779,
+    635.707,
+    0.777,
+    true
+   ]
+  ]
+ },
+ {
+  "mode": "640",
+  "kind": "bird_fp",
+  "file": "yt-eKSZtbSEmwg-0122_jpg.rf.7b3ba4ff0c67527dbb0c8846e7316c92.jpg",
+  "split": "train",
+  "sequence": "youtube:eKSZtbSEmwg",
+  "annotations": [
+   {
+    "class": "bird",
+    "bbox": [
+     111,
+     408,
+     71,
+     84.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     352,
+     240,
+     48.5,
+     53.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     406,
+     223,
+     69,
+     106.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     302,
+     432,
+     35,
+     60.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     354,
+     392,
+     49,
+     73
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     399,
+     440,
+     65.5,
+     80
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    296.641,
+    403.512,
+    468.973,
+    557.173,
+    0.601,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "640",
+  "kind": "bird_fp",
+  "file": "yt-aEpAALj4Cw4-0048_jpg.rf.2d616ac775de6105ddef655bca82d6c7.jpg",
+  "split": "valid",
+  "sequence": "youtube:aEpAALj4Cw4",
+  "annotations": [
+   {
+    "class": "bird",
+    "bbox": [
+     303,
+     363,
+     120,
+     129.5
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    310.837,
+    378.762,
+    425.356,
+    487.435,
+    0.851,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "640",
+  "kind": "airplane_fp",
+  "file": "V_AIRPLANE_03535_085_png_jpg.rf.8fc51e39e4dbba282fb219c9d3457c64.jpg",
+  "split": "test",
+  "sequence": "source-video:V_AIRPLANE_03535",
+  "annotations": [
+   {
+    "class": "airplane",
+    "bbox": [
+     78,
+     684,
+     78,
+     62
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    78.501,
+    688.916,
+    145.505,
+    738.464,
+    0.758,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "640",
+  "kind": "airplane_fp",
+  "file": "yt-t2SZawBVSrQ-0005_jpg.rf.5918ca84a9976c081b90cb919ecd15d7.jpg",
+  "split": "train",
+  "sequence": "youtube:t2SZawBVSrQ",
+  "annotations": [
+   {
+    "class": "airplane",
+    "bbox": [
+     322,
+     492,
+     330,
+     132
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    356.493,
+    495.089,
+    651.5,
+    624.852,
+    0.783,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "960",
+  "kind": "missed_drone",
+  "file": "20190925_143900_1_5_005_jpg.rf.4e0a30d068af292a4ecea0de520577cd.jpg",
+  "split": "train",
+  "sequence": "anti-uav:20190925_143900_1_5",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     169,
+     140,
+     11.5,
+     15
+    ]
+   }
+  ],
+  "predictions": []
+ },
+ {
+  "mode": "960",
+  "kind": "missed_drone",
+  "file": "yt-Sm87F_SF9kg-0183_jpg.rf.2e57305fae807012af2998d0daddc97f.jpg",
+  "split": "train",
+  "sequence": "youtube:Sm87F_SF9kg",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     423,
+     394,
+     256,
+     220
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     677,
+     631,
+     7,
+     13
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    420.268,
+    420.364,
+    674.69,
+    638.7,
+    0.836,
+    true
+   ]
+  ]
+ },
+ {
+  "mode": "960",
+  "kind": "bird_fp",
+  "file": "yt-eKSZtbSEmwg-0122_jpg.rf.7b3ba4ff0c67527dbb0c8846e7316c92.jpg",
+  "split": "train",
+  "sequence": "youtube:eKSZtbSEmwg",
+  "annotations": [
+   {
+    "class": "bird",
+    "bbox": [
+     111,
+     408,
+     71,
+     84.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     352,
+     240,
+     48.5,
+     53.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     406,
+     223,
+     69,
+     106.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     302,
+     432,
+     35,
+     60.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     354,
+     392,
+     49,
+     73
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     399,
+     440,
+     65.5,
+     80
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    101.505,
+    426.444,
+    173.533,
+    487.118,
+    0.787,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "960",
+  "kind": "bird_fp",
+  "file": "yt-aEpAALj4Cw4-0048_jpg.rf.2d616ac775de6105ddef655bca82d6c7.jpg",
+  "split": "valid",
+  "sequence": "youtube:aEpAALj4Cw4",
+  "annotations": [
+   {
+    "class": "bird",
+    "bbox": [
+     303,
+     363,
+     120,
+     129.5
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    285.762,
+    379.004,
+    425.778,
+    487.14,
+    0.789,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "960",
+  "kind": "airplane_fp",
+  "file": "V_AIRPLANE_03535_085_png_jpg.rf.8fc51e39e4dbba282fb219c9d3457c64.jpg",
+  "split": "test",
+  "sequence": "source-video:V_AIRPLANE_03535",
+  "annotations": [
+   {
+    "class": "airplane",
+    "bbox": [
+     78,
+     684,
+     78,
+     62
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    77.664,
+    687.98,
+    143.84,
+    737.706,
+    0.828,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "960",
+  "kind": "airplane_fp",
+  "file": "yt-t2SZawBVSrQ-0005_jpg.rf.5918ca84a9976c081b90cb919ecd15d7.jpg",
+  "split": "train",
+  "sequence": "youtube:t2SZawBVSrQ",
+  "annotations": [
+   {
+    "class": "airplane",
+    "bbox": [
+     322,
+     492,
+     330,
+     132
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    356.081,
+    489.201,
+    651.46,
+    623.594,
+    0.794,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "sahi416",
+  "kind": "missed_drone",
+  "file": "20190925_143900_1_5_005_jpg.rf.4e0a30d068af292a4ecea0de520577cd.jpg",
+  "split": "train",
+  "sequence": "anti-uav:20190925_143900_1_5",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     169,
+     140,
+     11.5,
+     15
+    ]
+   }
+  ],
+  "predictions": []
+ },
+ {
+  "mode": "sahi416",
+  "kind": "missed_drone",
+  "file": "yt-Sm87F_SF9kg-0183_jpg.rf.2e57305fae807012af2998d0daddc97f.jpg",
+  "split": "train",
+  "sequence": "youtube:Sm87F_SF9kg",
+  "annotations": [
+   {
+    "class": "drone",
+    "bbox": [
+     423,
+     394,
+     256,
+     220
+    ]
+   },
+   {
+    "class": "drone",
+    "bbox": [
+     677,
+     631,
+     7,
+     13
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    417.908,
+    416.076,
+    681.683,
+    635.707,
+    0.82,
+    true
+   ]
+  ]
+ },
+ {
+  "mode": "sahi416",
+  "kind": "bird_fp",
+  "file": "yt-eKSZtbSEmwg-0122_jpg.rf.7b3ba4ff0c67527dbb0c8846e7316c92.jpg",
+  "split": "train",
+  "sequence": "youtube:eKSZtbSEmwg",
+  "annotations": [
+   {
+    "class": "bird",
+    "bbox": [
+     111,
+     408,
+     71,
+     84.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     352,
+     240,
+     48.5,
+     53.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     406,
+     223,
+     69,
+     106.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     302,
+     432,
+     35,
+     60.5
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     354,
+     392,
+     49,
+     73
+    ]
+   },
+   {
+    "class": "bird",
+    "bbox": [
+     399,
+     440,
+     65.5,
+     80
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    102.178,
+    426.022,
+    173.577,
+    485.876,
+    0.76,
+    false
+   ],
+   [
+    342.25,
+    231.135,
+    476.594,
+    323.994,
+    0.754,
+    false
+   ],
+   [
+    296.641,
+    403.512,
+    468.973,
+    557.173,
+    0.601,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "sahi416",
+  "kind": "bird_fp",
+  "file": "yt-aEpAALj4Cw4-0048_jpg.rf.2d616ac775de6105ddef655bca82d6c7.jpg",
+  "split": "valid",
+  "sequence": "youtube:aEpAALj4Cw4",
+  "annotations": [
+   {
+    "class": "bird",
+    "bbox": [
+     303,
+     363,
+     120,
+     129.5
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    310.837,
+    378.762,
+    425.356,
+    487.435,
+    0.851,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "sahi416",
+  "kind": "airplane_fp",
+  "file": "V_AIRPLANE_03535_085_png_jpg.rf.8fc51e39e4dbba282fb219c9d3457c64.jpg",
+  "split": "test",
+  "sequence": "source-video:V_AIRPLANE_03535",
+  "annotations": [
+   {
+    "class": "airplane",
+    "bbox": [
+     78,
+     684,
+     78,
+     62
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    77.245,
+    688.407,
+    145.505,
+    738.464,
+    0.786,
+    false
+   ]
+  ]
+ },
+ {
+  "mode": "sahi416",
+  "kind": "airplane_fp",
+  "file": "yt-t2SZawBVSrQ-0005_jpg.rf.5918ca84a9976c081b90cb919ecd15d7.jpg",
+  "split": "train",
+  "sequence": "youtube:t2SZawBVSrQ",
+  "annotations": [
+   {
+    "class": "airplane",
+    "bbox": [
+     322,
+     492,
+     330,
+     132
+    ]
+   }
+  ],
+  "predictions": [
+   [
+    356.405,
+    495.089,
+    658.942,
+    624.968,
+    0.783,
+    false
+   ]
+  ]
+ }
+]
