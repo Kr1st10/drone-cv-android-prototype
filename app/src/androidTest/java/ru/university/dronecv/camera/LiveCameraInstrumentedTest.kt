@@ -50,6 +50,7 @@ class LiveCameraInstrumentedTest {
 
     private fun drainNativeWork() {
         // Ordered after any native call and release. No sleeping and no fabricated FPS assertion.
+        compose.waitForIdle() // Apply disposal before queueing the worker barrier.
         DetectorWorker.executor.submit {}.get(90, TimeUnit.SECONDS)
         compose.waitForIdle()
     }
@@ -76,13 +77,13 @@ class LiveCameraInstrumentedTest {
         drainNativeWork()
         compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
         awaitResult()
-        for (orientation in listOf(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
-            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE)) {
+        for ((index, orientation) in listOf(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE).withIndex()) {
             val oldRotation = compose.activity.window.decorView.display.rotation
             compose.activityRule.scenario.onActivity { it.requestedOrientation = orientation }
             compose.waitUntil(15_000) {
                 compose.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
-                    compose.activity.window.decorView.display.rotation != oldRotation
+                    (index == 0 || compose.activity.window.decorView.display.rotation != oldRotation)
             }
             awaitResult()
         }
