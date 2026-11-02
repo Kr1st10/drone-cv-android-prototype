@@ -1,8 +1,15 @@
 # PROJECT_STATE.md
 
-_Обновлено: 2026-11-02. Исследование SAHI (этап 4.1), ветка `research/sahi-4.1` от `main` @ `95e907e`._
+_Обновлено: 2026-11-02. Исследование разрешения (этап 4.2), ветка `research/input-resolution-4.2` от `main` @ `b3ba08a`._
 
-## Этап 4.1 — исследование SAHI (2026-11-02, Draft PR #8)
+## Этап 4.2 — исследование разрешения
+
+- Исходная статическая модель 640; воспроизводимые ONNX-экспорты 960/1280 из прежнего `best.pt`, без обучения. Скрипты `ml/scripts/resolution_experiment.py`, `verify_resolution_parity.py`, `fingerprint_resolution_data.py`; результаты и инструкции — `ml/results/resolution/`.
+- На 560 не независимых кадрах, 383 GT: 640 R/P 0.755/0.775, 960 0.799/0.756, 1280 0.728/0.692, SAHI 416 0.812/0.694. FP соответственно 84/99/124/137; полная средняя задержка 102.8/242.3/461.0/542.2 мс на CPU, не Android. Для GT <16 px 960 не улучшил 640. Подробности и ограничения в `RESEARCH.md` и отчёте.
+- Linux Python: `pytest ml/tests -q` — 22 passed; PyTorch/ONNX parity для трёх изображений и трёх размеров прошёл; SHA-256 920 входных файлов проверен. Телефонный бенчмарк и независимая выборка не выполнены. Android-код не изменялся.
+- Pull Request #9 открыт в main, не объединён. Следующий шаг — независимые данные с телефона и инструментальная оценка 640/960 на целевом устройстве.
+
+## Этап 4.1 — исследование SAHI (2026-11-02, PR #8 объединён)
 
 - Только Python: `ml/scripts/sahi_experiment.py`, `sahi_examples.py`, тесты `ml/tests/test_sahi_merge.py`,
   результаты `ml/results/sahi/` (REPORT.md, REPORT_TABLES.md, summary.json, examples.json, subset.json, pip_freeze.txt).

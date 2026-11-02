@@ -5,10 +5,14 @@
 Из корня репозитория, после установки окружения из `ml/README.md` и подготовки данных `python ml/scripts/prepare_eval_data.py`:
 
 ```bash
+python ml/scripts/fingerprint_resolution_data.py
 python ml/scripts/resolution_experiment.py export
+python ml/scripts/verify_resolution_parity.py
 for mode in 640 960 1280 sahi416; do python ml/scripts/resolution_experiment.py run --mode "$mode"; done
 python ml/scripts/resolution_experiment.py report
-python -m unittest discover -s ml/tests -p test_resolution_experiment.py -v
+python -m pytest ml/tests -q
 ```
 
 Экспорт 640 использует существующий `fetch_and_export.py`; 960/1280 экспортируются из тех же проверенных весов, с opset 17, FP32, static, simplify, без NMS. `exports.json` содержит хеши и размеры; файлы весов не коммитятся. Измеряются отдельно сумма времени вызовов ORT и полный путь препроцессинг + инференс + NMS/слияние после трёх прогревов; декодирование JPEG не входит. Каждый режим запускается отдельным процессом. Peak RSS включает модель, рантайм и все декодированные изображения, а не только модель. SAHI измеряется заново в том же окружении, чтобы сравнение времени было корректным. `raw_*.json` сохраняются локально; агрегированный `summary.json` коммитится. Измерения CPU не означают FPS Android.
+
+`REPORT.md` описывает результаты и ограничения; `parity.json` содержит проверку PyTorch/ONNX, `input_manifest.json` — контрольную сумму всех входов. Использованное полное окружение — `pip_freeze.txt`.
