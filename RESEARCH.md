@@ -126,3 +126,43 @@ ONNX Runtime использует тот же файл, что и Python-про�
 - Качество на наших снимках и на малых дронах; влияние входа 1280 / SAHI.
 - Скорость на Xiaomi 17 Pro и прирост от NNAPI/XNNPACK/GPU.
 - FP16/INT8-квантование для уменьшения размера.
+
+
+## 5. Интеграция CameraX и ORT (2026-11-02)
+
+Проверены официальная [configuration](https://developer.android.com/media/camera/camerax/configuration),
+[analysis](https://developer.android.com/media/camera/camerax/analyze) и точные исходники
+[camera-core 1.4.1](https://dl.google.com/dl/android/maven2/androidx/camera/camera-core/1.4.1/camera-core-1.4.1-sources.jar),
+[camera-view 1.4.1](https://dl.google.com/dl/android/maven2/androidx/camera/camera-view/1.4.1/camera-view-1.4.1-sources.jar).
+
+- UseCaseGroup + PreviewView.viewPort/FILL_CENTER гарантируют одинаковый видимый FOV после crop и rotation.
+  Для задней камеры normalized upright-crop координаты непосредственно отображаются на размеры PreviewView;
+  отдельный экспериментальный CoordinateTransform не нужен для текущего ограниченного пути.
+- ImageAnalysis.java версии 1.4.1 определяет RGBA byte order как **R,G,B,A**. В guide analyze при проверке
+  был указан противоречащий A,R,G,B; реализация опирается на версионные API/исходники и channel/stride tests.
+- KEEP_ONLY_LATEST вместе с синхронным analyzer ограничивает работу текущим/последним кадром без отдельной очереди.
+  ImageProxy.close обязателен на всех путях. Физическое совмещение на конкретном телефоне всё ещё требует QA.
+- Использован CPU ORT sequential, intra-op=2/inter-op=1, spinning=0 согласно
+  [thread management](https://onnxruntime.ai/docs/performance/tune-performance/threading.html).
+  Это ограничивает конкуренцию и idle spin; оптимальность 2 потоков на целевом телефоне **не измерена**.
+  XNNPACK/NNAPI/GPU остаются кандидатами для отдельного сравнения, ускорение не заявляется.
+- RGBA читается построчно с crop/stride в переиспользуемый ARGB IntArray, поворот совмещён с letterbox
+  в прежнем препроцессоре. Анализ предпочитает 640×480: это экономит копирование относительно HD, но
+  конкретное влияние на малые объекты и частоту кадров ещё не измерено. CameraX может согласовать другой размер.
+
+### Интеграционные риски UI, обнаруженные CI
+
+2026-11-02, API 29 x86_64, [первый emulator run](https://github.com/Kr1st10/drone-cv-android-prototype/actions/runs/41435816804):
+последовательные camera rebind и timeout; затем stack `StateFlow.setValue → ApplyingContinuationInterceptor →
+TestMonotonicFrameClock.measureAndLayoutForTest` на `drone-inference`, concurrent layout crash.
+Это проверенный сбой тестового Compose dispatcher, не доказательство такого же thread dispatch в обычной Activity.
+UI collector закреплён на Dispatchers.Main.immediate. Размер панели зафиксирован независимо от статистики,
+чтобы убрать возможность feedback layout→rebind→invalidate; точная причина первого rebind loop ещё проверяется.
+Android regression ждёт ≥3 результатов в одной активной сессии. Переносы лямбд в отдельные функции не нужны:
+проверка javap показала стабильные rememberComposableLambda/state holder.
+
+Повторный [CI run 41439862685](https://github.com/Kr1st10/drone-cv-android-prototype/actions/runs/41439862685),
+код `478f2b7`: 9/9 Android-тестов passed, включая ≥3 последовательных результата и lifecycle/rotation;
+layout crash не повторился. Bind-log содержит стабильные 1080×734 (rotation 0) и 1164×753 (rotation 1/3)
+в соответствующих сценариях, без прежнего непрерывного пересоздания. Это подтверждение эмуляторной интеграции,
+не измерение FPS/нагрева телефона и не проверка качества на реальном дроне.

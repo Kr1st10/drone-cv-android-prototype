@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Drone CV</string>
     <string name="permission_title">Нужен доступ к камере</string>
-    <string name="permission_rationale">Приложению нужна камера, чтобы показывать видеопревью. В дальнейшем кадры будут анализироваться локально на устройстве.</string>
+    <string name="permission_rationale">Приложению нужна камера для видеопревью и обнаружения дронов. Анализ выполняется локально на устройстве.</string>
     <string name="permission_denied_permanently">Доступ к камере запрещён. Разрешите его в настройках приложения.</string>
     <string name="grant_permission">Разрешить</string>
     <string name="open_settings">Открыть настройки</string>

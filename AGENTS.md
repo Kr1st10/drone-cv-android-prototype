@@ -1,8 +1,8 @@
 # AGENTS.md — постоянные инструкции для агентов
 
 ## Проект
-Университетский CV-проект: Android-приложение, которое в будущем будет **локально** (на устройстве)
-обнаруживать небольшие дроны нейросетью (YOLO) и выделять их рамками на видеопревью.
+Университетский CV-проект: Android-приложение, которое **локально** (на устройстве)
+обнаруживает дроны нейросетью (YOLO) и выделять их рамками на видеопревью.
 Целевое устройство — Xiaomi 17 Pro; пока тестируем на обычных Android-устройствах.
 
 ## Архитектура и модули
@@ -10,7 +10,9 @@
 - `app/src/main/java/ru/university/dronecv/MainActivity.kt` — вход, edge-to-edge, Compose; `DroneApp.kt` — переключение режимов.
 - `photo/` — Photo Picker, ограниченное декодирование/EXIF, Activity-scoped ViewModel и последовательный фоновый контроллер; общая геометрия Fit для фото и рамок.
 - `camera/CameraScreen.kt` — разрешение CAMERA, состояния экрана, ошибки.
-- `camera/CameraPreview.kt` — `PreviewView` + `ProcessCameraProvider`, привязка к lifecycle.
+- `camera/CameraPreview.kt` — общий ViewPort Preview/ImageAnalysis, привязка к lifecycle и display rotation.
+- `camera/LiveController.kt` — последовательный analyzer, generation/source tokens и владение кадром; `AndroidLiveBackend` — RGBA crop → общий YOLO engine.
+- `detection/DetectorWorker.kt` — единственный process-wide ML-worker для фото и видео; ORT CPU sequential/2 потока без spinning.
 - `detection/ObjectDetector.kt` — контракт детектора (`ObjectDetector`, `Detection`, `NormalizedBox`).
 - `detection/onnx/` — Android-адаптер, проверка файла и общий JVM/Android ORT-движок; `detection/yolo/` — чистые Kotlin pre/postprocessing.
 - `app/src/test/` — Kotlin/JVM-тесты; `app/src/androidTest/` — инструментальный smoke-тест.
@@ -57,3 +59,12 @@ JVM-тесты включают реальный ORT-инференс; моде�
 - Только один worker вызывает backend; одна ожидающая команда заменяется более новой. Проверять generation перед публикацией как результатов, так и ошибок.
 - Не вызывать `Bitmap.recycle()` для изображения, уже переданного Compose/render thread. Такие Bitmap освобождаются GC после снятия ссылок; явно утилизировать можно только неопубликованные/временные Bitmap.
 - В инференс передаётся тот же upright bitmap, который рисуется. Фото и рамки используют один `PhotoViewport`, без независимого округления размеров.
+
+## Владение ресурсами живой камеры
+- Preview и ImageAnalysis одной задней камеры привязываются одним UseCaseGroup с `PreviewView.viewPort`, FILL_CENTER. Рамки нормализованы относительно raw cropRect после `rotationDegrees`; повторно их не вращать. Изменение layout/display rotation требует нового ViewPort и invalidation.
+- ImageAnalysis RGBA/KEEP_ONLY_LATEST вызывает backend синхронно на `DetectorWorker.executor`, без дополнительной очереди. Каждый ImageProxy закрывается в `finally` контроллера. RGBA converter возвращает заимствованный буфер: использовать только до следующего кадра на том же worker.
+- Stop/pause/error/rebind сначала инвалидируют результат; source token защищает и от callback старой активации. Старые ошибки тоже отбрасываются. Монотонная revision для UI expiry не совпадает с generation запросов.
+- Снимать analyzer при остановке; закрывать модель только в очереди того же ML-worker после native call. Не ждать ORT и не применять shutdownNow на UI. Общий idle worker живёт до завершения процесса; backend владеет ORT-сессией.
+
+- Размер области превью не должен зависеть от появления/текста результата или статистики: иначе layout → ViewPort rebind → invalidate может сбрасывать каждый результат. Панель имеет фиксированный размер относительно доступного окна и прокручивается внутри.
+- UI-коллекция StateFlow детектора явно использует Dispatchers.Main.immediate; unit controller остаётся Android-independent. Это также исключает перенос Compose test frame/layout на ML-worker через unconfined test continuation.
