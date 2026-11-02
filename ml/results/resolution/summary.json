@@ -2,7 +2,7 @@
   "confidence": 0.5,
   "match_iou": 0.5,
   "nms_iou": 0.7,
-  "status": "partial: 640 and 960 completed; 1280 and SAHI pending",
+  "status": "partial: all three resolutions complete; SAHI comparison running",
   "results": {
     "640": {
       "images": 560,
@@ -117,6 +117,68 @@
       },
       "peak_rss_kib": 1040452,
       "model_sha256": "6cb34232e6fff08860e2baf8f407b1ce54abd52ebd577cd088ef2d6a45d761a1",
+      "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
+      "environment": {
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+        "logical_cpus": 2,
+        "platform": "Linux-6.18.56-x86_64-with-glibc2.34",
+        "python": "3.13.15",
+        "onnxruntime": "1.31.1",
+        "numpy": "2.5.4",
+        "opencv": "5.0.0"
+      }
+    },
+    "1280": {
+      "images": 560,
+      "positive_images": 360,
+      "negative_images": 200,
+      "gt": 383,
+      "tp": 279,
+      "fn": 104,
+      "fp_positive": 52,
+      "fp_negative": 72,
+      "fp_all": 124,
+      "precision_all": 0.6923076923076923,
+      "recall": 0.7284595300261096,
+      "recall_by_size": {
+        "<16": {
+          "n": 118,
+          "tp": 76,
+          "recall": 0.6440677966101694
+        },
+        "16-24": {
+          "n": 72,
+          "tp": 57,
+          "recall": 0.7916666666666666
+        },
+        "24-32": {
+          "n": 51,
+          "tp": 36,
+          "recall": 0.7058823529411765
+        },
+        "32-96": {
+          "n": 82,
+          "tp": 67,
+          "recall": 0.8170731707317073
+        },
+        ">=96": {
+          "n": 60,
+          "tp": 43,
+          "recall": 0.7166666666666667
+        }
+      },
+      "negative_images_with_fp": 65,
+      "latency_ms": {
+        "mean": 460.9575677892897,
+        "median": 449.27955549985654,
+        "p90": 509.5679886000198
+      },
+      "model_inference_ms": {
+        "mean": 440.25155510179314,
+        "median": 428.9867795000646
+      },
+      "peak_rss_kib": 1338088,
+      "model_sha256": "ba356bb2f459050019e985070d7d910cf0e9fcef380c366824b3b224584a1e50",
       "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
       "environment": {
         "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
