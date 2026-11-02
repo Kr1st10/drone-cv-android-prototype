@@ -1,0 +1,6 @@
+{
+  "description": "SHA-256 over ordered relative paths + NUL + SHA-256 bytes of 360 positive images and labels, then 200 COCO images, in subset.json order",
+  "files": 920,
+  "sha256": "afd53fb3a9311f07e9b21101e41bb4fcf0b7c6e371e5fd9fdf91f933056f5cec",
+  "pathikg_test_parquet_sha256": "e700f7ff59854804e4643269c2ed6d7e9712df3eb183ad4a40cbd4ec94bb25b9"
+}

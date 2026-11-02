@@ -2,7 +2,7 @@
   "confidence": 0.5,
   "match_iou": 0.5,
   "nms_iou": 0.7,
-  "status": "partial: 640 completed; other modes pending",
+  "status": "partial: 640 and 960 completed; 1280 and SAHI pending",
   "results": {
     "640": {
       "images": 560,
@@ -55,6 +55,68 @@
       },
       "peak_rss_kib": 828512,
       "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+      "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
+      "environment": {
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+        "logical_cpus": 2,
+        "platform": "Linux-6.18.56-x86_64-with-glibc2.34",
+        "python": "3.13.15",
+        "onnxruntime": "1.31.1",
+        "numpy": "2.5.4",
+        "opencv": "5.0.0"
+      }
+    },
+    "960": {
+      "images": 560,
+      "positive_images": 360,
+      "negative_images": 200,
+      "gt": 383,
+      "tp": 306,
+      "fn": 77,
+      "fp_positive": 30,
+      "fp_negative": 69,
+      "fp_all": 99,
+      "precision_all": 0.7555555555555555,
+      "recall": 0.7989556135770235,
+      "recall_by_size": {
+        "<16": {
+          "n": 118,
+          "tp": 81,
+          "recall": 0.6864406779661016
+        },
+        "16-24": {
+          "n": 72,
+          "tp": 60,
+          "recall": 0.8333333333333334
+        },
+        "24-32": {
+          "n": 51,
+          "tp": 37,
+          "recall": 0.7254901960784313
+        },
+        "32-96": {
+          "n": 82,
+          "tp": 69,
+          "recall": 0.8414634146341463
+        },
+        ">=96": {
+          "n": 60,
+          "tp": 59,
+          "recall": 0.9833333333333333
+        }
+      },
+      "negative_images_with_fp": 59,
+      "latency_ms": {
+        "mean": 242.28765710357314,
+        "median": 236.76685299994915,
+        "p90": 252.45508740013068
+      },
+      "model_inference_ms": {
+        "mean": 235.34538503571738,
+        "median": 230.20312899996043
+      },
+      "peak_rss_kib": 1040452,
+      "model_sha256": "6cb34232e6fff08860e2baf8f407b1ce54abd52ebd577cd088ef2d6a45d761a1",
       "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
       "environment": {
         "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
