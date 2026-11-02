@@ -45,7 +45,9 @@ def iou_matrix(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     x2 = np.minimum(a[:, None, 2], b[None, :, 2]); y2 = np.minimum(a[:, None, 3], b[None, :, 3])
     inter = np.clip(x2 - x1, 0, None) * np.clip(y2 - y1, 0, None)
     aa = (a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]); ab = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
-    return inter / (aa[:, None] + ab[None, :] - inter + 1e-9)
+    union = aa[:, None] + ab[None, :] - inter
+    # Preserve IoU == threshold exactly while keeping degenerate boxes safe.
+    return np.divide(inter, union, out=np.zeros_like(inter, dtype=float), where=union > 0)
 
 
 def match(pred: np.ndarray, scores: np.ndarray, gt: np.ndarray, thr: float = 0.5):

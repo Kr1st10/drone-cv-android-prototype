@@ -34,9 +34,31 @@ def predict():
 def summary_stats(values):
  return {'n':len(values),'min':min(values) if values else None,'median':float(np.median(values)) if values else None,'max':max(values) if values else None}
 
+def load_shards():
+ data=json.loads((AUDIT/'low_conf_metadata.json').read_text())
+ data['records']=sum((json.loads((AUDIT/f'low_conf_records_{i}.json').read_text()) for i in range(1,5)),[])
+ return data
+
+def save_shards(data):
+ meta={k:v for k,v in data.items() if k!='records'}
+ (AUDIT/'low_conf_metadata.json').write_text(json.dumps(meta,indent=2)+'\n')
+ for i in range(4):
+  (AUDIT/f'low_conf_records_{i+1}.json').write_text(json.dumps(data['records'][40*i:40*(i+1)],separators=(',',':'))+'\n')
+
+def validate(data,rows,old):
+ if data['floor']!=FLOOR or data['nms_iou']!=.7:raise ValueError('unexpected floor or NMS')
+ if data['model_sha256']!=old['model_sha256'] or data['manifest_sha256']!=old['manifest_sha256']:raise ValueError('model or manifest identity mismatch')
+ actual={p.name:sha(p) for p in sorted((ML/'results/independent').glob('manifest_*.json'))}
+ if actual!=data['manifest_sha256']:raise ValueError('manifest checksum mismatch')
+ expected={(r['split'],r['id'],r['file']) for r in rows}
+ observed=[(r['split'],r['id'],r['file']) for r in data['records']]
+ if len(observed)!=len(expected) or set(observed)!=expected:raise ValueError('missing, duplicate or unexpected image')
+ if any(not math.isfinite(v) for r in data['records'] for p in r['predictions'] for v in p):raise ValueError('non-finite prediction')
+ if any(p[4]<=FLOOR for r in data['records'] for p in r['predictions']):raise ValueError('prediction below saved floor')
+
 def analyze(data):
  rows=manifests();old=load_run('640'); lookup={(r['split'],r['id']):r for r in rows}; historical={(r['split'],r['id']):r for r in old['records']}
- if len(data['records'])!=len(rows):raise ValueError('wrong image count')
+ validate(data,rows,old)
  score_tp=[];score_fp=[]; fn=[]; sums={str(t):Counter() for t in THRESHOLDS}; diff=[]; bysize={x:Counter() for x in ('<16','16-24','24-30','30-64','64-96','>=96')}
  for r in data['records']:
   key=(r['split'],r['id']);meta=lookup[key]; allpred=r['predictions']; annotations=meta['annotations']; gt=[a for a in annotations if a['class']=='drone']
@@ -46,7 +68,7 @@ def analyze(data):
    if t==.5:
     h=historical[key]
     if (tp,fp,miss,hits)!=(h['tp'],h['fp'],h['fn'],h['hit']):diff.append(meta['file'])
-    # Recompute matching flags by subtracting one prediction? use existing implementation for flags.
+    # Compare independent scalar GT matches with the canonical vector matcher.
     import sahi_experiment as se
     from evaluate import match
     d=[dd.Detection(*p) for p in pp]; boxes,scores=se.to_arr(d);g=np.array([[x,y,x+w,y+h] for a in gt for x,y,w,h in [a['bbox']]],float).reshape(-1,4)
@@ -72,4 +94,4 @@ def analyze(data):
  (AUDIT/'thresholds.json').write_text(json.dumps(out,indent=2)+'\n');(AUDIT/'missed_gt.json').write_text(json.dumps(fn,separators=(',',':'))+'\n');print(json.dumps(out,indent=2))
 
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--from-raw',action='store_true');a=p.parse_args();data=json.loads((AUDIT/'low_conf_raw.json').read_text()) if a.from_raw else predict();analyze(data)
+ p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group();g.add_argument('--from-raw',action='store_true');g.add_argument('--from-shards',action='store_true');a=p.parse_args();data=load_shards() if a.from_shards else json.loads((AUDIT/'low_conf_raw.json').read_text()) if a.from_raw else predict();analyze(data);save_shards(data)
