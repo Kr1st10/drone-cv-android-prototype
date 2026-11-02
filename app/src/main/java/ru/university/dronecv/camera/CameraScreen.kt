@@ -28,7 +28,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,10 +48,9 @@ import ru.university.dronecv.detection.DetectorWorker
 
 /** Главный экран: запрос разрешения, видеопревью и обработка ошибок камеры. */
 @Composable
-fun CameraScreen() {
+fun CameraScreen(confidence: Float, onConfidenceChange: (Float) -> Unit) {
     val context = LocalContext.current
     var running by rememberSaveable { mutableStateOf(false) }
-    var confidence by rememberSaveable { mutableFloatStateOf(0.5f) }
     val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context), DetectorWorker.executor) }
     DisposableEffect(controller) { onDispose { controller.close() } }
     val hasCameraHardware = remember {
@@ -127,7 +125,7 @@ fun CameraScreen() {
                         if (!it) controller.configure(false, confidence)
                         running = it
                     },
-                    onConfidenceChange = { controller.updateThreshold(it); confidence = it },
+                    onConfidenceChange = { controller.updateThreshold(it); onConfidenceChange(it) },
                     recoverableIssue = recoverableIssue?.let { recoverableIssueText(it) },
                     onCameraError = { controller.configure(false, confidence); cameraError = it },
                     onCameraIssue = { recoverableIssue = it },

@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 
 @Composable
@@ -50,7 +51,7 @@ fun LiveCameraContent(
     onCameraError: (Throwable) -> Unit,
     onCameraIssue: (Int?) -> Unit,
 ) {
-    val state by controller.state.collectAsStateWithLifecycle()
+    val state by controller.state.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     // A camera that silently stalls must not leave boxes on screen indefinitely.
     LaunchedEffect(state.revision) {
         if (state.result != null) {
@@ -60,7 +61,8 @@ fun LiveCameraContent(
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
-        val panelMaxHeight = maxHeight * 0.5f
+        val panelHeight = minOf(280.dp, maxHeight * 0.5f)
+        val panelWidth = minOf(240.dp, maxWidth * 0.45f)
         val camera: @Composable (Modifier) -> Unit = { modifier ->
             Box(modifier.background(Color.Black)) {
                 CameraPreview(controller, running, confidence, Modifier.fillMaxSize(),
@@ -75,12 +77,12 @@ fun LiveCameraContent(
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
                 camera(Modifier.weight(1f).fillMaxHeight())
-                controls(Modifier.width(240.dp).fillMaxHeight())
+                controls(Modifier.width(panelWidth).fillMaxHeight())
             }
         } else {
             Column(Modifier.fillMaxSize()) {
                 camera(Modifier.weight(1f).fillMaxWidth())
-                controls(Modifier.fillMaxWidth().heightIn(max = panelMaxHeight))
+                controls(Modifier.fillMaxWidth().height(panelHeight))
             }
         }
     }

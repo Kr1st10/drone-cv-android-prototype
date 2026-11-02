@@ -149,3 +149,14 @@ ONNX Runtime использует тот же файл, что и Python-про�
 - RGBA читается построчно с crop/stride в переиспользуемый ARGB IntArray, поворот совмещён с letterbox
   в прежнем препроцессоре. Анализ предпочитает 640×480: это экономит копирование относительно HD, но
   конкретное влияние на малые объекты и частоту кадров ещё не измерено. CameraX может согласовать другой размер.
+
+### Интеграционные риски UI, обнаруженные CI
+
+2026-11-02, API 29 x86_64, [первый emulator run](https://github.com/Kr1st10/drone-cv-android-prototype/actions/runs/41435816804):
+последовательные camera rebind и timeout; затем stack `StateFlow.setValue → ApplyingContinuationInterceptor →
+TestMonotonicFrameClock.measureAndLayoutForTest` на `drone-inference`, concurrent layout crash.
+Это проверенный сбой тестового Compose dispatcher, не доказательство такого же thread dispatch в обычной Activity.
+UI collector закреплён на Dispatchers.Main.immediate. Размер панели зафиксирован независимо от статистики,
+чтобы убрать возможность feedback layout→rebind→invalidate; точная причина первого rebind loop ещё проверяется.
+Android regression ждёт ≥3 результатов в одной активной сессии. Переносы лямбд в отдельные функции не нужны:
+проверка javap показала стабильные rememberComposableLambda/state holder.

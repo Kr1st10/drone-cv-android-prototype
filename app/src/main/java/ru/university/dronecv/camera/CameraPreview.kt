@@ -132,6 +132,7 @@ fun CameraPreview(
         if (viewSize.width <= 0 || viewSize.height <= 0 || viewport == null) {
             onDispose { }
         } else {
+            Log.d("CameraPreview", "Bind viewport=${viewSize.width}x${viewSize.height}, rotation=$rotation")
             controller.configure(false, currentConfidence)
             bound = false
             cameraBlocked = false

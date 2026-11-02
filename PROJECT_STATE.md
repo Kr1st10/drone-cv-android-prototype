@@ -16,7 +16,7 @@ _Обновлено: 2026-11-02. Живая детекция, ветка `featur
 - Preview/ImageAnalysis объединены общим FILL_CENTER ViewPort. При layout/display rotation меняется binding,
   старые результаты инвалидируются; поддерживаются оба landscape-направления, в том числе без recreation.
 - Start/Stop, confidence 10–95% (по умолчанию 50%), FPS завершённых результатов, ORT и полный цикл,
-  число кадров и фактический размер crop. Портрет: панель снизу, альбом: сбоку; панель прокручивается.
+  число кадров и фактический размер crop. Порог сохраняется при повороте/смене вкладки. Портрет: панель снизу, альбом: сбоку; панель прокручивается.
 - Один process-wide ML-worker для фото/видео, KEEP_ONLY_LATEST, синхронный analyzer без второй очереди.
   ImageProxy закрывается в finally на всех путях. RGBA читается построчно в переиспользуемые буферы
   без Bitmap; поворот совмещён с прежним letterbox. Анализ предпочитает 640×480 с fallback CameraX.
@@ -41,6 +41,10 @@ _Обновлено: 2026-11-02. Живая детекция, ветка `featur
   на macOS arm64, JDK 17, SDK 35. Дополнительный empty-result regression test также passed. Lint: 0 ошибок,
   37 предупреждений о версиях зависимостей/target SDK/существующем backup manifest, 0 information.
   Компиляция AndroidTest не доказывает выполнение; CI emulator job проверяется отдельно.
+- Первый [CI run](https://github.com/Kr1st10/drone-cv-android-prototype/actions/runs/41435816804): assemble/unit/lint/model passed;
+  camera UI timeout и Compose layout crash на API 29. Stack показал test recomposer на ML-worker через StateFlow.
+  Внесены explicit Main UI collection, фиксированный размер панели и regression ожидания ≥3 последовательных кадров;
+  повторный emulator run ещё требуется. Не считать первый job аппаратной/интеграционной приёмкой.
 - `verify_apk_model.py`: модель несжатая, 37 927 788 байт, SHA-256
   `b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7`.
 - `adb devices -l` пуст, локально нет emulator/system image. Физический телефон не запускался.

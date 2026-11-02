@@ -12,6 +12,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -26,6 +27,7 @@ import ru.university.dronecv.photo.PhotoViewModel
 @Composable
 fun DroneApp() {
     var mode by rememberSaveable { mutableIntStateOf(0) }
+    var cameraConfidence by rememberSaveable { mutableFloatStateOf(0.5f) }
     val photos: PhotoViewModel = viewModel()
     Scaffold(topBar = {
         Column(Modifier.statusBarsPadding()) {
@@ -38,7 +40,7 @@ fun DroneApp() {
         }
     }) { insets ->
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets)) {
-            if (mode == 0) PhotoScreen(photos) else CameraScreen()
+            if (mode == 0) PhotoScreen(photos) else CameraScreen(cameraConfidence) { cameraConfidence = it }
         }
     }
 }

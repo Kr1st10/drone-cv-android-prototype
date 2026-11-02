@@ -55,10 +55,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.university.dronecv.R
 import ru.university.dronecv.detection.Detection
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 
 @Composable
 fun PhotoScreen(viewModel: PhotoViewModel) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val state by viewModel.state.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) viewModel.select(uri.toString()) // Cancellation keeps the current photo/results.
     }
