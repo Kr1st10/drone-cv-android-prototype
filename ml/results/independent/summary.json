@@ -1,0 +1,203 @@
+{
+  "confidence": 0.5,
+  "match_iou": 0.5,
+  "nms_iou": 0.7,
+  "sahi": {
+    "slice": 416,
+    "overlap": 0.2,
+    "full_frame": true,
+    "merge": "GREEDYNMM IOS 0.5"
+  },
+  "environment": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+    "logical_cpus": 2,
+    "platform": "Linux-6.18.56-x86_64-with-glibc2.34",
+    "python": "3.13.15",
+    "onnxruntime": "1.31.1",
+    "numpy": "2.5.4",
+    "opencv": "5.0.0"
+  },
+  "timing": "Full preprocessing/inference/postprocessing, excludes image decode. Warmup 3; fresh process per mode.",
+  "results": {
+    "640": {
+      "images": 160,
+      "gt": 105,
+      "tp": 29,
+      "fp": 75,
+      "fn": 76,
+      "precision": 0.27884615384615385,
+      "recall": 0.2761904761904762,
+      "recall_by_size": {
+        "<16": {
+          "n": 3,
+          "tp": 0,
+          "recall": 0.0
+        },
+        "16-24": {
+          "n": 7,
+          "tp": 1,
+          "recall": 0.14285714285714285
+        },
+        "24-30": {
+          "n": 2,
+          "tp": 0,
+          "recall": 0.0
+        },
+        ">=30": {
+          "n": 93,
+          "tp": 28,
+          "recall": 0.3010752688172043
+        }
+      },
+      "fp_negative": 36,
+      "negative_images": 80,
+      "groups": {
+        "bird": {
+          "images": 30,
+          "images_with_fp": 8,
+          "fp": 8
+        },
+        "airplane": {
+          "images": 30,
+          "images_with_fp": 27,
+          "fp": 28
+        },
+        "empty": {
+          "images": 20,
+          "images_with_fp": 0,
+          "fp": 0
+        }
+      },
+      "fp_overlap_iou_05": {
+        "bird": 5,
+        "airplane": 23
+      },
+      "latency_ms": {
+        "mean": 123.65886346249795,
+        "median": 114.74551749995499
+      },
+      "peak_rss_kib": 814460,
+      "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7"
+    },
+    "960": {
+      "images": 160,
+      "gt": 105,
+      "tp": 30,
+      "fp": 87,
+      "fn": 75,
+      "precision": 0.2564102564102564,
+      "recall": 0.2857142857142857,
+      "recall_by_size": {
+        "<16": {
+          "n": 3,
+          "tp": 0,
+          "recall": 0.0
+        },
+        "16-24": {
+          "n": 7,
+          "tp": 2,
+          "recall": 0.2857142857142857
+        },
+        "24-30": {
+          "n": 2,
+          "tp": 0,
+          "recall": 0.0
+        },
+        ">=30": {
+          "n": 93,
+          "tp": 28,
+          "recall": 0.3010752688172043
+        }
+      },
+      "fp_negative": 39,
+      "negative_images": 80,
+      "groups": {
+        "bird": {
+          "images": 30,
+          "images_with_fp": 10,
+          "fp": 12
+        },
+        "airplane": {
+          "images": 30,
+          "images_with_fp": 26,
+          "fp": 27
+        },
+        "empty": {
+          "images": 20,
+          "images_with_fp": 0,
+          "fp": 0
+        }
+      },
+      "fp_overlap_iou_05": {
+        "bird": 7,
+        "airplane": 22
+      },
+      "latency_ms": {
+        "mean": 303.4674040812618,
+        "median": 288.4817200000498
+      },
+      "peak_rss_kib": 1002740,
+      "model_sha256": "6cb34232e6fff08860e2baf8f407b1ce54abd52ebd577cd088ef2d6a45d761a1"
+    },
+    "sahi416": {
+      "images": 160,
+      "gt": 105,
+      "tp": 35,
+      "fp": 123,
+      "fn": 70,
+      "precision": 0.22151898734177214,
+      "recall": 0.3333333333333333,
+      "recall_by_size": {
+        "<16": {
+          "n": 3,
+          "tp": 0,
+          "recall": 0.0
+        },
+        "16-24": {
+          "n": 7,
+          "tp": 1,
+          "recall": 0.14285714285714285
+        },
+        "24-30": {
+          "n": 2,
+          "tp": 0,
+          "recall": 0.0
+        },
+        ">=30": {
+          "n": 93,
+          "tp": 34,
+          "recall": 0.3655913978494624
+        }
+      },
+      "fp_negative": 68,
+      "negative_images": 80,
+      "groups": {
+        "bird": {
+          "images": 30,
+          "images_with_fp": 15,
+          "fp": 30
+        },
+        "airplane": {
+          "images": 30,
+          "images_with_fp": 28,
+          "fp": 32
+        },
+        "empty": {
+          "images": 20,
+          "images_with_fp": 4,
+          "fp": 6
+        }
+      },
+      "fp_overlap_iou_05": {
+        "bird": 7,
+        "airplane": 26
+      },
+      "latency_ms": {
+        "mean": 1147.3259786687408,
+        "median": 1114.706159499974
+      },
+      "peak_rss_kib": 957720,
+      "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7"
+    }
+  }
+}
