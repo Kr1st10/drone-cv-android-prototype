@@ -1,0 +1,3 @@
+# Rendered examples contain third-party frames (YouTube via pathikg, COCO) - not committed.
+examples/
+sahi_eval.json

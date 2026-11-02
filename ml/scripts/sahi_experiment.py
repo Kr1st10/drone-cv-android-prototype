@@ -9,10 +9,11 @@ Compares, on the SAME images and the SAME ONNX model (ml/weights/yolo11s-drone-6
 Each slice is letterboxed to 640 by drone_detector.preprocess, i.e. a 320 px slice is up-scaled x2.
 Merging: SAHI GREEDYNMM, class-agnostic, IOS >= 0.5 (SAHI defaults; IOS also merges a partial
 fragment box that lies inside a fuller box from a neighbouring slice or the full-frame pass).
+Ablation `*_iou`: the same with IOU >= 0.5.
 
 Usage (after fetch_and_export.py and prepare_eval_data.py):
     python ml/scripts/sahi_experiment.py select            # deterministic subset -> ml/results/sahi/subset.json
-    python ml/scripts/sahi_experiment.py run [--limit N]   # -> ml/results/sahi/sahi_eval.json
+    python ml/scripts/sahi_experiment.py run [--limit N] [--only MODE ...]   # -> ml/results/sahi/sahi_eval.json
     python ml/scripts/sahi_experiment.py report            # -> ml/results/sahi/REPORT_TABLES.md
 """
 from __future__ import annotations
@@ -54,6 +55,7 @@ class Mode:
     slice: int | None = None       # None = baseline full-frame
     overlap: float = 0.2
     full_pass: bool = True         # SAHI perform_standard_pred
+    merge_metric: str = "IOS"      # GREEDYNMM match metric, threshold 0.5
 
 
 MODES = (
@@ -61,6 +63,9 @@ MODES = (
     Mode("sahi_320_ov0.2_full", 320, 0.2, True),
     Mode("sahi_320_ov0.2_tiles", 320, 0.2, False),
     Mode("sahi_416_ov0.2_full", 416, 0.2, True),
+    # Ablation added after the first run: IOS merged true small boxes into large false boxes that
+    # contain them (see REPORT.md); IOU does not merge a small box into a much larger one.
+    Mode("sahi_416_ov0.2_full_iou", 416, 0.2, True, "IOU"),
 )
 
 
@@ -119,7 +124,7 @@ def make_sahi_model(detect_fn: DetectFn, conf: float):
 
 
 def sahi_predict(img: np.ndarray, detect_fn: DetectFn, conf: float, slice_size: int, overlap: float,
-                 full_pass: bool) -> list:
+                 full_pass: bool, merge_metric: str = "IOS") -> list:
     """Run official SAHI slicing+merging; return dd.Detection in full-image pixels."""
     from sahi.predict import get_sliced_prediction
 
@@ -127,7 +132,7 @@ def sahi_predict(img: np.ndarray, detect_fn: DetectFn, conf: float, slice_size: 
     res = get_sliced_prediction(img, model, slice_height=slice_size, slice_width=slice_size,
                                 overlap_height_ratio=overlap, overlap_width_ratio=overlap,
                                 perform_standard_pred=full_pass, postprocess_type="GREEDYNMM",
-                                postprocess_match_metric="IOS", postprocess_match_threshold=0.5,
+                                postprocess_match_metric=merge_metric, postprocess_match_threshold=0.5,
                                 postprocess_class_agnostic=True, verbose=0, force_postprocess_type=True)
     out = []
     for p in res.object_prediction_list:
@@ -139,7 +144,7 @@ def sahi_predict(img: np.ndarray, detect_fn: DetectFn, conf: float, slice_size: 
 def predict(mode: Mode, img: np.ndarray, detect_fn: DetectFn, conf: float) -> list:
     if mode.slice is None:
         return detect_fn(img, conf)
-    return sahi_predict(img, detect_fn, conf, mode.slice, mode.overlap, mode.full_pass)
+    return sahi_predict(img, detect_fn, conf, mode.slice, mode.overlap, mode.full_pass, mode.merge_metric)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -228,7 +233,7 @@ def eval_image(dets, gt):
             "boxes": [[round(float(v), 1) for v in b] + [round(float(s), 3)] for b, s in zip(pb, ps)]}
 
 
-def run(limit: int, threads: int) -> None:
+def run(limit: int, threads: int, only: list[str] | None = None) -> None:
     import onnxruntime as ort
     import sahi
 
@@ -248,7 +253,8 @@ def run(limit: int, threads: int) -> None:
     for _ in range(3):
         det.det.raw(dd.preprocess(imgs[pos[0]["file"]])[0])
     results: dict = {}
-    for mode in MODES:
+    modes = [m for m in MODES if not only or m.name in only]
+    for mode in modes:
         res_mode = {}
         for conf in CONFS:
             per = {}
@@ -277,8 +283,13 @@ def run(limit: int, threads: int) -> None:
            "opencv": cv2.__version__, "ultralytics": __import__("ultralytics").__version__,
            "torch": __import__("torch").__version__,
            "onnx_sha256": json.loads((ML_DIR / "weights" / "export_info.json").read_text())["onnx_sha256"]}
-    out = {"modes": [m.__dict__ for m in MODES], "confs": CONFS, "nms_iou": NMS_IOU, "match_iou": MATCH_IOU,
-           "merge": {"type": "GREEDYNMM", "metric": "IOS", "threshold": 0.5, "class_agnostic": True},
+    prev = OUT_DIR / "sahi_eval.json"
+    if only and prev.exists():  # add modes to an existing run (same subset, same machine)
+        old = json.loads(prev.read_text())
+        results = {**old["results"], **results}
+        env = {**env, "added_modes": {**old["env"].get("added_modes", {}), **{m: env["platform"] for m in only}}}
+    out = {"modes": [m.__dict__ for m in MODES if m.name in results], "confs": CONFS, "nms_iou": NMS_IOU, "match_iou": MATCH_IOU,
+           "merge": {"type": "GREEDYNMM", "metric": "per mode, see modes[].merge_metric", "threshold": 0.5, "class_agnostic": True},
            "env": env, "gt_sizes": gt_sizes, "results": results}
     (OUT_DIR / "sahi_eval.json").write_text(json.dumps(out, separators=(",", ":")))
     print(f"wrote {OUT_DIR / 'sahi_eval.json'}")
@@ -398,6 +409,7 @@ def main() -> None:
     p.add_argument("--n-small16", type=int, default=120); p.add_argument("--n-small32", type=int, default=120)
     p.add_argument("--n-medium", type=int, default=60); p.add_argument("--n-large", type=int, default=60)
     p = sub.add_parser("run"); p.add_argument("--limit", type=int, default=0); p.add_argument("--threads", type=int, default=2)
+    p.add_argument("--only", nargs="*", default=None, help="run only these modes and merge into sahi_eval.json")
     sub.add_parser("report")
     a = ap.parse_args()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -409,7 +421,7 @@ def main() -> None:
               f"\npositives={len(s['positives'])} gt={sum(p['n_gt'] for p in s['positives'])} "
               f"negatives={len(s['negatives'])}")
     elif a.cmd == "run":
-        run(a.limit, a.threads)
+        run(a.limit, a.threads, a.only)
     else:
         report()
 
