@@ -34,7 +34,7 @@
 
 Wrapper Gradle 8.11.1 включён в репозиторий, дистрибутив проверяется по SHA-256.
 Укажите `JAVA_HOME` (JDK 17), `ANDROID_HOME` или локальный `local.properties` с `sdk.dir=...`.
-Установите SDK platform 35 и build-tools 35.0.0; примите лицензии SDK.
+Установите SDK platform 35 и build-tools 34.0.0; примите лицензии SDK.
 
 Модель сторонняя и не хранится в git. Получить **точный готовый ONNX** можно из artifact
 `verified-onnx-model` успешного запуска workflow Android build этой ветки (GitHub → Actions).

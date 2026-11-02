@@ -11,6 +11,8 @@
 - `camera/CameraScreen.kt` — разрешение CAMERA, состояния экрана, ошибки.
 - `camera/CameraPreview.kt` — `PreviewView` + `ProcessCameraProvider`, привязка к lifecycle.
 - `detection/ObjectDetector.kt` — контракт детектора (`ObjectDetector`, `Detection`, `NormalizedBox`).
+- `detection/onnx/` — Android-адаптер, проверка файла и общий JVM/Android ORT-движок; `detection/yolo/` — чистые Kotlin pre/postprocessing.
+- `app/src/test/` — Kotlin/JVM-тесты; `app/src/androidTest/` — инструментальный smoke-тест.
 - `ui/theme/Theme.kt` — тема Material 3.
 - Версии зависимостей — только в `gradle/libs.versions.toml`. CI — `.github/workflows/android-build.yml`.
 

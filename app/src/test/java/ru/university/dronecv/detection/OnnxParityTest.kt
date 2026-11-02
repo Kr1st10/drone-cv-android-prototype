@@ -29,9 +29,9 @@ import ru.university.dronecv.detection.yolo.PixelBox
 class OnnxParityTest {
 
     companion object {
-        private val modelFile = File(System.getProperty("drone.model.path", "ml/weights/yolo11s-drone-640.onnx"))
-        private val expectedSha = System.getProperty("drone.model.sha256", "")
-        private val parityDir = File(System.getProperty("drone.parity.dir", "ml/data/android_parity"))
+        private val modelFile = File(System.getProperty("drone.model.path") ?: "ml/weights/yolo11s-drone-640.onnx")
+        private val expectedSha = System.getProperty("drone.model.sha256") ?: ""
+        private val parityDir = File(System.getProperty("drone.parity.dir") ?: "ml/data/android_parity")
         private var engine: YoloOnnxEngine? = null
 
         @BeforeClass

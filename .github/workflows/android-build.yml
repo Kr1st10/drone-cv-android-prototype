@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: android-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   assemble-debug:
     runs-on: ubuntu-latest
