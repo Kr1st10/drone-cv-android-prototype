@@ -1,0 +1,705 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:anti-uav:20190925_143900_1_5",
+      "sequence_id": "AOD4:anti-uav:20190925_143900_1_5",
+      "scene": [
+        "drone"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "drone",
+          "xyxy": [
+            169,
+            140,
+            180.5,
+            155
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "20190925_143900_1_5_005_jpg.rf.4e0a30d068af292a4ecea0de520577cd.jpg",
+      "origin_split": "train",
+      "origin_id": 9949,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "bb6ed0978cbebf9e58c20fd9e294ad95726270e74b42424d3daecaae1c9f6b85",
+      "file": "images/c2b070f2c6f96e6afbcbeb1f116e4028fc146f8127590ebab338555402f3736e.png",
+      "sha256": "c2b070f2c6f96e6afbcbeb1f116e4028fc146f8127590ebab338555402f3736e",
+      "source_sha256": "e5730e72536123370b84253638335da9ff69b9a0a8ddee7a5e6d27402cada75a",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "8b65542254dd539e182dc70accecc125c2951337ed69558a910e9a57e039ca10",
+      "dhash64": "c3d3d3e5a3c30f0f",
+      "mean_rgb_hex": "5d6768"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:CwqG3k5FKFU",
+      "sequence_id": "AOD4:youtube:CwqG3k5FKFU",
+      "scene": [
+        "drone"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "drone",
+          "xyxy": [
+            498,
+            276,
+            525.5,
+            296
+          ]
+        },
+        {
+          "class": "drone",
+          "xyxy": [
+            516,
+            532,
+            540,
+            552
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-CwqG3k5FKFU-0005_jpg.rf.22a6a4623321d7b399e614fd91fb95c1.jpg",
+      "origin_split": "train",
+      "origin_id": 1579,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "7d4495374737a370221a5487d2b973dd57007bd4604721757b6935c95c7a0ca1",
+      "file": "images/d868fa34e76fa2131dd44e8190be4b9cb898e6564ae037744993c4c00e722817.png",
+      "sha256": "d868fa34e76fa2131dd44e8190be4b9cb898e6564ae037744993c4c00e722817",
+      "source_sha256": "711a736d7dedee44ee1498ca0147f24d66f9bf360a7075b34e993c3d6cb29da8",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "c1657c22e7664b937ad02460c7ae15e76a397322d86e79bffa99e593c6847959",
+      "dhash64": "23039000000000cc",
+      "mean_rgb_hex": "cdeff7"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:anti-uav:20190925_183946_1_4",
+      "sequence_id": "AOD4:anti-uav:20190925_183946_1_4",
+      "scene": [
+        "drone"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "drone",
+          "xyxy": [
+            515,
+            323,
+            587,
+            399
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "20190925_183946_1_4_167_jpg.rf.16970faf920b0e78f4cf74ffcb90b6f8.jpg",
+      "origin_split": "train",
+      "origin_id": 807,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "10e76df3ef8497df097de0e3d6636feb7077c65ec293ac47a17e5fea93c33394",
+      "file": "images/1f318aa7faa548dc4d4568ed90f43da8d978dd9a9cbae204c9e93b14236a703c.png",
+      "sha256": "1f318aa7faa548dc4d4568ed90f43da8d978dd9a9cbae204c9e93b14236a703c",
+      "source_sha256": "760d8a4d3197e46594722c25543ee77faa99c20ae96d54628e18bc5e1b6e64fd",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "9e14e2ae94a08ce0dbb0baf4d8cfffa0683a02b18d091aa40ea0eb9e608c8b8e",
+      "dhash64": "c56f170b23170f07",
+      "mean_rgb_hex": "32322a"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:anti-uav:20190925_130434_1_3",
+      "sequence_id": "AOD4:anti-uav:20190925_130434_1_3",
+      "scene": [
+        "drone"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "drone",
+          "xyxy": [
+            525,
+            551,
+            650.5,
+            706.5
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "20190925_130434_1_3_958_jpg.rf.20e342265470659115ee58733124d4f7.jpg",
+      "origin_split": "train",
+      "origin_id": 1439,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "9d77add62c5754eb26cd70edc18c5f4af14908c45aaf93f8f74526f93c75ee53",
+      "file": "images/3c6a95ba4db30ff5db7e5829535e395bad80916f32b3d3d8132d1e9cc484ba5b.png",
+      "sha256": "3c6a95ba4db30ff5db7e5829535e395bad80916f32b3d3d8132d1e9cc484ba5b",
+      "source_sha256": "390a1a1d194c0f6814084f94280527ebd011fb0855a95ef4a4f45f540b98eab6",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "14cf0144f5da7de4c9cda86bc59c28946a363e3c6e267aaf9104fc7b22c17f9e",
+      "dhash64": "4f070f071b1b0f0f",
+      "mean_rgb_hex": "838783"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:yYCWG5RrinY",
+      "sequence_id": "AOD4:youtube:yYCWG5RrinY",
+      "scene": [
+        "drone"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "drone",
+          "xyxy": [
+            307,
+            6,
+            1017,
+            882
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-yYCWG5RrinY-0020_jpg.rf.7c678fd7d94e3b2a5b7d0b7da4b3df29.jpg",
+      "origin_split": "valid",
+      "origin_id": 487,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "4f19839df6ec10630f0f9a9d5ac1542d24631460eabe92df917128299c740f45",
+      "file": "images/ac5df83b0b129b4738aa5b58b6c7d3abcde95b4f06838d4c0b42e79571cda83d.png",
+      "sha256": "ac5df83b0b129b4738aa5b58b6c7d3abcde95b4f06838d4c0b42e79571cda83d",
+      "source_sha256": "f83804c9d834a51bf5c0586da67832b178997a766a463661bbfb7586dcbf14cc",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "e45a63ad446404a9acca3ee215bb619361f94d3948c3be80f1b9e5e8a8fd01db",
+      "dhash64": "66f49c7978b47070",
+      "mean_rgb_hex": "bcc0c5"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:source-video:V_DRONE_065175",
+      "sequence_id": "AOD4:source-video:V_DRONE_065175",
+      "scene": [
+        "drone"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "drone",
+          "xyxy": [
+            299,
+            630,
+            347,
+            670
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "V_DRONE_065175_176_png_jpg.rf.30333c4ee19867059b4df7d3c73c4a1f.jpg",
+      "origin_split": "test",
+      "origin_id": 423,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "0f8975c8e458ad0697cd10365d888fba208ab5de4c7f13e792d2cd2320123770",
+      "file": "images/685cd4cd612e85fbf01c2b6861220d5d130cdb5b1aae67685cf5d4a8158bcaa5.png",
+      "sha256": "685cd4cd612e85fbf01c2b6861220d5d130cdb5b1aae67685cf5d4a8158bcaa5",
+      "source_sha256": "7221a6e612b1a6657f09181e1be8f59c86ae35aa8e2e3cd4549a8be5af583646",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "a8632f2a0b4a9c44bce5f26a5a58211754624a1bffffa7b4140ccbbca44b75bd",
+      "dhash64": "020100090306b703",
+      "mean_rgb_hex": "6781a0"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:0Wd7ZhGSkRo",
+      "sequence_id": "AOD4:youtube:0Wd7ZhGSkRo",
+      "scene": [
+        "drone"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "drone",
+          "xyxy": [
+            315,
+            311,
+            720.5,
+            665
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-0Wd7ZhGSkRo-0013_jpg.rf.165d9917fde96414ef46a24add0430de.jpg",
+      "origin_split": "train",
+      "origin_id": 796,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "26f3fce83f503e9c7c0e6baa34331f2fd1637f2b2a89e75b86c3c7d5d56bd6fb",
+      "file": "images/62c9faf3e5634c62ddb9753575b7a216dd85f4cd22b7c028f7f4309b67b9f458.png",
+      "sha256": "62c9faf3e5634c62ddb9753575b7a216dd85f4cd22b7c028f7f4309b67b9f458",
+      "source_sha256": "b77d517ac68cd301b565083de513355c0891ab005665765e112a0b445766f338",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "062aecf5a253e6b0be30754aeecefe45a610460ac6fb1a0930a72783ce60468c",
+      "dhash64": "1839767431174d99",
+      "mean_rgb_hex": "919497"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:HPsRKk_iYys",
+      "sequence_id": "AOD4:youtube:HPsRKk_iYys",
+      "scene": [
+        "drone"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "drone",
+          "xyxy": [
+            410,
+            347,
+            683.5,
+            747
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-HPsRKk_iYys-0072_jpg.rf.cca817747c0180057b6e47ce912cd745.jpg",
+      "origin_split": "train",
+      "origin_id": 13727,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "eac9124e8d214726b2cbc562ccbeb63f48c37755ba4f0110b3b2ee3630a7cfb3",
+      "file": "images/8ab0a6214e40ce3aac26cf556d8bc859c6844612e7673eac82d80ccbdb1e5109.png",
+      "sha256": "8ab0a6214e40ce3aac26cf556d8bc859c6844612e7673eac82d80ccbdb1e5109",
+      "source_sha256": "ecff0c99a75878791652970be9c1b92ef8622e994fee8f9c2fef18411f471c4c",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "0ae0d07f70a8d0c8b8bb7a3c39f5f41da751959c727ed7907db5115871dbd5c2",
+      "dhash64": "8e8e2c8f9d9e8f3f",
+      "mean_rgb_hex": "646248"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:aEpAALj4Cw4",
+      "sequence_id": "AOD4:youtube:aEpAALj4Cw4",
+      "scene": [
+        "bird"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "bird",
+          "xyxy": [
+            303,
+            363,
+            423,
+            492.5
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-aEpAALj4Cw4-0048_jpg.rf.2d616ac775de6105ddef655bca82d6c7.jpg",
+      "origin_split": "valid",
+      "origin_id": 3590,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "588e404e51f04b2792582a975def6fd8811fa0d778e9c82e170e05b151fcaa9f",
+      "file": "images/a0e169c77e9caa6bacbdfb194dcb0307fddc953c5f661e666eb292979b352cfa.png",
+      "sha256": "a0e169c77e9caa6bacbdfb194dcb0307fddc953c5f661e666eb292979b352cfa",
+      "source_sha256": "3a972aa6491819d138546225a077fd51e0a50f1ff2ab03b4f33a50a4205729ca",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "c1060553317118af19522101166ce32f58a437d1efa61aa465883a9a361e609f",
+      "dhash64": "66cc226dd5d24f32",
+      "mean_rgb_hex": "8c9298"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:5eq0auuni1g",
+      "sequence_id": "AOD4:youtube:5eq0auuni1g",
+      "scene": [
+        "bird"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "bird",
+          "xyxy": [
+            506,
+            472,
+            563,
+            549.5
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-5eq0auuni1g-0045_jpg.rf.2d3c3ce7b53744cad6624588432bf425.jpg",
+      "origin_split": "train",
+      "origin_id": 2278,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "ec814687095ada4e5914d54b55307d3bacd253163028e04a002d7507ff957f15",
+      "file": "images/62d5b9a402abe0d49a534edf27435561b8e783464a8416fc1319e8cf762c9fbc.png",
+      "sha256": "62d5b9a402abe0d49a534edf27435561b8e783464a8416fc1319e8cf762c9fbc",
+      "source_sha256": "a89c6d55f63cb3078c81221e1cd44517fed20d45d76cbed89f51cec7060bbce3",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "ed8ac9856ca6f88d3865c0eb650d72a993eaa0e061a4b8170af97b58c5d92861",
+      "dhash64": "0000000010010323",
+      "mean_rgb_hex": "8aa9cf"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:unknown:yt-false-0023",
+      "sequence_id": "AOD4:unknown:yt-false-0023",
+      "scene": [
+        "bird"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "bird",
+          "xyxy": [
+            252,
+            261,
+            901.5,
+            718
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-false-0023_jpg.rf.6d23c0ef477c4f0ee8d32afde21013eb.jpg",
+      "origin_split": "train",
+      "origin_id": 3396,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "da258828c7f10d6eb1411538b65eb6e7e789e1a0131971a38cad541bbaeb8e5d",
+      "file": "images/d8fc29546ee518a57668350580e8733547f1b6ea7bb5706fc854ca22d7735e92.png",
+      "sha256": "d8fc29546ee518a57668350580e8733547f1b6ea7bb5706fc854ca22d7735e92",
+      "source_sha256": "fb83e14f0a972cb76009d0b6ff96f40ce5872d1777667e9f70d6e6b14c59b6a9",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "7e59fafa2e1ab87adb1575a9f47c2898fcf239dadef75ac2b91964c7623ccff3",
+      "dhash64": "daf3f62969cdbccd",
+      "mean_rgb_hex": "6b6f58"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:source-video:V_AIRPLANE_03535",
+      "sequence_id": "AOD4:source-video:V_AIRPLANE_03535",
+      "scene": [
+        "airplane"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "airplane",
+          "xyxy": [
+            78,
+            684,
+            156,
+            746
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "V_AIRPLANE_03535_085_png_jpg.rf.8fc51e39e4dbba282fb219c9d3457c64.jpg",
+      "origin_split": "test",
+      "origin_id": 1281,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "fd75728381a141c3383fe00d188df3163454df3139e3f041127222ce6ac2d171",
+      "file": "images/8e44eaf1aaab32b5bd84cd661d3f28ec7e8b92887a0214b72106fe74e6254025.png",
+      "sha256": "8e44eaf1aaab32b5bd84cd661d3f28ec7e8b92887a0214b72106fe74e6254025",
+      "source_sha256": "d63f02fbd431b291d6c9bd2ae7d82e650074e00092aa36700f4895e8fad7b2cb",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "faafef5fdd639b2ad343bc92bb7150abee9616d3e64ce1447eed961fd23bfc52",
+      "dhash64": "00010101051b4a02",
+      "mean_rgb_hex": "7b919e"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:bwGKBfCw0kc",
+      "sequence_id": "AOD4:youtube:bwGKBfCw0kc",
+      "scene": [
+        "airplane"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "airplane",
+          "xyxy": [
+            190,
+            301,
+            832,
+            667.5
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-bwGKBfCw0kc-0062_jpg.rf.0720aa2e8501ece9fdcd8e58ee77856e.jpg",
+      "origin_split": "train",
+      "origin_id": 11663,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "6b2499c551e801bc5966345fd6c53bd259a5b633ec5e0722a1940ffa9b2c5e5f",
+      "file": "images/1e2e9e835af4c8e07b3c2dd0b3a41bb73544c6cd7289ba03c659621cd9794606.png",
+      "sha256": "1e2e9e835af4c8e07b3c2dd0b3a41bb73544c6cd7289ba03c659621cd9794606",
+      "source_sha256": "3fd42bd123456b05c1e5116bcd121f3ba8d5fe2e0d851a447e39a81101c801b8",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "3a9bf4a3cb4f0062c7bbbc046b1bc32ff5e48ff00acddb8cdd9c779b25c2b8ac",
+      "dhash64": "d0d0d0ccf872e8d0",
+      "mean_rgb_hex": "868a95"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:vpQEQ81cfoA",
+      "sequence_id": "AOD4:youtube:vpQEQ81cfoA",
+      "scene": [
+        "airplane"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [
+        {
+          "class": "airplane",
+          "xyxy": [
+            234,
+            339,
+            645.5,
+            579.5
+          ]
+        }
+      ],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-vpQEQ81cfoA-1259_jpg.rf.ae65758c935ee25b4ca9c777848cdd3d.jpg",
+      "origin_split": "valid",
+      "origin_id": 1347,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "c2b0f21b9a1780c8fc98b3c37a37738766d02a8fdb35ba24f09d76732178c3fe",
+      "file": "images/456df50cee5e21d8f1a91942b33c3d70b26f7843d13f5cf8ab732dfb1ea5534a.png",
+      "sha256": "456df50cee5e21d8f1a91942b33c3d70b26f7843d13f5cf8ab732dfb1ea5534a",
+      "source_sha256": "3bf4e3c0a8cc6bbfa73d234cfc8c1c423df72caabe96ba10780dd49b8dc488e7",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "f135dd5abb9c24f44a1eb7ba7bc731adc716697c8de10af74e1e2937ea1d376e",
+      "dhash64": "d8f5f072f14c30c0",
+      "mean_rgb_hex": "8ea5c3"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:R_jEmwd_LEA",
+      "sequence_id": "AOD4:youtube:R_jEmwd_LEA",
+      "scene": [
+        "nature"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-R_jEmwd_LEA-0002_jpg.rf.b77ae14ee7a092c9833fae3cf4a98761.jpg",
+      "origin_split": "train",
+      "origin_id": 7960,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "37d554ababf8d7c5c935fa94efaccac2f2306189065a95c36a66e86e64274001",
+      "file": "images/8ec80b63b6371e309a030203ed28ae28d74a78806f5a469600266b17a7def4e8.png",
+      "sha256": "8ec80b63b6371e309a030203ed28ae28d74a78806f5a469600266b17a7def4e8",
+      "source_sha256": "e702fe1d3ebb441a1d4a4a6c3d0963a4a4db44349e18dc86801ac9da63920410",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "467585c6b8d3da1da7bf1da068347e74da180c83b4e68a8be78b1034d4cd6553",
+      "dhash64": "e71d4c642221634b",
+      "mean_rgb_hex": "3c433c"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:ppR_QhxqgEE",
+      "sequence_id": "AOD4:youtube:ppR_QhxqgEE",
+      "scene": [
+        "forest"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-ppR_QhxqgEE-0004_jpg.rf.5d1db5b0177efc2893948538737795d1.jpg",
+      "origin_split": "train",
+      "origin_id": 10848,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "e6f4b9fb24454bcdc79921ade5faaa84ffa4dfb736f38a067304e3e48b25efac",
+      "file": "images/ca2b0f4b2ecbe740557ca3ee63c20f2436abdfa3ceeee8e62d0800e8b771958d.png",
+      "sha256": "ca2b0f4b2ecbe740557ca3ee63c20f2436abdfa3ceeee8e62d0800e8b771958d",
+      "source_sha256": "f6efc6eed89d589e66ded935478167112bc0de2a52b9034bf8b099bd80d27f1f",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "f9390bae04e62b48a56a2efb7c68e5f649453a9a872505e5d62e8a6f45992fb7",
+      "dhash64": "4f8785050f8f060e",
+      "mean_rgb_hex": "3b372b"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:7huquZeqPKk",
+      "sequence_id": "AOD4:youtube:7huquZeqPKk",
+      "scene": [
+        "clouds"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-7huquZeqPKk-0051_jpg.rf.851ec726aaf09f945527e151d480425b.jpg",
+      "origin_split": "train",
+      "origin_id": 4852,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "310a977ffd0a3cd43713b7341bc68ecdadc7140d1dc95ae895c3a25240368712",
+      "file": "images/66d8ccb74ce46851bce1eb092e1747279515b25b7e652183279e10519b3dbc88.png",
+      "sha256": "66d8ccb74ce46851bce1eb092e1747279515b25b7e652183279e10519b3dbc88",
+      "source_sha256": "1aae34cca78690de4976fbb693aee8cecb003672c5935bfdb5a48013f6c71417",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "da7fa8acfaf369193174ba9897e3f13e21bf0c6296b71a6ccd253b0d91760857",
+      "dhash64": "008c9918c1f33971",
+      "mean_rgb_hex": "373e44"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:l6EzZafb1Pk",
+      "sequence_id": "AOD4:youtube:l6EzZafb1Pk",
+      "scene": [
+        "buildings"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-l6EzZafb1Pk-0001_jpg.rf.6591e4546365752e8861fb6cf6b9fdc0.jpg",
+      "origin_split": "train",
+      "origin_id": 2927,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "5456142483ee05172191c86a7e397eeb8547890cbdecac8939ad82ac6460c186",
+      "file": "images/9c9d9738e4a7d378d451ad61329431e7e677497e6eaeb4c11bdb892edc70024d.png",
+      "sha256": "9c9d9738e4a7d378d451ad61329431e7e677497e6eaeb4c11bdb892edc70024d",
+      "source_sha256": "060bbf49df608d154daf50cbea930f69e490c0a1f612efde36c6a069cd84792c",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "24148e42b3a71b0b30bae87ae3cb420229df092f1191e360c9f164f893c72c24",
+      "dhash64": "3f171717173b3555",
+      "mean_rgb_hex": "444950"
+    },
+    {
+      "source_url": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+      "license": "CC BY 4.0 (dataset record)",
+      "rights_note": "AOD source collection is CC BY 4.0; underlying videos may carry separate rights. Review before use or redistribution.",
+      "source_group": "AOD4:youtube:04z02TNjio0",
+      "sequence_id": "AOD4:youtube:04z02TNjio0",
+      "scene": [
+        "field"
+      ],
+      "independence": "unknown",
+      "usage_history": "exposed",
+      "annotations": [],
+      "source_group_verified": false,
+      "origin_dataset": "AOD4",
+      "origin_file": "yt-04z02TNjio0-0007_jpg.rf.c4de02fc644d1ebf2675a1103c2f0c9c.jpg",
+      "origin_split": "train",
+      "origin_id": 13226,
+      "origin_annotation_format": "COCO xywh converted to continuous xyxy",
+      "id": "401030d5acdedb1ba3c281ce261c8033c832004c526c344f0da1c53a67bd37fb",
+      "file": "images/b429ae72057f95c63b0e991ef9469e698a6cbec364468dc693ddc6a5a08a1a10.png",
+      "sha256": "b429ae72057f95c63b0e991ef9469e698a6cbec364468dc693ddc6a5a08a1a10",
+      "source_sha256": "fcba58decbbc1f3b468c2d1dc3622ae23e9721671bc8e9fad88433e0c1e76b56",
+      "width": 1024,
+      "height": 1024,
+      "review_status": "unreviewed",
+      "pixel_sha256": "0d57a7977a123c5efb6eabf386c6b7acd551023f0fa3ce1b7d0dae287557b10c",
+      "dhash64": "818000006060d0b0",
+      "mean_rgb_hex": "917b64"
+    }
+  ]
+}
