@@ -59,8 +59,9 @@ class DiagnosticFrames(private val capacity: Int = 100_000) {
     fun completed(token: Long, endNanos: Long, conversionMs: Double, preprocessMs: Double,
                   inferenceMs: Double, postprocessMs: Double, pipelineMs: Double) = synchronized(lock) {
         if (!recording || token != generation) return@synchronized
-        val times = listOf(conversionMs, preprocessMs, inferenceMs, postprocessMs, pipelineMs)
-        require(endNanos >= startNanos && times.all { it.isFinite() && it >= 0 })
+        require(endNanos >= startNanos && conversionMs.isFinite() && conversionMs >= 0 &&
+            preprocessMs.isFinite() && preprocessMs >= 0 && inferenceMs.isFinite() && inferenceMs >= 0 &&
+            postprocessMs.isFinite() && postprocessMs >= 0 && pipelineMs.isFinite() && pipelineMs >= 0)
         completed++
         if (frames.size < capacity) frames.add(FrameMeasurement(endNanos - startNanos, conversionMs,
             preprocessMs, inferenceMs, postprocessMs, pipelineMs)) else truncated++
