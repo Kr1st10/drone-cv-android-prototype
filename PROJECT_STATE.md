@@ -1,6 +1,18 @@
 # PROJECT_STATE.md
 
-_Обновлено: 2026-11-02. Живая детекция, ветка `feature/live-drone-detection`._
+_Обновлено: 2026-11-02. Исследование SAHI (этап 4.1), ветка `research/sahi-4.1` от `main` @ `95e907e`._
+
+## Этап 4.1 — исследование SAHI (2026-11-02, Draft PR #8)
+
+- Только Python: `ml/scripts/sahi_experiment.py`, `sahi_examples.py`, тесты `ml/tests/test_sahi_merge.py`,
+  результаты `ml/results/sahi/` (REPORT.md, REPORT_TABLES.md, summary.json, examples.json, subset.json, pip_freeze.txt).
+  Android, CameraX, модель и экспорт не менялись; `sahi==0.14.0` добавлен только в `ml/requirements.txt`.
+- Проверено в Linux sandbox (Xeon 2 vCPU, Python 3.13.15, ORT 1.31.1 CPU): повторный экспорт дал прежний ONNX SHA-256
+  `b4867481…`; `python -m pytest ml/tests -q` — **16 passed**; полный прогон 560 изображений × 5 режимов × 2 порога.
+- Итог: слайс 416 + full-frame — R 0.755 → 0.812 при P 0.934 (conf 0.5, 383 GT, не независимый набор), но
+  негативы с ложной детекцией 37 → 60 (hard) и 17 → 37 (random) из 100, время ×4.9 на CPU. SAHI в Android не внедряется.
+- Не выполнено: независимые снимки с телефона, замеры на телефоне, высокое разрешение, Android-реализация (вне этапа).
+- PR #7 к этому моменту уже влит в `main` (merge-коммит `95e907e`); ниже — состояние живой детекции без изменений.
 
 ## Локальная интеграция и проверка на телефоне — 2026-11-02
 
