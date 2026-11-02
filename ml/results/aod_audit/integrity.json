@@ -1,0 +1,38 @@
+{
+  "aod_archive_sha256": "fac56b9c0494312bcd4c63dfefcbcd8ed07ab55d4b00584131c0b55273d24518",
+  "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+  "model_names": {
+    "0": "drone"
+  },
+  "aod_coco_category_names": {
+    "0": "airplane-helicopter-drone-bird",
+    "1": "airplane",
+    "2": "bird",
+    "3": "drone",
+    "4": "helicopter"
+  },
+  "source_annotations_match_manifest": true,
+  "actual_image_dimensions_match": true,
+  "image_hashes_match": true,
+  "size_definition": "sqrt(w*h) at delivered 1024x1024; not pre-resize physical pixels",
+  "sizes": {
+    "<16": 3,
+    ">=30": 93,
+    "16-24": 7,
+    "24-30": 2
+  },
+  "class_combinations": {
+    "drone": 80,
+    "bird": 30,
+    "airplane": 30,
+    "empty": 20
+  },
+  "independent_scalar_match_of_saved_predictions": {
+    "tp": 29,
+    "fp": 75,
+    "fn": 76,
+    "images": 160
+  },
+  "differences": [],
+  "limitations": "No assertion that the labels are exhaustive or visually correct; saved predictions have 3 decimal rounding; match is only checked on those."
+}
