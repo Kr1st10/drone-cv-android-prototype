@@ -34,11 +34,13 @@ _Обновлено: 2026-11-02. Живая детекция, ветка `featur
 
 ## Подтверждённые проверки
 
-- Локальные JVM-тесты: **97 tests, 95 passed, 2 skipped**, 0 errors/failures. Только два отсутствующих
-  Python parity fixtures пропущены; настоящий JVM ORT-инференс выполнен. 30 новых тестов камеры:
+- Локальные JVM-тесты: **98 tests, 96 passed, 2 skipped**, 0 errors/failures. Только два отсутствующих
+  Python parity fixtures пропущены; настоящий JVM ORT-инференс выполнен. 31 новый тест камеры:
   crop/stride/channels/rotation, mapping, stale results/errors, source/threshold, close ownership, FPS/expiry.
-- APK и AndroidTest APK компилируются на macOS arm64, JDK 17, SDK 35. Финальный lint/CI прогон фиксируется ниже
-  после завершения; компиляция AndroidTest не доказывает выполнение.
+- `./gradlew --no-daemon assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug` — BUILD SUCCESSFUL
+  на macOS arm64, JDK 17, SDK 35. Дополнительный empty-result regression test также passed. Lint: 0 ошибок,
+  37 предупреждений о версиях зависимостей/target SDK/существующем backup manifest, 0 information.
+  Компиляция AndroidTest не доказывает выполнение; CI emulator job проверяется отдельно.
 - `verify_apk_model.py`: модель несжатая, 37 927 788 байт, SHA-256
   `b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7`.
 - `adb devices -l` пуст, локально нет emulator/system image. Физический телефон не запускался.

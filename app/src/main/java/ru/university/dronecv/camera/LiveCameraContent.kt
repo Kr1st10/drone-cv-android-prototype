@@ -60,6 +60,7 @@ fun LiveCameraContent(
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
+        val panelMaxHeight = maxHeight * 0.5f
         val camera: @Composable (Modifier) -> Unit = { modifier ->
             Box(modifier.background(Color.Black)) {
                 CameraPreview(controller, running, confidence, Modifier.fillMaxSize(),
@@ -79,7 +80,7 @@ fun LiveCameraContent(
         } else {
             Column(Modifier.fillMaxSize()) {
                 camera(Modifier.weight(1f).fillMaxWidth())
-                controls(Modifier.fillMaxWidth().heightIn(max = maxHeight * 0.5f))
+                controls(Modifier.fillMaxWidth().heightIn(max = panelMaxHeight))
             }
         }
     }

@@ -26,7 +26,7 @@ class LiveControllerTest {
         val thresholds = mutableListOf<Float>()
         val events = mutableListOf<String>()
         var onInfer: () -> Unit = {}
-        val result = LiveInference(listOf(
+        var result = LiveInference(listOf(
             Detection("drone", 0.9f, NormalizedBox(0.1f, 0.2f, 0.4f, 0.6f)),
         ), 480, 640, 12.5)
         override fun infer(frame: Frame, confidence: Float): LiveInference {
@@ -76,6 +76,22 @@ class LiveControllerTest {
         assertEquals(1L, state.completedFrames)
         assertEquals(listOf(0.7f), backend.thresholds)
         assertEquals(1, frame.closes.get())
+    }
+
+    @Test fun emptyNextFrameReplacesPreviousDetectionsAndKeepsRunning() {
+        val worker = Worker()
+        val backend = Backend()
+        val controller = LiveController(backend, worker)
+        controller.configure(true, 0.5f)
+        controller.analyze(Frame())
+        assertEquals(1, controller.state.value.result!!.detections.size)
+        backend.result = backend.result.copy(detections = emptyList())
+        val empty = Frame()
+        controller.analyze(empty)
+        assertEquals(LivePhase.RUNNING, controller.state.value.phase)
+        assertTrue(controller.state.value.result!!.detections.isEmpty())
+        assertEquals(2L, controller.state.value.completedFrames)
+        assertEquals(1, empty.closes.get())
     }
 
     @Test fun thresholdChangeImmediatelyClearsBoxesAndUsesNewThreshold() {
