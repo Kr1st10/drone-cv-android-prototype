@@ -25,8 +25,21 @@ class ReportMetricsTest(unittest.TestCase):
         self.assertEqual(se.precision_all(r), 0.0)
 
     def test_report_generator_uses_saved_aggregate_and_same_baseline(self):
-        path = Path(__file__).resolve().parents[1] / 'results' / 'sahi' / 'summary.json'
-        summary = json.loads(path.read_text())
+        # Synthetic aggregates keep this test stable if later runs change measurements.
+        def record(tp, fp, hard, random, mean, p50, p90, pos_mean):
+            return dict(tp=tp, fp=fp, fn=383-tp, precision=tp/(tp+fp), recall=tp/383,
+                        f1=0.0, dup_fp_on_matched_gt=0,
+                        vs_baseline=dict(gt_gained=0, gt_lost=0),
+                        negatives=dict(hard=dict(images=100, images_with_detections=0, detections=hard),
+                                       random=dict(images=100, images_with_detections=0, detections=random)),
+                        recall_by_size={k: dict(n_gt=1, recall=0.0) for k in se.SIZE_BUCKETS},
+                        latency_ms=dict(mean=mean, p50=p50, p90=p90, mean_pos_640x480=pos_mean),
+                        inferences_per_image=dict(mean=1, min=1, max=1))
+        base = record(289, 22, 43, 19, 102.71308928571429, 101.6, 104.8, 102.3)
+        sahi = record(311, 22, 72, 43, 523.2364285714286, 529.3, 587.5, 549.2)
+        sahi320 = record(309, 42, 92, 56, 762.2059642857142, 749.5, 845.7, 789.2)
+        summary = {name: {'0.25': r, '0.5': r} for name, r in
+                   [('baseline', base), ('sahi_416_ov0.2_full', sahi), ('sahi_320_ov0.2_full', sahi320)]}
         env = dict(cpu='test', logical_cpus=2, ort_intra_op_threads=2, python='test',
                    onnxruntime='test', sahi='test', numpy='test', opencv='test', onnx_sha256='test')
         data = dict(env=env, confs=[0.25, 0.5], nms_iou=0.7, match_iou=0.5)

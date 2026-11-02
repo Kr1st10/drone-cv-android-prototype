@@ -145,7 +145,7 @@ python ml/scripts/sahi_experiment.py select        # должен воспрои
 python ml/scripts/sahi_experiment.py run           # ~45 мин на 2 vCPU -> sahi_eval.json (git-ignored, ~0.9 МБ)
 python ml/scripts/sahi_experiment.py report        # REPORT_TABLES.md, summary.json
 python ml/scripts/sahi_examples.py --mode sahi_416_ov0.2_full --conf 0.5 --render   # examples.json (+ картинки, git-ignored)
-python -m pytest ml/tests -q                       # 16 тестов
+python -m pytest ml/tests -q                       # полный набор; 16 тестов были пройдены до уточнения отчёта
 ```
 
 Источники: SAHI https://github.com/obss/sahi (MIT, релиз 0.14.0; Akyon et al., «Slicing Aided Hyper Inference
