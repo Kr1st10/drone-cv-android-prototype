@@ -1,0 +1,70 @@
+{
+  "confidence": 0.5,
+  "match_iou": 0.5,
+  "nms_iou": 0.7,
+  "status": "partial: 640 completed; other modes pending",
+  "results": {
+    "640": {
+      "images": 560,
+      "positive_images": 360,
+      "negative_images": 200,
+      "gt": 383,
+      "tp": 289,
+      "fn": 94,
+      "fp_positive": 22,
+      "fp_negative": 62,
+      "fp_all": 84,
+      "precision_all": 0.774798927613941,
+      "recall": 0.7545691906005222,
+      "recall_by_size": {
+        "<16": {
+          "n": 118,
+          "tp": 82,
+          "recall": 0.6949152542372882
+        },
+        "16-24": {
+          "n": 72,
+          "tp": 57,
+          "recall": 0.7916666666666666
+        },
+        "24-32": {
+          "n": 51,
+          "tp": 34,
+          "recall": 0.6666666666666666
+        },
+        "32-96": {
+          "n": 82,
+          "tp": 61,
+          "recall": 0.7439024390243902
+        },
+        ">=96": {
+          "n": 60,
+          "tp": 55,
+          "recall": 0.9166666666666666
+        }
+      },
+      "negative_images_with_fp": 54,
+      "latency_ms": {
+        "mean": 102.80036497321338,
+        "median": 102.1134405000339,
+        "p90": 105.43757140007983
+      },
+      "model_inference_ms": {
+        "mean": 100.26486120357073,
+        "median": 99.62179599995125
+      },
+      "peak_rss_kib": 828512,
+      "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+      "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
+      "environment": {
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+        "logical_cpus": 2,
+        "platform": "Linux-6.18.56-x86_64-with-glibc2.34",
+        "python": "3.13.15",
+        "onnxruntime": "1.31.1",
+        "numpy": "2.5.4",
+        "opencv": "5.0.0"
+      }
+    }
+  }
+}

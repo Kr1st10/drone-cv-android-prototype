@@ -136,7 +136,7 @@ def summarize(data):
     fp_neg=sum(r['fp'] for r in neg); hit=[(h,s) for r in pos for h,s in zip(r['hit'],r['sizes'])]
     by_size={}
     for label,lo,hi in [('<16',0,16),('16-24',16,24),('24-32',24,32),('32-96',32,96),('>=96',96,float('inf'))]:
-        arr=[h for h,s in hit if lo<=s<hi]
+        arr=[h for h,s in hit if lo<=round(float(s), 2)<hi]  # stage 4.1 stores sizes rounded to 0.01 px
         by_size[label]={'n':len(arr),'tp':sum(arr),'recall':sum(arr)/len(arr) if arr else None}
     times=[r['ms'] for r in data['images']]
     model_times=[r['model_ms'] for r in data['images']]

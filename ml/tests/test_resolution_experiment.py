@@ -33,5 +33,9 @@ class ResolutionTests(unittest.TestCase):
         self.assertEqual((s['fp_positive'],s['fp_negative'],s['precision_all']),(1,2,.25))
         self.assertEqual((s['recall_by_size']['16-24']['n'],s['recall_by_size']['16-24']['recall']),(1,1))
         self.assertEqual(s['latency_ms']['median'],15)
+        # Stage 4.1 rounds sqrt(area) to 0.01 px before binning.
+        data['images'][0]['sizes']=[15.999]
+        s=rexp.summarize(data)
+        self.assertEqual((s['recall_by_size']['<16']['n'],s['recall_by_size']['16-24']['n']),(0,1))
 
 if __name__=='__main__': unittest.main()
