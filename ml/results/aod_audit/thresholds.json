@@ -1,0 +1,132 @@
+{
+  "floor_strictly_greater": 0.05,
+  "matching_iou": 0.5,
+  "nms_iou": 0.7,
+  "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+  "manifest_sha256": {
+    "manifest_1.json": "e163dad3e8f3bf9131b73b2b297c57444fe7c95dc05903f666fc18b62b3180a1",
+    "manifest_2.json": "472b4c741ee871b1f4a0195063b4d69c65843a2aae87b1156f91db15078a7371",
+    "manifest_3.json": "e2ecef89e5797fe05e6b0a8457ba92a324f49d22eb4b6dd2abadfbdb1ced3615",
+    "manifest_4.json": "c9874cbadb4f7e7080155665e6b999c917da9ea28f007a3311174571d8a9d31a"
+  },
+  "environment": {
+    "python": "3.13.15",
+    "onnxruntime": "1.31.1",
+    "numpy": "2.5.4"
+  },
+  "same_05_as_stage43": true,
+  "thresholds": [
+    {
+      "confidence_strictly_greater": 0.05,
+      "tp": 37,
+      "fp": 171,
+      "fn": 68,
+      "fp_negative": 98,
+      "precision": 0.1778846153846154,
+      "recall": 0.3523809523809524
+    },
+    {
+      "confidence_strictly_greater": 0.1,
+      "tp": 35,
+      "fp": 125,
+      "fn": 70,
+      "fp_negative": 69,
+      "precision": 0.21875,
+      "recall": 0.3333333333333333
+    },
+    {
+      "confidence_strictly_greater": 0.25,
+      "tp": 32,
+      "fp": 97,
+      "fn": 73,
+      "fp_negative": 51,
+      "precision": 0.24806201550387597,
+      "recall": 0.3047619047619048
+    },
+    {
+      "confidence_strictly_greater": 0.5,
+      "tp": 29,
+      "fp": 75,
+      "fn": 76,
+      "fp_negative": 36,
+      "precision": 0.27884615384615385,
+      "recall": 0.2761904761904762
+    },
+    {
+      "confidence_strictly_greater": 0.75,
+      "tp": 18,
+      "fp": 42,
+      "fn": 87,
+      "fp_negative": 24,
+      "precision": 0.3,
+      "recall": 0.17142857142857143
+    },
+    {
+      "confidence_strictly_greater": 0.9,
+      "tp": 0,
+      "fp": 3,
+      "fn": 105,
+      "fp_negative": 3,
+      "precision": 0.0,
+      "recall": 0.0
+    }
+  ],
+  "score_distribution_at_05": {
+    "tp": {
+      "n": 29,
+      "min": 0.6598609685897827,
+      "median": 0.7765394449234009,
+      "max": 0.8614641427993774
+    },
+    "fp": {
+      "n": 75,
+      "min": 0.5498979091644287,
+      "median": 0.7566721439361572,
+      "max": 0.9249430298805237
+    }
+  },
+  "size_buckets_at_05": {
+    "<16": {
+      "n": 3,
+      "tp": 0,
+      "fn": 3
+    },
+    "16-24": {
+      "n": 7,
+      "tp": 1,
+      "fn": 6
+    },
+    "24-30": {
+      "n": 2,
+      "tp": 0,
+      "fn": 2
+    },
+    "30-64": {
+      "n": 52,
+      "tp": 12,
+      "fn": 40
+    },
+    "64-96": {
+      "n": 21,
+      "tp": 6,
+      "fn": 15
+    },
+    ">=96": {
+      "n": 20,
+      "tp": 10,
+      "fn": 10
+    }
+  },
+  "fn_at_05": {
+    "total": 76,
+    "candidate_iou_ge_05_with_score_above_floor": 8,
+    "no_candidate_iou_ge_05_above_floor": 68,
+    "matched_candidate_score": {
+      "n": 8,
+      "min": 0.05034881830215454,
+      "median": 0.1822109818458557,
+      "max": 0.3405875563621521
+    }
+  },
+  "limitations": "Exploratory threshold sweep on same sample, no independent validation. FN scores are post-NMS retained candidates only, not raw class scores; absence above floor is not zero confidence."
+}
