@@ -12,3 +12,6 @@ pyarrow==26.0.0
 pytest==8.4.2
 # Stage 4.1 research only (ml/scripts/sahi_experiment.py), MIT; not used by Android. Full freeze: ml/results/sahi/pip_freeze.txt
 sahi==0.14.0
+
+# Stage 4.5 canonical EXIF-aware image intake
+Pillow==13.0.0

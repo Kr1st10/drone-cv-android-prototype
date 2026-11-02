@@ -1,0 +1,37 @@
+{
+  "description": "Existing AOD4 4.3 sample; quarantined, not independent, annotations unreviewed, no test or model evaluation",
+  "count_images": 19,
+  "images_with_drone_annotation": 8,
+  "total_drone_annotations": 9,
+  "objects_by_size_sqrt_area": {
+    "<16": 1,
+    "16-<24": 2,
+    ">=30": 6
+  },
+  "scene_tags_multilabel": {
+    "drone": 8,
+    "bird": 3,
+    "airplane": 3,
+    "nature": 1,
+    "forest": 1,
+    "clouds": 1,
+    "buildings": 1,
+    "field": 1
+  },
+  "annotation_class_counts": {
+    "drone": 9,
+    "bird": 3,
+    "airplane": 3
+  },
+  "counts_reviewed": 0,
+  "eligible_for_split": 0,
+  "known_prior_use": "exposed in 4.3 and 4.4",
+  "independence": "unknown for all",
+  "format_errors": 0,
+  "within_pilot_duplicate_candidates": 0,
+  "negative_exhaustiveness": "not established",
+  "source_dataset": "https://data.mendeley.com/datasets/cd5z895tr2/1",
+  "source_license": "CC BY 4.0 dataset record; underlying media rights may differ",
+  "manifest_sha256": "0d458d4f2f57858096c35abc4e633eb7173c19c7e85d09b7a61e073895e4707c",
+  "visual_review": "19 contact-sheet overlays inspected at reduced size; not full annotation adjudication; all records remain unreviewed"
+}
