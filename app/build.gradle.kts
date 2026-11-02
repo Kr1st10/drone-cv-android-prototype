@@ -77,16 +77,15 @@ configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configu
     exclude(group = "com.microsoft.onnxruntime", module = "onnxruntime-android")
 }
 
-/** Проверяет модель в assets: нет файла — предупреждение (сборка без модели допустима), другой SHA-256 — ошибка. */
+/** Не допускает APK без модели или с неверным SHA-256. */
 val verifyDroneModel by tasks.registering {
     val modelFile = file("src/main/assets/$droneModelAsset")
     val expected = droneModelSha256
     inputs.property("expectedSha256", expected)
     doLast {
         if (!modelFile.isFile) {
-            logger.warn(
-                "WARNING: $modelFile is missing. The APK will build, but OnnxDroneDetector.create() will throw " +
-                    "ModelNotFoundException. Run: python ml/scripts/fetch_and_export.py && " +
+            throw GradleException(
+                "Model missing: $modelFile. Run: python ml/scripts/fetch_and_export.py && " +
                     "python ml/scripts/install_android_model.py"
             )
         } else {

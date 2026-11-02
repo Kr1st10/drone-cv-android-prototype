@@ -77,11 +77,12 @@ class YoloPostprocessor(private val labels: List<String>) {
                     best = s; bestClass = c
                 }
             }
-            if (!(best > config.confidenceThreshold)) continue // также отбрасывает NaN
+            if (!best.isFinite() || !(best > config.confidenceThreshold)) continue
             val cx = output[i]
             val cy = output[n + i]
             val w = output[2 * n + i]
             val h = output[3 * n + i]
+            if (!cx.isFinite() || !cy.isFinite() || !w.isFinite() || !h.isFinite() || w <= 0f || h <= 0f) continue
             candidates += Candidate(bestClass, best, PixelBox(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2))
         }
         if (candidates.isEmpty()) return emptyList()

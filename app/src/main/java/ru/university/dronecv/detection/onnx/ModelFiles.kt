@@ -22,42 +22,31 @@ object ModelFiles {
     }
 
     /**
-     * Копирует модель из [source] в [target] атомарно (через временный файл), проверяя SHA-256.
-     * Если [target] уже установлен с тем же хешем (метка `<target>.sha256`), копирование пропускается.
-     * При несовпадении хеша файл не устанавливается и бросается [ModelIntegrityException].
+     * Проверяет установленный файл по фактическому SHA-256; повреждённый кеш восстанавливает из [source].
+     * Установка атомарна: исходный файл сохраняется при ошибке чтения или несовпадении хеша.
      */
+    @Synchronized
     fun installVerified(source: () -> InputStream, target: File, expectedSha256: String): File {
         val expected = expectedSha256.lowercase()
-        val marker = File(target.parentFile, target.name + ".sha256")
-        if (target.isFile && marker.isFile && marker.readText().trim() == expected) return target
-        target.parentFile?.mkdirs()
-        val tmp = File(target.parentFile, target.name + ".part")
-        val md = MessageDigest.getInstance("SHA-256")
-        source().use { input ->
-            tmp.outputStream().use { out ->
-                val buf = ByteArray(1 shl 16)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    md.update(buf, 0, n)
-                    out.write(buf, 0, n)
-                }
+        require(expected.matches(Regex("[0-9a-f]{64}"))) { "Expected a SHA-256 hex digest" }
+        if (target.isFile && sha256(target) == expected) return target
+        val parent = target.absoluteFile.parentFile!!
+        parent.mkdirs()
+        val tmp = File.createTempFile(target.name + ".", ".part", parent)
+        try {
+            source().use { input -> tmp.outputStream().use { input.copyTo(it) } }
+            val actual = sha256(tmp)
+            if (actual != expected) {
+                throw ModelIntegrityException("Model SHA-256 mismatch: expected $expected, got $actual")
             }
-        }
-        val actual = md.digest().joinToString("") { "%02x".format(it) }
-        if (actual != expected) {
+            java.nio.file.Files.move(
+                tmp.toPath(), target.toPath(),
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            )
+            return target
+        } finally {
             tmp.delete()
-            throw ModelIntegrityException("Model SHA-256 mismatch: expected $expected, got $actual")
         }
-        marker.delete()
-        if (!tmp.renameTo(target)) {
-            target.delete()
-            if (!tmp.renameTo(target)) {
-                tmp.delete()
-                throw java.io.IOException("Cannot move model to ${target.absolutePath}")
-            }
-        }
-        marker.writeText(expected)
-        return target
     }
 }

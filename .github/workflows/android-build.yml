@@ -13,12 +13,55 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-python@v5
         with:
-          gradle-version: "8.11.1"
-      - name: Assemble debug APK
-        run: gradle --no-daemon assembleDebug
+          python-version: "3.13"
+      - name: Restore verified model export
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: ml/weights/yolo11s-drone-640.onnx
+          key: onnx-${{ runner.os }}-${{ hashFiles('ml/model_manifest.json', 'ml/requirements.txt', 'ml/scripts/fetch_and_export.py') }}
+      - name: Export pinned model (only on cache miss)
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r ml/requirements.txt
+          python ml/scripts/fetch_and_export.py
+      - name: Install and verify model
+        run: python ml/scripts/install_android_model.py
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Check absent and corrupt models are rejected
+        shell: bash
+        run: |
+          model=app/src/main/assets/models/yolo11s-drone-640.onnx
+          mv "$model" "$RUNNER_TEMP/verified-model.onnx"
+          if ./gradlew --no-daemon :app:verifyDroneModel > "$RUNNER_TEMP/missing.log" 2>&1; then
+            echo "Missing model was accepted"; exit 1
+          fi
+          grep -F 'Model missing:' "$RUNNER_TEMP/missing.log"
+          printf corrupt > "$model"
+          if ./gradlew --no-daemon :app:verifyDroneModel > "$RUNNER_TEMP/corrupt.log" 2>&1; then
+            echo "Corrupt model was accepted"; exit 1
+          fi
+          grep -F 'Model SHA-256 mismatch' "$RUNNER_TEMP/corrupt.log"
+          mv "$RUNNER_TEMP/verified-model.onnx" "$model"
+      - name: Build APK and run Kotlin unit tests
+        run: ./gradlew --no-daemon assembleDebug testDebugUnitTest
+      - name: Verify model packaged in APK
+        run: python ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
       - uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-onnx-model
+          path: ml/weights/yolo11s-drone-640.onnx

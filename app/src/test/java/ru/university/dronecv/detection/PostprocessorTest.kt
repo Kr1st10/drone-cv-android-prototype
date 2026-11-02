@@ -29,6 +29,24 @@ class PostprocessorTest {
     }
 
     @Test
+    fun invalidGeometryAndNonFiniteScoresAreDropped() {
+        val valid = row(100f, 280f, 20f, 10f, 0.9f)
+        val rows = mutableListOf(valid)
+        for (channel in 0..4) {
+            for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+                rows += valid.copyOf().apply { this[channel] = invalid }
+            }
+        }
+        for (channel in 2..3) {
+            for (invalid in listOf(0f, -10f)) rows += valid.copyOf().apply { this[channel] = invalid }
+        }
+        val result = post.decode(yoloOutput(rows), shape, lb640x480)
+        assertEquals(1, result.size)
+        assertEquals(PixelBox(90f, 195f, 110f, 205f), result.single().box)
+        result.single().toDetection(640, 480)
+    }
+
+    @Test
     fun decodeAndUndoLetterboxPadding() {
         // 640x480 -> pad_top 80. Центр (100, 280) во входе = (100, 200) в исходнике.
         val d = post.decode(yoloOutput(listOf(row(100f, 280f, 20f, 10f, 0.9f))), shape, lb640x480).single()

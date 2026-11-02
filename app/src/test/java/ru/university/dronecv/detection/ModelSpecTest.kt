@@ -72,4 +72,37 @@ class ModelSpecTest {
         assertFalse(other.exists()); assertFalse(File(dir, "bad.onnx.part").exists())
         dir.deleteRecursively()
     }
+    @Test
+    fun corruptCachedModelIsReplacedDespiteMatchingMarker() {
+        val dir = Files.createTempDirectory("model-corrupt").toFile()
+        try {
+            val data = "verified model".toByteArray()
+            val sha = ModelFiles.sha256(data.inputStream())
+            val target = File(dir, "m.onnx")
+            target.writeText("corrupt")
+            File(dir, "m.onnx.sha256").writeText(sha)
+            ModelFiles.installVerified({ data.inputStream() }, target, sha)
+            assertEquals(sha, ModelFiles.sha256(target))
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test
+    fun failedInstallPreservesTargetAndRemovesTemporaryFile() {
+        val dir = Files.createTempDirectory("model-failure").toFile()
+        try {
+            val target = File(dir, "m.onnx").apply { writeText("old model") }
+            val expected = ModelFiles.sha256("new model".byteInputStream())
+            assertThrows(ModelIntegrityException::class.java) {
+                ModelFiles.installVerified({ "wrong model".byteInputStream() }, target, expected)
+            }
+            assertThrows(java.io.IOException::class.java) {
+                ModelFiles.installVerified({ object : java.io.InputStream() {
+                    override fun read(): Int = throw java.io.IOException("source failed")
+                } }, target, expected)
+            }
+            assertEquals("old model", target.readText())
+            assertEquals(listOf("m.onnx"), dir.list()!!.toList())
+        } finally { dir.deleteRecursively() }
+    }
+
 }

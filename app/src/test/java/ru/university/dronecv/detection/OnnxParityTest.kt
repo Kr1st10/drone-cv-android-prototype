@@ -24,7 +24,7 @@ import ru.university.dronecv.detection.yolo.PixelBox
  * и сравнение с Python-эталоном `ml/scripts/make_android_reference.py`.
  *
  * Требует (git-ignored): `ml/weights/yolo11s-drone-640.onnx` и `ml/data/android_parity/`.
- * Если файлов нет, тесты пропускаются (Assume), а не считаются пройденными молча — это видно в отчёте Gradle.
+ * Модель и её SHA-256 обязательны. Только два сравнения с Python пропускаются без локальных parity fixtures.
  */
 class OnnxParityTest {
 
@@ -37,7 +37,9 @@ class OnnxParityTest {
         @BeforeClass
         @JvmStatic
         fun setUp() {
-            if (modelFile.isFile) engine = YoloOnnxEngine.fromFile(modelFile)
+            check(modelFile.isFile) { "Model missing: $modelFile; run ml/scripts/install_android_model.py" }
+            check(expectedSha.isNotEmpty() && ModelFiles.sha256(modelFile) == expectedSha) { "Model SHA-256 mismatch" }
+            engine = YoloOnnxEngine.fromFile(modelFile)
         }
 
         @AfterClass
@@ -188,10 +190,11 @@ class OnnxParityTest {
             assertEquals(c.width, r.imageWidth); assertEquals(c.height, r.imageHeight)
             refTotal += c.dets.size; ktTotal += r.detections.size
             val used = BooleanArray(r.detections.size)
+            var caseMatches = 0
             for ((box, score) in c.dets) {
                 val j = r.detections.indices.filter { !used[it] }.maxByOrNull { r.detections[it].box.iou(box) }
                 if (j != null && r.detections[j].box.iou(box) > 0.9f) {
-                    used[j] = true; matched++
+                    used[j] = true; matched++; caseMatches++
                     val k = r.detections[j]
                     val dc = maxOf(abs(k.box.left - box.left), abs(k.box.top - box.top),
                         abs(k.box.right - box.right), abs(k.box.bottom - box.bottom))
@@ -208,6 +211,7 @@ class OnnxParityTest {
             if (isExact(c)) {
                 // Тот же тензор -> те же рамки (с точностью float32).
                 assertEquals("detections count (${c.id})", c.dets.size, r.detections.size)
+                assertEquals("matched detections (${c.id})", c.dets.size, caseMatches)
             }
         }
         println(report)
