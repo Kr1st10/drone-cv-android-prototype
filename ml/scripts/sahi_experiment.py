@@ -357,6 +357,12 @@ def summarize(data: dict) -> dict:
     return summ
 
 
+def precision_all(r: dict) -> float:
+    """TP/(TP + positive FP + detections on assumed-negative frames)."""
+    fp_neg = sum(sub["detections"] for sub in r["negatives"].values())
+    return r["tp"] / max(r["tp"] + r["fp"] + fp_neg, 1)
+
+
 def report() -> None:
     data = json.loads((OUT_DIR / "sahi_eval.json").read_text())
     s = summarize(data)
@@ -367,15 +373,18 @@ def report() -> None:
          f"Среда: {env['cpu']}, {env['logical_cpus']} logical CPU, ORT intra-op {env['ort_intra_op_threads']}; "
          f"Python {env['python']}, onnxruntime {env['onnxruntime']}, sahi {env['sahi']}, numpy {env['numpy']}, "
          f"opencv {env['opencv']}. ONNX SHA-256 `{env['onnx_sha256']}`.", ""]
+    L += ["P позитивы = TP / (TP + FP на позитивных кадрах); P вся выборка = TP / "
+          "(TP + FP на позитивных кадрах + все детекции на предполагаемых негативах). "
+          "F1 рассчитан по P на позитивных кадрах и R. COCO-негативы предполагаются без дронов.", ""]
     for conf in data["confs"]:
         c = str(conf)
         L += [f"## conf > {conf}, NMS IoU {data['nms_iou']}, IoU сопоставления {data['match_iou']}", "",
-              "| Режим | P | R | F1 | TP | FP | FN | FP-дубли у найденных GT | +GT / −GT vs baseline | "
+              "| Режим | P позитивы | P вся выборка | R | F1 позитивы | TP | FP позитивы | FN | FP-дубли у найденных GT | +GT / −GT vs baseline | "
               "Негативы hard: изобр. / детекций | Негативы random: изобр. / детекций |",
-              "|---|---|---|---|---|---|---|---|---|---|---|"]
+              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for m, by in s.items():
             r = by[c]; v = r["vs_baseline"]; nh = r["negatives"]["hard"]; nr = r["negatives"]["random"]
-            L.append(f"| {m} | {r['precision']:.3f} | {r['recall']:.3f} | {r['f1']:.3f} | {r['tp']} | {r['fp']} | "
+            L.append(f"| {m} | {r['precision']:.3f} | {precision_all(r):.3f} | {r['recall']:.3f} | {r['f1']:.3f} | {r['tp']} | {r['fp']} | "
                      f"{r['fn']} | {r['dup_fp_on_matched_gt']} | +{v['gt_gained']} / −{v['gt_lost']} | "
                      f"{nh['images_with_detections']}/{nh['images']} / {nh['detections']} | "
                      f"{nr['images_with_detections']}/{nr['images']} / {nr['detections']} |")
@@ -392,6 +401,7 @@ def report() -> None:
     L += ["## Время на изображение (conf 0.25; slicing + инференсы + merge, без декодирования JPEG)", "",
           "| Режим | Инференсов/изобр. (mean, min–max) | mean, мс | p50, мс | p90, мс | mean 640×480 positives, мс | × baseline |",
           "|---|---|---|---|---|---|---|"]
+    # Same reference for every row: baseline captured in the saved summary at this confidence.
     b = s["baseline"][c]["latency_ms"]["mean"]
     for m, by in s.items():
         r = by[c]; t = r["latency_ms"]; i = r["inferences_per_image"]
