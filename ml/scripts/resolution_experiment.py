@@ -90,6 +90,13 @@ def run(mode):
     detector = se.OnnxDetect(WEIGHTS / f'yolo11s-drone-{size}.onnx', threads=THREADS)
     model_input = detector.det.session.get_inputs()[0].shape
     if model_input != [1,3,size,size]: raise ValueError(f'Unexpected input shape: {model_input}')
+    raw_original = detector.det.raw
+    model_elapsed = [0.0]
+    def timed_raw(x):
+        started = time.perf_counter()
+        try: return raw_original(x)
+        finally: model_elapsed[0] += (time.perf_counter() - started) * 1000
+    detector.det.raw = timed_raw
     def predict(img):
         if mode == 'sahi416': return se.sahi_predict(img, detector, CONF, 416, 0.2, True, 'IOS')
         return detector(img, CONF)
@@ -99,11 +106,13 @@ def run(mode):
         img=images[it['file']]
         gt=(load_gt(ML/'data/pathikg_test/labels'/it['file'].replace('.jpg','.txt'), img.shape[1], img.shape[0])
             if kind == 'pos' else np.zeros((0,4)))
+        model_elapsed[0]=0.0
         t=time.perf_counter(); dets=predict(img); ms=(time.perf_counter()-t)*1000
+        model_ms=model_elapsed[0]
         r=se.eval_image(dets,gt)
         sizes=np.sqrt((gt[:,2]-gt[:,0])*(gt[:,3]-gt[:,1]))
         records.append({'file':it['file'],'kind':kind,'subset':it.get('subset'), 'tp':r['tp'],
-                        'fp':r['fp'],'fn':r['fn'],'hit':r['gt_hit'], 'sizes':sizes.tolist(), 'ms':ms})
+                        'fp':r['fp'],'fn':r['fn'],'hit':r['gt_hit'], 'sizes':sizes.tolist(), 'ms':ms, 'model_ms':model_ms})
         if (idx+1)%100==0: print(f'{mode}: {idx+1}/{len(items)}',flush=True)
     # ru_maxrss is peak of whole fresh process, includes model, cached decoded inputs, imports etc.
     cpu='unknown'
@@ -130,12 +139,14 @@ def summarize(data):
         arr=[h for h,s in hit if lo<=s<hi]
         by_size[label]={'n':len(arr),'tp':sum(arr),'recall':sum(arr)/len(arr) if arr else None}
     times=[r['ms'] for r in data['images']]
+    model_times=[r['model_ms'] for r in data['images']]
     return {'images':len(data['images']),'positive_images':len(pos),'negative_images':len(neg),
             'gt':tp+fn,'tp':tp,'fn':fn,'fp_positive':fp_pos,'fp_negative':fp_neg,'fp_all':fp_pos+fp_neg,
             'precision_all':tp/(tp+fp_pos+fp_neg) if tp+fp_pos+fp_neg else 0,
             'recall':tp/(tp+fn) if tp+fn else 0,'recall_by_size':by_size,
             'negative_images_with_fp':sum(r['fp']>0 for r in neg),
             'latency_ms':{'mean':float(np.mean(times)),'median':float(np.median(times)),'p90':float(np.percentile(times,90))},
+            'model_inference_ms':{'mean':float(np.mean(model_times)),'median':float(np.median(model_times))},
             'peak_rss_kib':data['peak_rss_kib'],'model_sha256':data['model_sha256'],
             'subset_sha256':data['subset_sha256'],'environment':data['environment']}
 
@@ -147,7 +158,7 @@ def report():
     if len({json.dumps(r['environment'],sort_keys=True) for r in result.values()}) != 1: raise ValueError('Environments differ')
     (OUT/'summary.json').write_text(json.dumps({'confidence':CONF,'match_iou':se.MATCH_IOU,'nms_iou':se.NMS_IOU,
         'memory_note':'Linux peak RSS for each complete fresh process, includes decoded images and libraries',
-        'timing_note':'preprocess + inference + postprocess; JPEG decoding excluded; per mode fresh process',
+        'timing_note':'latency_ms: preprocess + inference + postprocess; model_inference_ms: sum of ORT session calls; JPEG decoding excluded; per mode fresh process',
         'results':result},indent=2)+'\n')
     print(json.dumps(result,indent=2))
 

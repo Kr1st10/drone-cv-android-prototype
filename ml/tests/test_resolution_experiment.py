@@ -26,8 +26,8 @@ class ResolutionTests(unittest.TestCase):
         self.assertEqual(dd.nms(boxes,np.array([.9,.8,.7]),.7).tolist(),[0,2])
 
     def test_precision_includes_negative_detections(self):
-        data={'images':[{'kind':'pos','tp':1,'fp':1,'fn':0,'hit':[True],'sizes':[20.],'ms':10},
-                        {'kind':'neg','tp':0,'fp':2,'fn':0,'hit':[],'sizes':[],'ms':20}],
+        data={'images':[{'kind':'pos','tp':1,'fp':1,'fn':0,'hit':[True],'sizes':[20.],'ms':10,'model_ms':7},
+                        {'kind':'neg','tp':0,'fp':2,'fn':0,'hit':[],'sizes':[],'ms':20,'model_ms':14}],
               'peak_rss_kib':1,'model_sha256':'a','subset_sha256':'b','environment':{}}
         s=rexp.summarize(data)
         self.assertEqual((s['fp_positive'],s['fp_negative'],s['precision_all']),(1,2,.25))
