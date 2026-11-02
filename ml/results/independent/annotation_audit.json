@@ -1,0 +1,44 @@
+{
+  "method": "Manual visual inspection of 14 images (2 per selection group where available), plus crops for all three drone annotations <16 px and the closest test dHash candidate. Ambiguous labels are not corrected or excluded without ground truth.",
+  "tiny_annotation_flags": [
+    {
+      "split": "train",
+      "id": 9949,
+      "bbox": [
+        169,
+        140,
+        11.5,
+        15
+      ],
+      "observation": "not visually identifiable in crop near overlaid text"
+    },
+    {
+      "split": "train",
+      "id": 2346,
+      "bbox": [
+        677,
+        631,
+        7,
+        13
+      ],
+      "observation": "tiny box appears on ground next to much larger labelled drone; object identity unclear"
+    },
+    {
+      "split": "valid",
+      "id": 3434,
+      "bbox": [
+        476,
+        1010,
+        16,
+        12
+      ],
+      "observation": "at bottom edge of blurred image; object identity unclear"
+    }
+  ],
+  "closest_dhash_pair": {
+    "aod_filename": "yt-V4TZcEtB5U4-0139_jpg.rf.3dd390130c2c0bce32cc8d76c2d46063.jpg",
+    "pathikg_test_filename": "VS_P6694.jpg",
+    "distance": 0,
+    "visual_observation": "different visible objects/backgrounds; dHash collision, not evidence of same frame"
+  }
+}

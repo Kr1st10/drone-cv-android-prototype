@@ -48,6 +48,9 @@ def main():
  out={'pathikg_revision':DS_REV,'method':'64-bit dHash grayscale 9x8 INTER_AREA; nearest Hamming distance; SHA1 exact compressed bytes', 'scans':scans,'results':best,
       'near_le4':sum(x['distance']<=4 for x in best),'exact_byte_matches':sum(x['exact'] for x in best),
       'caveat':'dHash is a heuristic, can flag flat backgrounds and miss crops, re-encodes or temporal variants; unknown model training split/source origins prevent a guarantee of independence'}
+ results=out.pop('results')
  (OUT/'overlap.json').write_text(json.dumps(out,indent=1)+'\n')
+ for i in range(0,len(results),80):
+  (OUT/f'overlap_candidates_{i//80+1}.json').write_text(json.dumps(results[i:i+80],separators=(',',':'))+'\n')
  print('done near<=4',out['near_le4'],'exact',out['exact_byte_matches'],flush=True)
 if __name__=='__main__':main()

@@ -57,6 +57,10 @@ def run(mode):
       'environment':{'cpu':cpu,'logical_cpus':__import__('os').cpu_count(),'platform':platform.platform(),'python':platform.python_version(), 'onnxruntime':ort.__version__,'numpy':np.__version__,'opencv':cv2.__version__},
       'peak_rss_kib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,'records':records}
  (OUT/f'raw_{mode}.json').write_text(json.dumps(obj,separators=(',',':'))+'\n')
+ meta={k:v for k,v in obj.items() if k!='records'}
+ (OUT/f'metadata_{mode}.json').write_text(json.dumps(meta,indent=1)+'\n')
+ for i in range(0,len(records),40):
+  (OUT/f'records_{mode}_{i//40+1}.json').write_text(json.dumps(records[i:i+40],separators=(',',':'))+'\n')
  print('saved',mode,flush=True)
 
 def summarize(data,rows):
@@ -75,8 +79,16 @@ def summarize(data,rows):
          'fp_overlap_iou_05':{cat:sum(r['fp_overlap'][cat] for r in rs) for cat in ('bird','airplane')},
          'latency_ms':{'mean':float(np.mean(t)),'median':float(np.median(t))},'peak_rss_kib':data['peak_rss_kib'],'model_sha256':data['model_sha256']}
 
+def load_run(mode):
+ meta=json.loads((OUT/f'metadata_{mode}.json').read_text())
+ chunks=sorted(OUT.glob(f'records_{mode}_*.json'))
+ if len(chunks)!=4:raise ValueError('expected four record chunks')
+ meta['records']=sum([json.loads(p.read_text()) for p in chunks],[])
+ if len(meta['records'])!=160:raise ValueError('invalid record count')
+ return meta
+
 def report():
- rows=manifests(); lookup={(r['split'],r['id']):r for r in rows};raw={m:json.loads((OUT/f'raw_{m}.json').read_text()) for m in MODES}
+ rows=manifests(); lookup={(r['split'],r['id']):r for r in rows};raw={m:load_run(m) for m in MODES}
  if len({json.dumps(v['manifest_sha256'],sort_keys=True) for v in raw.values()})!=1 or len({json.dumps(v['environment'],sort_keys=True) for v in raw.values()})!=1:raise ValueError('manifest/environment differs')
  ids=[(x['split'],x['id']) for x in raw['640']['records']]
  if any([(x['split'],x['id']) for x in d['records']]!=ids for d in raw.values()):raise ValueError('different images')

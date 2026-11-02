@@ -1,0 +1,69 @@
+{
+ "pathikg_revision": "004b46cc181ecdcabd715753c2c5346d869c0044",
+ "method": "64-bit dHash grayscale 9x8 INTER_AREA; nearest Hamming distance; SHA1 exact compressed bytes",
+ "scans": [
+  {
+   "split": "test",
+   "file": "pathikg_test.parquet",
+   "sha256": "e700f7ff59854804e4643269c2ed6d7e9712df3eb183ad4a40cbd4ec94bb25b9",
+   "rows": 2625
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_0.parquet",
+   "sha256": "7822d9836bcfc59a8b38c311002435b42fd3eccfa011d55ba1387d58481e6ea6",
+   "rows": 5717
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_1.parquet",
+   "sha256": "c416c2d5bc522c9cec4873e6236b0a087233ce08599f50f8e0b17561f566f5d0",
+   "rows": 5717
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_2.parquet",
+   "sha256": "e8ec53fcf1720b6945728882729db4954733f24470f01b9e5a6f123f08d9c91d",
+   "rows": 5716
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_3.parquet",
+   "sha256": "1e44d936b91df1ced8154f8057e7c92b4b3138fc8d11193a972519beb8126b5f",
+   "rows": 5716
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_4.parquet",
+   "sha256": "6495cf5ddab1ae5dd3ba5ed13359f7e855de2b2fa65a8c1288f2da4b6ac4cdc2",
+   "rows": 5716
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_5.parquet",
+   "sha256": "c2c10e65a030d1254916ed69f77a83543339baa60cfe42cea7ad03bead7919ea",
+   "rows": 5716
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_6.parquet",
+   "sha256": "ac2c8efa3cde470c1a1adff23627faeae2394c21ba5b23845e47987c112d7461",
+   "rows": 5716
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_7.parquet",
+   "sha256": "6ae976ce414b21004eca34d998a6a2bd1a2482de634a4c4c3349a69d522027a9",
+   "rows": 5716
+  },
+  {
+   "split": "train",
+   "file": "pathikg_train_8.parquet",
+   "sha256": "efc3d57bced8c53cca1db225126ce6df4dccc1bb4d5689cbd0f01a99624457ef",
+   "rows": 5716
+  }
+ ],
+ "near_le4": 18,
+ "exact_byte_matches": 0,
+ "caveat": "dHash is a heuristic, can flag flat backgrounds and miss crops, re-encodes or temporal variants; unknown model training split/source origins prevent a guarantee of independence"
+}
