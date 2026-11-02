@@ -1,0 +1,16 @@
+{
+  "floor": 0.05,
+  "nms_iou": 0.7,
+  "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+  "manifest_sha256": {
+    "manifest_1.json": "e163dad3e8f3bf9131b73b2b297c57444fe7c95dc05903f666fc18b62b3180a1",
+    "manifest_2.json": "472b4c741ee871b1f4a0195063b4d69c65843a2aae87b1156f91db15078a7371",
+    "manifest_3.json": "e2ecef89e5797fe05e6b0a8457ba92a324f49d22eb4b6dd2abadfbdb1ced3615",
+    "manifest_4.json": "c9874cbadb4f7e7080155665e6b999c917da9ea28f007a3311174571d8a9d31a"
+  },
+  "environment": {
+    "python": "3.13.15",
+    "onnxruntime": "1.31.1",
+    "numpy": "2.5.4"
+  }
+}
