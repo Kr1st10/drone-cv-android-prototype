@@ -70,8 +70,11 @@ def main():
  p=argparse.ArgumentParser();p.add_argument('--archive',type=Path,default=DATA/'AOD4.zip');p.add_argument('--download',action='store_true');args=p.parse_args()
  if args.download and not args.archive.exists():
   args.archive.parent.mkdir(parents=True,exist_ok=True)
-  with urllib.request.urlopen(URL) as r, args.archive.open('wb') as w:
+  part=args.archive.with_suffix('.part')
+  with urllib.request.urlopen(URL) as r, part.open('wb') as w:
    while b:=r.read(1<<20):w.write(b)
+  if sha(part)!=SHA:raise ValueError('download SHA-256 mismatch')
+  part.replace(args.archive)
  if sha(args.archive)!=SHA:raise SystemExit('AOD4 archive SHA-256 mismatch')
  candidates=[]
  with zipfile.ZipFile(args.archive) as z:
