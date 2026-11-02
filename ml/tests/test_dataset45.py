@@ -134,3 +134,54 @@ def test_cli_lock_wrapper_and_validation(tmp_path):
     assert main(['split','--manifest',str(manifest),'--out',str(out)])==0
     assert main(['split','--manifest',str(manifest),'--out',str(out2),'--lock',str(out),'--freeze-test'])==0
     assert json.loads(out2.read_text())['lock']['test_frozen']
+
+def test_exif_rotation_is_applied_before_boxes(tmp_path):
+    p=tmp_path/'rotated.jpg';im=Image.new('RGB',(20,40),'blue');exif=Image.Exif();exif[274]=6;im.save(p,exif=exif)
+    m=metadata(600);m['annotations']=[{'class':'drone','xyxy':[0,0,39,19]}]
+    r=ingest_image(p,m,tmp_path/'dataset')
+    assert (r['width'],r['height'])==(40,20) and not validate_record(r)[0]
+
+def test_video_import_cannot_enter_test_without_review(tmp_path):
+    r=record(tmp_path);r.update(review_status='unreviewed',annotations=[],negative_verified=False)
+    with pytest.raises(ValueError,match='quarantine'):make_split([r])
+
+def test_freeze_requires_all_partitions(tmp_path):
+    row=record(tmp_path)
+    with pytest.raises(ValueError,match='nonempty'):make_split([row],freeze=True)
+
+def test_evaluation_uses_shared_matching_and_negative_counts(tmp_path):
+    from ml.dataset45.evaluate import evaluate_records
+    a=record(tmp_path,1);b=record(tmp_path,2);b['annotations']=[{'class':'bird','xyxy':[4,4,10,10]}];b['negative_verified']=True
+    result=evaluate_records([a,b],[{'id':a['id'],'predictions':[[2,3,12,13,.9],[2,3,12,13,.8]]},
+                                   {'id':b['id'],'predictions':[[4,4,10,10,.7]]}],.5)
+    assert (result['counts']['tp'],result['counts']['fp'],result['counts']['fn'])==(1,2,0)
+    assert result['precision_all']==pytest.approx(1/3) and result['recall']==1
+    assert result['negative_images']=={'images':1,'fp':1,'images_with_fp':1}
+    assert result['recall_by_size']['<16']=={'n':1,'tp':1,'recall':1}
+    assert result['timing_ms'] is None
+
+def test_evaluation_rejects_missing_or_subthreshold_predictions(tmp_path):
+    from ml.dataset45.evaluate import evaluate_records
+    a=record(tmp_path)
+    with pytest.raises(ValueError,match='exactly one'):evaluate_records([a],[],.5)
+    with pytest.raises(ValueError,match='threshold'):evaluate_records([a],[{'id':a['id'],'predictions':[[2,3,12,13,.5]]}],.5)
+
+def test_reference_dataset_conflicts_are_not_silently_ignored(tmp_path):
+    from ml.dataset45.duplicates import reference_conflicts
+    pixels=np.random.default_rng(700).integers(0,256,(32,32,3),dtype=np.uint8)
+    candidate=record(tmp_path,1,pixels); reference=record(tmp_path,2,pixels)
+    matches=reference_conflicts([candidate],[reference]);assert 'exact_pixels_or_file' in matches[0]['reasons']
+    other=record(tmp_path,3);other['sequence_id']=candidate['sequence_id']
+    assert 'sequence_id' in reference_conflicts([candidate],[other])[0]['reasons']
+
+def test_end_to_end_final_eval_requires_frozen_holdout(tmp_path):
+    from ml.dataset45.evaluate import main as evaluate_main
+    rows=[record(tmp_path,i) for i in range(30)];manifest=tmp_path/'dataset'/'manifest.json';save_manifest(manifest,rows)
+    ass,lock,_=make_split(rows,freeze=True);lock_path=tmp_path/'split.json';lock_path.write_text(json.dumps({'lock':lock}))
+    test=[r for r in rows if ass[r['id']]=='test'];pred=tmp_path/'pred.json'
+    pred.write_text(json.dumps({'config':{'model_id':'synthetic','model_sha256':'a'*64,'confidence':.5,'nms_iou':.7},
+                                'records':[{'id':r['id'],'predictions':[]} for r in test]}))
+    output=tmp_path/'result.json'
+    assert evaluate_main(['--manifest',str(manifest),'--lock',str(lock_path),'--predictions',str(pred),'--split','test','--purpose','final','--output',str(output)])==0
+    result=json.loads(output.read_text());assert result['counts']['fn']==len(test) and result['test_frozen'] and result['timing_ms'] is None
+    with pytest.raises(ValueError,match='requires purpose'):evaluate_main(['--manifest',str(manifest),'--lock',str(lock_path),'--predictions',str(pred),'--split','test','--purpose','development','--output',str(output)])

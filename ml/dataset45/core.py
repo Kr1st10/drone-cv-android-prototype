@@ -111,7 +111,7 @@ def ingest_pixels(image: Image.Image, metadata: dict, root: Path, source_sha: st
     if dest.exists() and sha256_bytes(dest.read_bytes())!=sha: raise ValueError('existing destination hash mismatch')
     if not dest.exists(): dest.write_bytes(data)
     # Preserve caller's provenance values, but do not accept pre-approval at ingestion.
-    keep=('source_url','license','rights_note','source_group','sequence_id','scene','independence','independence_evidence','usage_history','annotations','video_sha256','frame_index','frame_time_seconds','source_group_verified')
+    keep=('source_url','license','rights_note','source_group','sequence_id','scene','independence','independence_evidence','usage_history','annotations','video_sha256','frame_index','frame_time_seconds','source_group_verified','origin_dataset','origin_file','origin_split','origin_id','origin_annotation_format')
     record={k:metadata[k] for k in keep if k in metadata}
     identity=json.dumps([metadata.get('source_group'),metadata.get('sequence_id'),source_sha,metadata.get('frame_index')],separators=(',',':')).encode()
     record.update({'id': sha256_bytes(identity), 'file':str(Path('images')/dest.name), 'sha256':sha,

@@ -8,7 +8,7 @@ from pathlib import Path
 import cv2
 from PIL import Image, ImageDraw
 from .core import ingest_image, ingest_pixels, load_manifest, save_manifest, validate_record, sha256_bytes, fingerprints
-from .duplicates import duplicate_pairs
+from .duplicates import duplicate_pairs, reference_conflicts
 from .splits import make_split
 
 
@@ -102,6 +102,7 @@ def main(argv=None):
         if kind=='import-video':q.add_argument('--every',required=True,type=int,help='minimum step in decoded frames');q.add_argument('--limit',type=int,default=100)
     for kind in ('validate','duplicates','visualize','split'):
         q=sub.add_parser(kind);q.add_argument('--manifest',required=True,type=Path)
+        if kind in ('duplicates','split'):q.add_argument('--reference',type=Path,action='append',default=[],help='compare with a known external dataset manifest')
         if kind=='visualize':q.add_argument('--out',required=True,type=Path)
         if kind=='split':
             q.add_argument('--out',required=True,type=Path);q.add_argument('--lock',type=Path);q.add_argument('--seed',default='stage45-v1');q.add_argument('--freeze-test',action='store_true')
@@ -113,11 +114,22 @@ def main(argv=None):
     data=load_manifest(args.manifest); result=check(args.manifest,data)
     if args.command=='validate':print(json.dumps(result,ensure_ascii=False,indent=2));return int(result['error_count']>0)
     if result['error_count']:raise ValueError('invalid manifest or images; run validate')
-    if args.command=='duplicates': print(json.dumps(result['duplicate_pairs'],ensure_ascii=False,indent=2));return 0
+    if args.command in ('duplicates','split'):
+        external=[];reference_hashes=[]
+        for ref in args.reference:
+            reference_hashes.append(sha256_bytes(ref.read_bytes()))
+            rd=load_manifest(ref);report=check(ref,rd)
+            if report['error_count']:raise ValueError('invalid reference manifest/images')
+            external.extend(reference_conflicts(data['records'],rd['records']))
+        if args.command=='duplicates':
+            print(json.dumps({'within':result['duplicate_pairs'],'reference_conflicts':external},ensure_ascii=False,indent=2));return 0
+        if external:raise ValueError(f'{len(external)} potential conflicts with reference data; quarantine and review')
     if args.command=='visualize':render(args.manifest,data['records'],args.out);print('rendered',len(data['records']));return 0
     previous=json.loads(args.lock.read_text()) if args.lock else None
     if previous and 'lock' in previous:previous=previous['lock']
+    if previous and previous.get('reference_sha256',[])!=sorted(reference_hashes):raise ValueError('reference manifest set differs from locked set')
     assignments,lock,pairs=make_split(data['records'],args.seed,previous,args.freeze_test)
+    lock['reference_sha256']=sorted(reference_hashes)
     args.out.parent.mkdir(parents=True,exist_ok=True)
     if args.lock and args.out.resolve()==args.lock.resolve():raise ValueError('output must differ from input lock')
     args.out.write_text(json.dumps({'assignments':assignments,'lock':lock,'candidate_pairs':pairs},indent=2)+'\n')
