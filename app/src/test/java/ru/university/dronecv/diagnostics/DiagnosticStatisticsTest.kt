@@ -30,3 +30,16 @@ class DiagnosticStatisticsTest {
         assertEquals(0L, store.stop(token, 10, true, "error")!!.completedFrames)
     }
 }
+
+class DiagnosticReportTest {
+    @Test fun exportIncludesEmptyAndInterruptedStateAndEscapesStrings() {
+        val f = DiagnosticFrameSnapshot(1_000_000_000L, 0, 0, 0, true, "pause\n\"quoted\"", emptyList())
+        val r = DiagnosticReport(0, "Device", "15", 35, "0.4.0", "models/test.onnx", "abc", .5f, f, emptyList())
+        val json = r.toJson()
+        assertTrue(json.contains("\"interrupted\":true"))
+        assertTrue(json.contains("pause\\n\\\"quoted\\\""))
+        assertTrue(json.contains("\"preprocessing\":null"))
+        assertTrue(json.contains("\"camera_frames_dropped\":null"))
+        assertTrue(json.contains("\"frames\":[]"))
+    }
+}

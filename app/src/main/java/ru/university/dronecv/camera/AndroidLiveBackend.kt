@@ -15,14 +15,17 @@ class AndroidLiveBackend(context: Context) : LiveBackend<ImageProxy> {
     override fun infer(frame: ImageProxy, confidence: Float): LiveInference {
         try {
             val active = detector ?: OnnxDroneDetector.create(app).also { detector = it }
+            val conversionStart = System.nanoTime()
             val plane = frame.planes[0]
             val crop = frame.cropRect
             val image = converter.convert(plane.buffer, frame.width, frame.height,
                 plane.rowStride, plane.pixelStride, crop.left, crop.top, crop.right, crop.bottom)
+            val conversionEnd = System.nanoTime()
             val result = active.detectArgbDetailed(image, frame.imageInfo.rotationDegrees,
                 PostprocessConfig(confidenceThreshold = confidence))
             return LiveInference(result.detections.map { it.toDetection(result.imageWidth, result.imageHeight) },
-                result.imageWidth, result.imageHeight, result.inferenceMs)
+                result.imageWidth, result.imageHeight, result.inferenceMs,
+                (conversionEnd - conversionStart) / 1_000_000.0, result.preprocessMs, result.postprocessMs)
         } catch (e: Exception) {
             Log.e("LiveDetection", "Frame inference failed", e)
             throw e

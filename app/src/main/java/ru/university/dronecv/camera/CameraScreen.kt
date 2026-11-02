@@ -43,6 +43,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.university.dronecv.diagnostics.DiagnosticViewModel
 import ru.university.dronecv.R
 import ru.university.dronecv.detection.DetectorWorker
 
@@ -50,9 +53,14 @@ import ru.university.dronecv.detection.DetectorWorker
 @Composable
 fun CameraScreen(confidence: Float, onConfidenceChange: (Float) -> Unit) {
     val context = LocalContext.current
+    val diagnostics: DiagnosticViewModel = viewModel()
     var running by rememberSaveable { mutableStateOf(false) }
-    val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context), DetectorWorker.executor) }
-    DisposableEffect(controller) { onDispose { controller.close() } }
+    val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context), DetectorWorker.executor, diagnostics.frames) }
+    DisposableEffect(controller) { onDispose { diagnostics.stop(true, "Camera screen disposed"); controller.close() } }
+    val liveState by controller.state.collectAsStateWithLifecycle()
+    LaunchedEffect(liveState.phase) {
+        if (liveState.phase == LivePhase.ERROR) diagnostics.stop(true, "Detector error: ${liveState.error}")
+    }
     val hasCameraHardware = remember {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
@@ -82,7 +90,7 @@ fun CameraScreen(confidence: Float, onConfidenceChange: (Float) -> Unit) {
             hasPermission = granted
             if (granted) permanentlyDenied = false
         }
-        onPauseOrDispose { }
+        onPauseOrDispose { diagnostics.stop(true, "Activity paused or screen turned off") }
     }
 
     LaunchedEffect(Unit) {
@@ -119,15 +127,16 @@ fun CameraScreen(confidence: Float, onConfidenceChange: (Float) -> Unit) {
             else -> key(bindAttempt) {
                 LiveCameraContent(
                     controller = controller,
+                    diagnostics = diagnostics,
                     running = running,
                     confidence = confidence,
                     onRunningChange = {
-                        if (!it) controller.configure(false, confidence)
+                        if (!it) { diagnostics.stop(true, "Detection stopped"); controller.configure(false, confidence) }
                         running = it
                     },
-                    onConfidenceChange = { controller.updateThreshold(it); onConfidenceChange(it) },
+                    onConfidenceChange = { diagnostics.stop(true, "Confidence changed"); controller.updateThreshold(it); onConfidenceChange(it) },
                     recoverableIssue = recoverableIssue?.let { recoverableIssueText(it) },
-                    onCameraError = { controller.configure(false, confidence); cameraError = it },
+                    onCameraError = { diagnostics.stop(true, "Camera error: ${it.message}"); controller.configure(false, confidence); cameraError = it },
                     onCameraIssue = { recoverableIssue = it },
                 )
             }
