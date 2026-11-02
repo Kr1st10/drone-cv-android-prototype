@@ -40,11 +40,17 @@ _Обновлено: 2026-11-02. Живая детекция, ветка `featur
 - `./gradlew --no-daemon assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug` — BUILD SUCCESSFUL
   на macOS arm64, JDK 17, SDK 35. Дополнительный empty-result regression test также passed. Lint: 0 ошибок,
   37 предупреждений о версиях зависимостей/target SDK/существующем backup manifest, 0 information.
-  Компиляция AndroidTest не доказывает выполнение; CI emulator job проверяется отдельно.
-- Первый [CI run](https://github.com/Kr1st10/drone-cv-android-prototype/actions/runs/41435816804): assemble/unit/lint/model passed;
-  camera UI timeout и Compose layout crash на API 29. Stack показал test recomposer на ML-worker через StateFlow.
-  Внесены explicit Main UI collection, фиксированный размер панели и regression ожидания ≥3 последовательных кадров;
-  повторный emulator run ещё требуется. Не считать первый job аппаратной/интеграционной приёмкой.
+  Локальная компиляция AndroidTest отделена от фактического CI emulator run ниже.
+- [CI run 41439862685](https://github.com/Kr1st10/drone-cv-android-prototype/actions/runs/41439862685), код `478f2b7`:
+  **assemble-debug + connected-tests passed**. На API 29 x86_64 Pixel 2 emulator: **9/9 Android tests passed,
+  0 skipped**, `OK (9 tests)`, 112.011 с. Включены настоящий CameraX→ORT→UI (≥3 последовательных результатов),
+  confidence/сохранение порога, Stop/restart/смена вкладки, фон/возврат, recreation и обе landscape-ориентации;
+  также 3 ORT smoke tests и 4 photo decoder/EXIF/ORT tests. Модель взята из существующего проверенного cache.
+- Первый emulator run обнаружил layout/thread regression. UI collection закреплена на Main, размер панели
+  стабилен относительно окна, добавлен непрерывный regression. Повторный run выше passed без layout crash;
+  bind-log показывает ожидаемые переходы `1080×734/rotation 0` → `1164×753/rotation 1/3`.
+- PR: [#7](https://github.com/Kr1st10/drone-cv-android-prototype/pull/7), не объединён. Последующие изменения
+  после `478f2b7` относятся к фиксации результатов в документации; актуальный статус head — в checks PR.
 - `verify_apk_model.py`: модель несжатая, 37 927 788 байт, SHA-256
   `b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7`.
 - `adb devices -l` пуст, локально нет emulator/system image. Физический телефон не запускался.

@@ -160,3 +160,9 @@ UI collector закреплён на Dispatchers.Main.immediate. Размер п
 чтобы убрать возможность feedback layout→rebind→invalidate; точная причина первого rebind loop ещё проверяется.
 Android regression ждёт ≥3 результатов в одной активной сессии. Переносы лямбд в отдельные функции не нужны:
 проверка javap показала стабильные rememberComposableLambda/state holder.
+
+Повторный [CI run 41439862685](https://github.com/Kr1st10/drone-cv-android-prototype/actions/runs/41439862685),
+код `478f2b7`: 9/9 Android-тестов passed, включая ≥3 последовательных результата и lifecycle/rotation;
+layout crash не повторился. Bind-log содержит стабильные 1080×734 (rotation 0) и 1164×753 (rotation 1/3)
+в соответствующих сценариях, без прежнего непрерывного пересоздания. Это подтверждение эмуляторной интеграции,
+не измерение FPS/нагрева телефона и не проверка качества на реальном дроне.
