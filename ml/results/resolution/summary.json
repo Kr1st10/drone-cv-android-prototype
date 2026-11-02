@@ -1,0 +1,257 @@
+{
+  "confidence": 0.5,
+  "match_iou": 0.5,
+  "nms_iou": 0.7,
+  "memory_note": "Linux peak RSS for each complete fresh process, includes decoded images and libraries",
+  "timing_note": "latency_ms: preprocess + inference + postprocess; model_inference_ms: sum of ORT session calls; JPEG decoding excluded; per mode fresh process",
+  "results": {
+    "640": {
+      "images": 560,
+      "positive_images": 360,
+      "negative_images": 200,
+      "gt": 383,
+      "tp": 289,
+      "fn": 94,
+      "fp_positive": 22,
+      "fp_negative": 62,
+      "fp_all": 84,
+      "precision_all": 0.774798927613941,
+      "recall": 0.7545691906005222,
+      "recall_by_size": {
+        "<16": {
+          "n": 118,
+          "tp": 82,
+          "recall": 0.6949152542372882
+        },
+        "16-24": {
+          "n": 72,
+          "tp": 57,
+          "recall": 0.7916666666666666
+        },
+        "24-32": {
+          "n": 51,
+          "tp": 34,
+          "recall": 0.6666666666666666
+        },
+        "32-96": {
+          "n": 82,
+          "tp": 61,
+          "recall": 0.7439024390243902
+        },
+        ">=96": {
+          "n": 60,
+          "tp": 55,
+          "recall": 0.9166666666666666
+        }
+      },
+      "negative_images_with_fp": 54,
+      "latency_ms": {
+        "mean": 102.80036497321338,
+        "median": 102.1134405000339,
+        "p90": 105.43757140007983
+      },
+      "model_inference_ms": {
+        "mean": 100.26486120357073,
+        "median": 99.62179599995125
+      },
+      "peak_rss_kib": 828512,
+      "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+      "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
+      "environment": {
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+        "logical_cpus": 2,
+        "platform": "Linux-6.18.56-x86_64-with-glibc2.34",
+        "python": "3.13.15",
+        "onnxruntime": "1.31.1",
+        "numpy": "2.5.4",
+        "opencv": "5.0.0"
+      }
+    },
+    "960": {
+      "images": 560,
+      "positive_images": 360,
+      "negative_images": 200,
+      "gt": 383,
+      "tp": 306,
+      "fn": 77,
+      "fp_positive": 30,
+      "fp_negative": 69,
+      "fp_all": 99,
+      "precision_all": 0.7555555555555555,
+      "recall": 0.7989556135770235,
+      "recall_by_size": {
+        "<16": {
+          "n": 118,
+          "tp": 81,
+          "recall": 0.6864406779661016
+        },
+        "16-24": {
+          "n": 72,
+          "tp": 60,
+          "recall": 0.8333333333333334
+        },
+        "24-32": {
+          "n": 51,
+          "tp": 37,
+          "recall": 0.7254901960784313
+        },
+        "32-96": {
+          "n": 82,
+          "tp": 69,
+          "recall": 0.8414634146341463
+        },
+        ">=96": {
+          "n": 60,
+          "tp": 59,
+          "recall": 0.9833333333333333
+        }
+      },
+      "negative_images_with_fp": 59,
+      "latency_ms": {
+        "mean": 242.28765710357314,
+        "median": 236.76685299994915,
+        "p90": 252.45508740013068
+      },
+      "model_inference_ms": {
+        "mean": 235.34538503571738,
+        "median": 230.20312899996043
+      },
+      "peak_rss_kib": 1040452,
+      "model_sha256": "6cb34232e6fff08860e2baf8f407b1ce54abd52ebd577cd088ef2d6a45d761a1",
+      "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
+      "environment": {
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+        "logical_cpus": 2,
+        "platform": "Linux-6.18.56-x86_64-with-glibc2.34",
+        "python": "3.13.15",
+        "onnxruntime": "1.31.1",
+        "numpy": "2.5.4",
+        "opencv": "5.0.0"
+      }
+    },
+    "1280": {
+      "images": 560,
+      "positive_images": 360,
+      "negative_images": 200,
+      "gt": 383,
+      "tp": 279,
+      "fn": 104,
+      "fp_positive": 52,
+      "fp_negative": 72,
+      "fp_all": 124,
+      "precision_all": 0.6923076923076923,
+      "recall": 0.7284595300261096,
+      "recall_by_size": {
+        "<16": {
+          "n": 118,
+          "tp": 76,
+          "recall": 0.6440677966101694
+        },
+        "16-24": {
+          "n": 72,
+          "tp": 57,
+          "recall": 0.7916666666666666
+        },
+        "24-32": {
+          "n": 51,
+          "tp": 36,
+          "recall": 0.7058823529411765
+        },
+        "32-96": {
+          "n": 82,
+          "tp": 67,
+          "recall": 0.8170731707317073
+        },
+        ">=96": {
+          "n": 60,
+          "tp": 43,
+          "recall": 0.7166666666666667
+        }
+      },
+      "negative_images_with_fp": 65,
+      "latency_ms": {
+        "mean": 460.9575677892897,
+        "median": 449.27955549985654,
+        "p90": 509.5679886000198
+      },
+      "model_inference_ms": {
+        "mean": 440.25155510179314,
+        "median": 428.9867795000646
+      },
+      "peak_rss_kib": 1338088,
+      "model_sha256": "ba356bb2f459050019e985070d7d910cf0e9fcef380c366824b3b224584a1e50",
+      "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
+      "environment": {
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+        "logical_cpus": 2,
+        "platform": "Linux-6.18.56-x86_64-with-glibc2.34",
+        "python": "3.13.15",
+        "onnxruntime": "1.31.1",
+        "numpy": "2.5.4",
+        "opencv": "5.0.0"
+      }
+    },
+    "sahi416": {
+      "images": 560,
+      "positive_images": 360,
+      "negative_images": 200,
+      "gt": 383,
+      "tp": 311,
+      "fn": 72,
+      "fp_positive": 22,
+      "fp_negative": 115,
+      "fp_all": 137,
+      "precision_all": 0.6941964285714286,
+      "recall": 0.8120104438642297,
+      "recall_by_size": {
+        "<16": {
+          "n": 118,
+          "tp": 87,
+          "recall": 0.7372881355932204
+        },
+        "16-24": {
+          "n": 72,
+          "tp": 58,
+          "recall": 0.8055555555555556
+        },
+        "24-32": {
+          "n": 51,
+          "tp": 38,
+          "recall": 0.7450980392156863
+        },
+        "32-96": {
+          "n": 82,
+          "tp": 70,
+          "recall": 0.8536585365853658
+        },
+        ">=96": {
+          "n": 60,
+          "tp": 58,
+          "recall": 0.9666666666666667
+        }
+      },
+      "negative_images_with_fp": 97,
+      "latency_ms": {
+        "mean": 542.2035228857145,
+        "median": 546.7423234999842,
+        "p90": 615.0263961001656
+      },
+      "model_inference_ms": {
+        "mean": 511.60058426250345,
+        "median": 515.4186555000706
+      },
+      "peak_rss_kib": 1039032,
+      "model_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+      "subset_sha256": "bca1e11542ffa03f74c82da61099a07c7e9ca68c80a7913c654b3e8c6ca8893f",
+      "environment": {
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+        "logical_cpus": 2,
+        "platform": "Linux-6.18.56-x86_64-with-glibc2.34",
+        "python": "3.13.15",
+        "onnxruntime": "1.31.1",
+        "numpy": "2.5.4",
+        "opencv": "5.0.0"
+      }
+    }
+  }
+}
