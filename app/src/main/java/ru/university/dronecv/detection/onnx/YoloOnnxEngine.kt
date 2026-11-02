@@ -24,7 +24,7 @@ import ru.university.dronecv.detection.yolo.YoloPreprocessor
 /** Параметры движка: потоки ONNX Runtime и пороги постобработки. */
 data class YoloEngineOptions(
     /** Число потоков intra-op; 0 — выбор ONNX Runtime. */
-    val intraOpThreads: Int = 0,
+    val intraOpThreads: Int = 2,
     val postprocess: PostprocessConfig = PostprocessConfig(),
 )
 
@@ -154,6 +154,10 @@ class YoloOnnxEngine private constructor(
                 OrtSession.SessionOptions().use { so ->
                     so.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                     if (options.intraOpThreads > 0) so.setIntraOpNumThreads(options.intraOpThreads)
+                    so.setInterOpNumThreads(1)
+                    so.setExecutionMode(OrtSession.SessionOptions.ExecutionMode.SEQUENTIAL)
+                    so.addConfigEntry("session.intra_op.allow_spinning", "0")
+                    so.addConfigEntry("session.inter_op.allow_spinning", "0")
                     open(env, so)
                 }
             } catch (e: OrtException) {

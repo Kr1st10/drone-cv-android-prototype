@@ -12,6 +12,7 @@ import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.detection.ObjectDetector
 import ru.university.dronecv.detection.yolo.ArgbImage
 import ru.university.dronecv.detection.yolo.ModelNotFoundException
+import ru.university.dronecv.detection.yolo.PostprocessConfig
 import ru.university.dronecv.detection.yolo.toDetection
 
 /**
@@ -39,6 +40,12 @@ class OnnxDroneDetector private constructor(private val engine: YoloOnnxEngine) 
         checkNotMainThread("detect")
         check(!engine.isClosed) { "OnnxDroneDetector is closed" }
         return engine.detect(frame.toArgbImage(), rotationDegrees)
+    }
+
+    /** Borrowed camera pixels; no Bitmap or second full-frame copy. Same engine as Photo. */
+    fun detectArgbDetailed(image: ArgbImage, rotationDegrees: Int, postprocess: PostprocessConfig): YoloResult {
+        checkNotMainThread("detectArgbDetailed")
+        return engine.detect(image, rotationDegrees, postprocess)
     }
 
     override fun close() = engine.close()

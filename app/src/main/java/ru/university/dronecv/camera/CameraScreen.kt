@@ -10,10 +10,9 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.CameraState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,9 +24,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,11 +45,16 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import ru.university.dronecv.R
+import ru.university.dronecv.detection.DetectorWorker
 
 /** Главный экран: запрос разрешения, видеопревью и обработка ошибок камеры. */
 @Composable
 fun CameraScreen() {
     val context = LocalContext.current
+    var running by rememberSaveable { mutableStateOf(false) }
+    var confidence by rememberSaveable { mutableFloatStateOf(0.5f) }
+    val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context), DetectorWorker.executor) }
+    DisposableEffect(controller) { onDispose { controller.close() } }
     val hasCameraHardware = remember {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
@@ -112,28 +118,20 @@ fun CameraScreen() {
                 },
             )
 
-            else -> Box(modifier = Modifier.fillMaxSize()) {
-                // key() пересоздаёт привязку камеры при нажатии «Повторить».
-                key(bindAttempt) {
-                    CameraPreview(
-                        modifier = Modifier.fillMaxSize(),
-                        onError = { cameraError = it },
-                        onRecoverableIssue = { recoverableIssue = it },
-                    )
-                }
-                recoverableIssue?.let { code ->
-                    Text(
-                        text = recoverableIssueText(code),
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .safeDrawingPadding()
-                            .padding(16.dp)
-                            .background(Color(0x99000000))
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
-                }
+            else -> key(bindAttempt) {
+                LiveCameraContent(
+                    controller = controller,
+                    running = running,
+                    confidence = confidence,
+                    onRunningChange = {
+                        if (!it) controller.configure(false, confidence)
+                        running = it
+                    },
+                    onConfidenceChange = { controller.updateThreshold(it); confidence = it },
+                    recoverableIssue = recoverableIssue?.let { recoverableIssueText(it) },
+                    onCameraError = { controller.configure(false, confidence); cameraError = it },
+                    onCameraIssue = { recoverableIssue = it },
+                )
             }
         }
     }
