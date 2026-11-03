@@ -205,6 +205,41 @@ def cluster_bootstrap(recs, preds, conf, groups, n=2000, seed=63):
     return {'units': len(arr), 'precision_ci95': q(P), 'recall_ci95': q(R), 'resamples': n, 'seed': seed}
 
 
+def per_cluster(recs, preds, conf, groups, iou=0.5):
+    import numpy as np
+    from ml.scripts.evaluate import match
+    by = {e['id']: e for e in preds}; per = {}
+    for r in recs:
+        p = [x for x in by[r['id']]['predictions'] if x[4] > conf]
+        gt = np.array([x['xyxy'] for x in r['annotations']], float).reshape(-1, 4)
+        tp, hit, _ = match(np.array([x[:4] for x in p], float).reshape(-1, 4), np.array([x[4] for x in p], float), gt, iou)
+        c = per.setdefault(groups.get(r['id'], r['id']), [0, 0, 0]); c[0] += int(tp.sum()); c[1] += int((~tp).sum()); c[2] += int((~hit).sum())
+    return per
+
+
+def paired_delta(recs, a, b, conf, groups, iou=0.5, n=2000, seed=63):
+    """Paired cluster bootstrap 95% CI of (b - a) for precision and recall on identical images."""
+    import numpy as np
+    pa, pb = per_cluster(recs, a, conf, groups, iou), per_cluster(recs, b, conf, groups, iou); keys = sorted(pa)
+    A = np.array([pa[k] for k in keys], float); B = np.array([pb[k] for k in keys], float); rng = np.random.default_rng(seed)
+    f = lambda s: (s[0] / (s[0] + s[1]) if s[0] + s[1] else np.nan, s[0] / (s[0] + s[2]) if s[0] + s[2] else np.nan)
+    dP, dR = [], []
+    for _ in range(n):
+        i = rng.integers(0, len(keys), len(keys)); x, y = f(A[i].sum(0)), f(B[i].sum(0)); dP.append(y[0] - x[0]); dR.append(y[1] - x[1])
+    q = lambda v: [round(float(np.nanpercentile(v, 2.5)), 4), round(float(np.nanpercentile(v, 97.5)), 4)]
+    x, y = f(A.sum(0)), f(B.sum(0))
+    return {'conf': conf, 'match_iou': iou, 'units': len(keys), 'delta_precision': round(y[0] - x[0], 4), 'delta_precision_ci95': q(dP),
+            'delta_recall': round(y[1] - x[1], 4), 'delta_recall_ci95': q(dR)}
+
+
+def cmd_compare(a):
+    recs = load(a.manifest, 'validation'); A = json.loads(a.baseline.read_text()); B = json.loads(a.candidate.read_text())
+    groups = {i: g[0] for g in clusters([(r['id'], r['dhash64']) for r in recs], 4) for i in g}
+    out = {'baseline': A['config'], 'candidate': B['config'], 'note': 'Same validation images; paired bootstrap over near-duplicate clusters. Development validation, not a test.',
+           'results': [paired_delta(recs, A['records'], B['records'], c, groups, iou) for c in a.conf for iou in (0.5, 0.3)]}
+    a.output.write_text(json.dumps(out, indent=2, ensure_ascii=False) + '\n'); print(json.dumps(out['results'], indent=1))
+
+
 def examples(recs, preds, conf, k=8):
     from ml.scripts.evaluate import match
     import numpy as np
@@ -278,6 +313,8 @@ def main(argv=None):
     q = s.add_parser('train'); q.add_argument('--manifest', type=Path, required=True); q.add_argument('--weights', type=Path, required=True)
     q.add_argument('--config', type=Path, default=Path('ml/results/dut63/finetune_config.json')); q.add_argument('--workdir', type=Path, required=True)
     q.add_argument('--limit', type=int, default=0); q.add_argument('--threads', type=int, default=2); q.add_argument('--device', default='cpu')
-    a = p.parse_args(argv); {'prepare': cmd_prepare, 'predict': cmd_predict, 'evaluate': cmd_evaluate, 'train': cmd_train}[a.cmd](a)
+    q = s.add_parser('compare'); q.add_argument('--manifest', type=Path, required=True); q.add_argument('--baseline', type=Path, required=True)
+    q.add_argument('--candidate', type=Path, required=True); q.add_argument('--output', type=Path, required=True); q.add_argument('--conf', type=float, nargs='+', default=[0.25, 0.5])
+    a = p.parse_args(argv); {'prepare': cmd_prepare, 'predict': cmd_predict, 'evaluate': cmd_evaluate, 'train': cmd_train, 'compare': cmd_compare}[a.cmd](a)
 
 if __name__ == '__main__': main()

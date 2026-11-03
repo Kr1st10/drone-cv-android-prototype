@@ -66,6 +66,9 @@ def test_read_shard_and_evaluation(tmp_path):
     assert res['counts'] == {'tp': 1, 'fp': 0, 'fn': 0, 'images': 2}
     ci = dut63.cluster_bootstrap(recs, preds, .25, {}, n=50)
     assert ci['units'] == 2 and ci['recall_ci95'] == [1.0, 1.0]
+    worse = [{'id': recs[0]['id'], 'predictions': [[40, 30, 50, 40, .9]]}, {'id': recs[1]['id'], 'predictions': []}]
+    d = dut63.paired_delta(recs, worse, preds, .25, {}, n=50)
+    assert d['delta_recall'] == 1.0 and d['delta_precision'] == 0.5
 
 
 def test_configs_pin_checkpoint_and_disable_val_selection():

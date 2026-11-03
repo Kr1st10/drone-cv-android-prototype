@@ -1,0 +1,90 @@
+{
+  "baseline": {
+    "model_id": "sapoepsilon/yolov11s-drone-detector@58897d6",
+    "model_sha256": "337390e1018eaf815474c02e172a224425095466d4a5cd2dbd11301b0aa01b78",
+    "imgsz": 640,
+    "confidence": 0.1,
+    "nms_iou": 0.45,
+    "matching_iou": 0.5,
+    "ultralytics": "8.4.197",
+    "torch": "2.6.0+cpu",
+    "timing_conditions": "x86_64 CPU, 2 torch threads, Ultralytics predict incl. pre/post, sandbox (not phone)",
+    "manifest_sha256": "18ffca0a546be221c2ec74ce6246a3f8b9a1c8b4f0dc1577e7c1be593cb76d10",
+    "note": "post-NMS boxes with score>0.1 kept (equivalent to greedy NMS at conf 0.1); coordinates rounded to 0.1 px"
+  },
+  "candidate": {
+    "model_id": "stage63-dut-limited-finetune-cpu/last.pt",
+    "model_sha256": "7c0bc3d8a98cf40eb57cf00b11e86b3c8cc249f25291db21d648802218b9c8fa",
+    "imgsz": 640,
+    "confidence": 0.1,
+    "nms_iou": 0.45,
+    "matching_iou": 0.5,
+    "ultralytics": "8.4.197",
+    "torch": "2.6.0+cpu",
+    "timing_conditions": "x86_64 CPU, 2 torch threads, Ultralytics predict incl. pre/post, sandbox (not phone)",
+    "manifest_sha256": "18ffca0a546be221c2ec74ce6246a3f8b9a1c8b4f0dc1577e7c1be593cb76d10"
+  },
+  "note": "Same validation images; paired bootstrap over near-duplicate clusters. Development validation, not a test.",
+  "results": [
+    {
+      "conf": 0.25,
+      "match_iou": 0.5,
+      "units": 50,
+      "delta_precision": 0.2327,
+      "delta_precision_ci95": [
+        0.122,
+        0.3515
+      ],
+      "delta_recall": 0.115,
+      "delta_recall_ci95": [
+        0.0567,
+        0.1788
+      ]
+    },
+    {
+      "conf": 0.25,
+      "match_iou": 0.3,
+      "units": 50,
+      "delta_precision": -0.0189,
+      "delta_precision_ci95": [
+        -0.1674,
+        0.1518
+      ],
+      "delta_recall": -0.0567,
+      "delta_recall_ci95": [
+        -0.1075,
+        -0.0074
+      ]
+    },
+    {
+      "conf": 0.5,
+      "match_iou": 0.5,
+      "units": 50,
+      "delta_precision": 0.3797,
+      "delta_precision_ci95": [
+        0.2726,
+        0.5066
+      ],
+      "delta_recall": 0.03,
+      "delta_recall_ci95": [
+        -0.0187,
+        0.0853
+      ]
+    },
+    {
+      "conf": 0.5,
+      "match_iou": 0.3,
+      "units": 50,
+      "delta_precision": 0.0425,
+      "delta_precision_ci95": [
+        -0.1062,
+        0.2118
+      ],
+      "delta_recall": -0.155,
+      "delta_recall_ci95": [
+        -0.2167,
+        -0.0916
+      ]
+    }
+  ]
+}

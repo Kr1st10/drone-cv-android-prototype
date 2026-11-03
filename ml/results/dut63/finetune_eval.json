@@ -1,0 +1,770 @@
+{
+  "config": {
+    "model_id": "stage63-dut-limited-finetune-cpu/last.pt",
+    "model_sha256": "7c0bc3d8a98cf40eb57cf00b11e86b3c8cc249f25291db21d648802218b9c8fa",
+    "imgsz": 640,
+    "confidence": 0.1,
+    "nms_iou": 0.45,
+    "matching_iou": 0.5,
+    "ultralytics": "8.4.197",
+    "torch": "2.6.0+cpu",
+    "timing_conditions": "x86_64 CPU, 2 torch threads, Ultralytics predict incl. pre/post, sandbox (not phone)",
+    "manifest_sha256": "18ffca0a546be221c2ec74ce6246a3f8b9a1c8b4f0dc1577e7c1be593cb76d10"
+  },
+  "by_confidence": {
+    "0.25": {
+      "counts": {
+        "tp": 242,
+        "fp": 120,
+        "fn": 358,
+        "images": 600
+      },
+      "precision_all": 0.6685082872928176,
+      "recall": 0.4033333333333333,
+      "recall_by_size": {
+        "<16": {
+          "n": 105,
+          "tp": 6,
+          "recall": 0.05714285714285714
+        },
+        "16-<24": {
+          "n": 216,
+          "tp": 81,
+          "recall": 0.375
+        },
+        "24-<30": {
+          "n": 111,
+          "tp": 53,
+          "recall": 0.4774774774774775
+        },
+        ">=30": {
+          "n": 168,
+          "tp": 102,
+          "recall": 0.6071428571428571
+        }
+      },
+      "negative_images": {},
+      "timing_ms": {
+        "mean": 174.36416666666668,
+        "median": 166.7
+      },
+      "diagnostic_match_iou_0.3": {
+        "counts": {
+          "tp": 274,
+          "fp": 88,
+          "fn": 326,
+          "images": 600
+        },
+        "precision_all": 0.7569060773480663,
+        "recall": 0.45666666666666667,
+        "recall_by_size": {
+          "<16": {
+            "n": 105,
+            "tp": 24,
+            "recall": 0.22857142857142856
+          },
+          "16-<24": {
+            "n": 216,
+            "tp": 95,
+            "recall": 0.4398148148148148
+          },
+          "24-<30": {
+            "n": 111,
+            "tp": 53,
+            "recall": 0.4774774774774775
+          },
+          ">=30": {
+            "n": 168,
+            "tp": 102,
+            "recall": 0.6071428571428571
+          }
+        }
+      },
+      "fp_by_pred_size": {
+        "<16": 3,
+        "16-<24": 23,
+        "24-<30": 18,
+        ">=30": 76
+      },
+      "fn_by_size": {
+        "<16": 99,
+        "16-<24": 135,
+        "24-<30": 58,
+        ">=30": 66
+      },
+      "fp_localization": {
+        "overlaps_gt_iou_0.1_to_0.5": 37,
+        "no_gt_overlap_iou_lt_0.1": 83
+      },
+      "cluster_bootstrap": {
+        "units": 50,
+        "precision_ci95": [
+          0.5511,
+          0.7795
+        ],
+        "recall_ci95": [
+          0.325,
+          0.4797
+        ],
+        "resamples": 2000,
+        "seed": 63
+      },
+      "examples": {
+        "top_fp": [
+          {
+            "id": "dut-det-validation-02488",
+            "box": [
+              1258.1,
+              916.0,
+              1355.2,
+              951.5
+            ],
+            "score": 0.708,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02124",
+            "box": [
+              991.7,
+              119.4,
+              1029.2,
+              138.9
+            ],
+            "score": 0.7036,
+            "size_bin": "24-<30",
+            "max_iou_gt": 0.498
+          },
+          {
+            "id": "dut-det-validation-02482",
+            "box": [
+              1256.6,
+              914.4,
+              1346.8,
+              950.0
+            ],
+            "score": 0.6915,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02495",
+            "box": [
+              1257.6,
+              915.6,
+              1350.8,
+              952.4
+            ],
+            "score": 0.6899,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02486",
+            "box": [
+              1257.0,
+              915.5,
+              1354.9,
+              952.2
+            ],
+            "score": 0.6806,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02494",
+            "box": [
+              1257.8,
+              916.1,
+              1355.4,
+              949.7
+            ],
+            "score": 0.6787,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02492",
+            "box": [
+              1257.0,
+              915.8,
+              1354.9,
+              951.5
+            ],
+            "score": 0.6701,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02483",
+            "box": [
+              1257.0,
+              915.7,
+              1357.9,
+              951.4
+            ],
+            "score": 0.6658,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          }
+        ],
+        "fn": [
+          {
+            "id": "dut-det-validation-02025",
+            "box": [
+              890.0,
+              662.0,
+              906.0,
+              674.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02050",
+            "box": [
+              1248.0,
+              945.0,
+              1276.0,
+              953.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.1132
+          },
+          {
+            "id": "dut-det-validation-02052",
+            "box": [
+              1232.0,
+              879.0,
+              1255.0,
+              888.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02053",
+            "box": [
+              1231.0,
+              978.0,
+              1251.0,
+              986.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02054",
+            "box": [
+              1193.0,
+              938.0,
+              1219.0,
+              945.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02059",
+            "box": [
+              1651.0,
+              586.0,
+              1670.0,
+              595.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.4834
+          },
+          {
+            "id": "dut-det-validation-02060",
+            "box": [
+              1718.0,
+              719.0,
+              1734.0,
+              726.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.1458
+          },
+          {
+            "id": "dut-det-validation-02070",
+            "box": [
+              747.0,
+              495.0,
+              768.0,
+              506.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2217
+          },
+          {
+            "id": "dut-det-validation-02073",
+            "box": [
+              201.0,
+              621.0,
+              217.0,
+              629.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02075",
+            "box": [
+              1246.0,
+              555.0,
+              1260.0,
+              563.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.3641
+          },
+          {
+            "id": "dut-det-validation-02083",
+            "box": [
+              1495.0,
+              798.0,
+              1510.0,
+              805.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.442
+          },
+          {
+            "id": "dut-det-validation-02086",
+            "box": [
+              910.0,
+              726.0,
+              932.0,
+              735.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02088",
+            "box": [
+              949.0,
+              565.0,
+              970.0,
+              575.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2605
+          },
+          {
+            "id": "dut-det-validation-02089",
+            "box": [
+              1089.0,
+              552.0,
+              1105.0,
+              558.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02090",
+            "box": [
+              777.0,
+              625.0,
+              796.0,
+              633.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2007
+          },
+          {
+            "id": "dut-det-validation-02091",
+            "box": [
+              957.0,
+              558.0,
+              980.0,
+              569.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2487
+          }
+        ]
+      }
+    },
+    "0.5": {
+      "counts": {
+        "tp": 175,
+        "fp": 25,
+        "fn": 425,
+        "images": 600
+      },
+      "precision_all": 0.875,
+      "recall": 0.2916666666666667,
+      "recall_by_size": {
+        "<16": {
+          "n": 105,
+          "tp": 2,
+          "recall": 0.01904761904761905
+        },
+        "16-<24": {
+          "n": 216,
+          "tp": 40,
+          "recall": 0.18518518518518517
+        },
+        "24-<30": {
+          "n": 111,
+          "tp": 45,
+          "recall": 0.40540540540540543
+        },
+        ">=30": {
+          "n": 168,
+          "tp": 88,
+          "recall": 0.5238095238095238
+        }
+      },
+      "negative_images": {},
+      "timing_ms": {
+        "mean": 174.36416666666668,
+        "median": 166.7
+      },
+      "diagnostic_match_iou_0.3": {
+        "counts": {
+          "tp": 182,
+          "fp": 18,
+          "fn": 418,
+          "images": 600
+        },
+        "precision_all": 0.91,
+        "recall": 0.30333333333333334,
+        "recall_by_size": {
+          "<16": {
+            "n": 105,
+            "tp": 5,
+            "recall": 0.047619047619047616
+          },
+          "16-<24": {
+            "n": 216,
+            "tp": 44,
+            "recall": 0.2037037037037037
+          },
+          "24-<30": {
+            "n": 111,
+            "tp": 45,
+            "recall": 0.40540540540540543
+          },
+          ">=30": {
+            "n": 168,
+            "tp": 88,
+            "recall": 0.5238095238095238
+          }
+        }
+      },
+      "fp_by_pred_size": {
+        "<16": 1,
+        "16-<24": 2,
+        "24-<30": 5,
+        ">=30": 17
+      },
+      "fn_by_size": {
+        "<16": 103,
+        "16-<24": 176,
+        "24-<30": 66,
+        ">=30": 80
+      },
+      "fp_localization": {
+        "overlaps_gt_iou_0.1_to_0.5": 7,
+        "no_gt_overlap_iou_lt_0.1": 18
+      },
+      "cluster_bootstrap": {
+        "units": 50,
+        "precision_ci95": [
+          0.7697,
+          0.972
+        ],
+        "recall_ci95": [
+          0.2203,
+          0.3656
+        ],
+        "resamples": 2000,
+        "seed": 63
+      },
+      "examples": {
+        "top_fp": [
+          {
+            "id": "dut-det-validation-02488",
+            "box": [
+              1258.1,
+              916.0,
+              1355.2,
+              951.5
+            ],
+            "score": 0.708,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02124",
+            "box": [
+              991.7,
+              119.4,
+              1029.2,
+              138.9
+            ],
+            "score": 0.7036,
+            "size_bin": "24-<30",
+            "max_iou_gt": 0.498
+          },
+          {
+            "id": "dut-det-validation-02482",
+            "box": [
+              1256.6,
+              914.4,
+              1346.8,
+              950.0
+            ],
+            "score": 0.6915,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02495",
+            "box": [
+              1257.6,
+              915.6,
+              1350.8,
+              952.4
+            ],
+            "score": 0.6899,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02486",
+            "box": [
+              1257.0,
+              915.5,
+              1354.9,
+              952.2
+            ],
+            "score": 0.6806,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02494",
+            "box": [
+              1257.8,
+              916.1,
+              1355.4,
+              949.7
+            ],
+            "score": 0.6787,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02492",
+            "box": [
+              1257.0,
+              915.8,
+              1354.9,
+              951.5
+            ],
+            "score": 0.6701,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          },
+          {
+            "id": "dut-det-validation-02483",
+            "box": [
+              1257.0,
+              915.7,
+              1357.9,
+              951.4
+            ],
+            "score": 0.6658,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.0
+          }
+        ],
+        "fn": [
+          {
+            "id": "dut-det-validation-02025",
+            "box": [
+              890.0,
+              662.0,
+              906.0,
+              674.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02050",
+            "box": [
+              1248.0,
+              945.0,
+              1276.0,
+              953.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.1132
+          },
+          {
+            "id": "dut-det-validation-02052",
+            "box": [
+              1232.0,
+              879.0,
+              1255.0,
+              888.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02053",
+            "box": [
+              1231.0,
+              978.0,
+              1251.0,
+              986.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02054",
+            "box": [
+              1193.0,
+              938.0,
+              1219.0,
+              945.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02059",
+            "box": [
+              1651.0,
+              586.0,
+              1670.0,
+              595.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.4834
+          },
+          {
+            "id": "dut-det-validation-02060",
+            "box": [
+              1718.0,
+              719.0,
+              1734.0,
+              726.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.1458
+          },
+          {
+            "id": "dut-det-validation-02070",
+            "box": [
+              747.0,
+              495.0,
+              768.0,
+              506.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2217
+          },
+          {
+            "id": "dut-det-validation-02073",
+            "box": [
+              201.0,
+              621.0,
+              217.0,
+              629.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02075",
+            "box": [
+              1246.0,
+              555.0,
+              1260.0,
+              563.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.3641
+          },
+          {
+            "id": "dut-det-validation-02076",
+            "box": [
+              1157.0,
+              378.0,
+              1175.0,
+              390.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2802
+          },
+          {
+            "id": "dut-det-validation-02083",
+            "box": [
+              1495.0,
+              798.0,
+              1510.0,
+              805.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.442
+          },
+          {
+            "id": "dut-det-validation-02086",
+            "box": [
+              910.0,
+              726.0,
+              932.0,
+              735.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02088",
+            "box": [
+              949.0,
+              565.0,
+              970.0,
+              575.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2605
+          },
+          {
+            "id": "dut-det-validation-02089",
+            "box": [
+              1089.0,
+              552.0,
+              1105.0,
+              558.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02090",
+            "box": [
+              777.0,
+              625.0,
+              796.0,
+              633.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2007
+          }
+        ]
+      }
+    }
+  },
+  "split": "DUT official val shard (development validation, not independent test)",
+  "predictions_sha256": "1b014bda1c57493b4688bf760dd7cba7b7c2279b7d9ef27524b8b9b2ce383588"
+}
