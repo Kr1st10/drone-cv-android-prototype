@@ -85,3 +85,16 @@ def test_thread_backend_conflict_and_missing_warmup_rejected():
     with pytest.raises(ValueError): a.thread_comparison_key(a.analyze(d))
     d['model']['backend']='ONNX Runtime CPU, intra-op 4, inter-op 1'; del d['warmup']
     with pytest.raises(ValueError): a.thread_comparison_key(a.analyze(d))
+
+
+def test_thread_cli_excludes_interrupted_and_aggregates_complete(tmp_path):
+    import json, subprocess, sys
+    d=sample(); d['model']={'intra_op_threads':2,'inter_op_threads':1,'execution_mode':'SEQUENTIAL','execution_provider':'CPU','backend':'ONNX Runtime CPU, intra-op 2, inter-op 1','sha256':'abc'}
+    d['build_type']='debug'; d['warmup']={'method':'manual','completed_frames_before_session':30}
+    other=copy.deepcopy(d); other['interrupted']=True; other['reason']='background'
+    for name, item in [('complete', d), ('interrupted', other)]: (tmp_path / (name+'.json')).write_text(json.dumps(item))
+    out=tmp_path / 'out.json'
+    result=subprocess.run([sys.executable, str(Path(__file__).parents[1]/'scripts/analyze_android_sessions.py'),str(tmp_path/'complete.json'),str(tmp_path/'interrupted.json'),'--compare-threads','--output',str(out)],capture_output=True)
+    report=json.loads(out.read_text())
+    assert result.returncode != 0 and report['excluded_sessions']==[str(tmp_path/'interrupted.json')]
+    assert report['thread_groups']['2']['sessions']==1

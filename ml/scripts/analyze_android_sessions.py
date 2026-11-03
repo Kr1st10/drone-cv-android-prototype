@@ -136,7 +136,11 @@ def main():
     output = {'schema_version': 1, 'config_mismatches': mismatches, 'sessions': runs}
     if args.compare_threads:
         groups = {}
+        excluded = [r['file'] for r in runs if r['interrupted'] or r['unstored'] or not r['completed'] or r['duration_ms'] <= 0 or r['errors']]
+        output['excluded_sessions'] = excluded
         for r in runs:
+            if r['file'] in excluded:
+                continue
             n = str(r['model']['intra_op_threads'])
             groups.setdefault(n, []).append(r)
         output['thread_groups'] = {n: {'sessions': len(rs),
@@ -146,7 +150,7 @@ def main():
             for n, rs in sorted(groups.items())} 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
-    if mismatches or any(r['errors'] for r in runs):
+    if mismatches or any(r['errors'] for r in runs) or (args.compare_threads and output['excluded_sessions']):
         raise SystemExit('Integrity errors or incomparable configuration; see output')
 
 if __name__ == '__main__': main()
