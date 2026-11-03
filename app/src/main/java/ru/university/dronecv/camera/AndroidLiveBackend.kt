@@ -4,17 +4,21 @@ import android.content.Context
 import android.util.Log
 import androidx.camera.core.ImageProxy
 import ru.university.dronecv.detection.onnx.OnnxDroneDetector
+import ru.university.dronecv.detection.onnx.YoloEngineOptions
+import ru.university.dronecv.detection.onnx.ThreadSessionManager
 import ru.university.dronecv.detection.yolo.PostprocessConfig
 import ru.university.dronecv.detection.yolo.toDetection
 
-class AndroidLiveBackend(context: Context) : LiveBackend<ImageProxy> {
+class AndroidLiveBackend(context: Context, initialThreads: Int = 2) : LiveBackend<ImageProxy> {
     private val app = context.applicationContext
-    private var detector: OnnxDroneDetector? = null
+    private val sessions = ThreadSessionManager(initialThreads) { threads ->
+        OnnxDroneDetector.create(app, YoloEngineOptions(intraOpThreads = threads))
+    }
     private val converter = RgbaFrameConverter()
 
     override fun infer(frame: ImageProxy, confidence: Float): LiveInference {
         try {
-            val active = detector ?: OnnxDroneDetector.create(app).also { detector = it }
+            val active = sessions.session()
             val conversionStart = System.nanoTime()
             val plane = frame.planes[0]
             val crop = frame.cropRect
@@ -32,9 +36,10 @@ class AndroidLiveBackend(context: Context) : LiveBackend<ImageProxy> {
         }
     }
 
+    override fun changeThreads(threads: Int) = sessions.switchTo(threads)
+
     override fun close() {
-        try { detector?.close() } catch (e: Exception) { Log.e("LiveDetection", "Model release failed", e) }
-        detector = null
+        try { sessions.close() } catch (e: Exception) { Log.e("LiveDetection", "Model release failed", e) }
         converter.clear()
     }
 }

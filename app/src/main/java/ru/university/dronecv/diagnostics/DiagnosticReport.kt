@@ -6,7 +6,11 @@ data class ResourceSample(val offsetNanos: Long, val pssKb: Long?, val thermalSt
 
 data class DiagnosticReport(val startEpochMs: Long, val device: String, val androidRelease: String,
                             val sdk: Int, val appVersion: String, val modelAsset: String, val modelSha256: String, val confidence: Float,
-                            val frames: DiagnosticFrameSnapshot, val resources: List<ResourceSample>)
+                            val frames: DiagnosticFrameSnapshot, val resources: List<ResourceSample>,
+                            val intraOpThreads: Int = 2, val buildType: String = "unknown",
+                            val warmupCompletedFrames: Long = 0) {
+    init { require(intraOpThreads in setOf(1, 2, 4) && warmupCompletedFrames >= 0) }
+}
 
 private fun q(s: String): String = buildString {
     append('"')
@@ -26,7 +30,8 @@ private fun summary(values: List<Double>): String {
 fun DiagnosticReport.toJson(): String = buildString {
     val f = frames
     append("{\"schema_version\":1,\"started_epoch_ms\":$startEpochMs,\"device\":${q(device)},\"android_release\":${q(androidRelease)},\"android_sdk\":$sdk,\"app_version\":${q(appVersion)},")
-    append("\"model\":{\"name\":\"YOLO11s\",\"asset\":${q(modelAsset)},\"sha256\":${q(modelSha256)},\"input_width\":640,\"input_height\":640,\"backend\":\"ONNX Runtime CPU, intra-op 2, inter-op 1\",\"confidence\":$confidence,\"nms_iou\":0.7},")
+    append("\"build_type\":${q(buildType)},\"warmup\":{\"method\":\"manual\",\"completed_frames_before_session\":$warmupCompletedFrames},")
+    append("\"model\":{\"name\":\"YOLO11s\",\"asset\":${q(modelAsset)},\"sha256\":${q(modelSha256)},\"input_width\":640,\"input_height\":640,\"backend\":\"ONNX Runtime CPU, intra-op $intraOpThreads, inter-op 1\",\"intra_op_threads\":$intraOpThreads,\"inter_op_threads\":1,\"execution_mode\":\"SEQUENTIAL\",\"execution_provider\":\"CPU\",\"confidence\":$confidence,\"nms_iou\":0.7},")
     append("\"duration_ms\":${f.durationNanos / 1_000_000.0},\"interrupted\":${f.interrupted},\"reason\":${f.reason?.let(::q) ?: "null"},")
     append("\"analyzer_callbacks_accepted\":${f.analyzerCallbacks},\"completed_frames\":${f.completedFrames},\"unstored_frames\":${f.unstoredFrames},\"processed_fps_session\":${num(f.processedFps)},")
     append("\"accepted_callbacks_not_completed\":${f.analyzerCallbacks - f.completedFrames},\"camera_frames_dropped\":null,\"frame_to_display_latency_ms\":null,")

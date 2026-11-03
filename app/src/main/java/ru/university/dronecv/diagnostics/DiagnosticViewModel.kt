@@ -26,15 +26,19 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     private var startedNs = 0L
     private var startedEpochMs = 0L
     private var threshold = .5f
+    private var intraThreads = 2
+    private var warmupFrames = 0L
     private val resources = ArrayList<ResourceSample>()
     private var sampler: Job? = null
     private var report: DiagnosticReport? = null
     private val mutableUi = MutableStateFlow(DiagnosticUi())
     val ui = mutableUi.asStateFlow()
 
-    fun start(confidence: Float) = synchronized(lock) {
+    fun start(confidence: Float, threads: Int = 2, warmupCompletedFrames: Long = 0) = synchronized(lock) {
         if (token != null) return@synchronized
+        require(threads in setOf(1, 2, 4) && warmupCompletedFrames >= 0)
         startedNs = System.nanoTime(); startedEpochMs = System.currentTimeMillis(); threshold = confidence
+        intraThreads = threads; warmupFrames = warmupCompletedFrames
         val id = frames.start(startedNs); token = id; resources.clear(); report = null
         mutableUi.value = DiagnosticUi(recording = true)
         sampler = viewModelScope.launch(Dispatchers.Default) {
@@ -56,7 +60,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
         val snapshot = frames.stop(id, System.nanoTime(), interrupted, reason) ?: return@synchronized
         val result = DiagnosticReport(startedEpochMs, "${Build.MANUFACTURER} ${Build.MODEL}", Build.VERSION.RELEASE,
             Build.VERSION.SDK_INT, BuildConfig.VERSION_NAME, BuildConfig.DRONE_MODEL_ASSET, BuildConfig.DRONE_MODEL_SHA256, threshold,
-            snapshot, resources.toList())
+            snapshot, resources.toList(), intraThreads, BuildConfig.BUILD_TYPE, warmupFrames)
         report = result
         mutableUi.value = DiagnosticUi(recording = false, report = result)
         viewModelScope.launch(Dispatchers.Default) {

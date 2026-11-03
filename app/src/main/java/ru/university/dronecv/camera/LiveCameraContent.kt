@@ -45,6 +45,7 @@ import ru.university.dronecv.diagnostics.DiagnosticPanel
 @Composable
 fun LiveCameraContent(
     controller: LiveController<ImageProxy>,
+    threadState: ThreadConfiguration,
     diagnostics: DiagnosticViewModel,
     running: Boolean,
     confidence: Float,
@@ -76,7 +77,7 @@ fun LiveCameraContent(
         }
         val controls: @Composable (Modifier) -> Unit = { modifier ->
             LiveControls(state, running, confidence, onRunningChange, onConfidenceChange,
-                recoverableIssue, diagnostics, modifier)
+                recoverableIssue, diagnostics, threadState, controller::requestThreads, modifier)
         }
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
@@ -96,11 +97,13 @@ fun LiveCameraContent(
 private fun LiveControls(
     state: LiveState, running: Boolean, confidence: Float,
     onRunningChange: (Boolean) -> Unit, onConfidenceChange: (Float) -> Unit,
-    issue: String?, diagnostics: DiagnosticViewModel, modifier: Modifier,
+    issue: String?, diagnostics: DiagnosticViewModel, threadState: ThreadConfiguration,
+    onThreadsChange: (Int) -> Boolean, modifier: Modifier,
 ) {
+    val diagnosticUi by diagnostics.ui.collectAsStateWithLifecycle()
     Column(modifier.background(MaterialTheme.colorScheme.surface).verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Button(onClick = { onRunningChange(!running) }, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = { onRunningChange(!running) }, enabled = !threadState.switching, modifier = Modifier.fillMaxWidth()) {
             Text(if (running) "Остановить" else "Начать детекцию")
         }
         Text("Confidence: ${(confidence * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
@@ -123,9 +126,19 @@ private fun LiveControls(
             modifier = Modifier.testTag(if (state.result != null) "live-frame-ready" else "live-frame-waiting"),
             style = MaterialTheme.typography.bodySmall)
         state.result?.let {
-            Text("YOLO11s · CPU / 2 потока · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
+            Text("YOLO11s · CPU / ${threadState.threads} потока · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
         }
-        DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING, confidence)
+        Text("Потоки ORT: ${threadState.threads}" + if (threadState.switching) " · загрузка…" else "", style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf(1, 2, 4).forEach { threads ->
+                Button(onClick = { onThreadsChange(threads) },
+                    enabled = !running && !diagnosticUi.recording && !threadState.switching && threads != threadState.threads,
+                    modifier = Modifier.weight(1f).testTag("ort-threads-$threads")) { Text("$threads") }
+            }
+        }
+        threadState.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING && !threadState.switching,
+            confidence, threadState.threads, state.completedFrames)
     }
 }
 
