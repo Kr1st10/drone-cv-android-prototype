@@ -1,0 +1,139 @@
+{
+  "sample": "52 frames = 6 evenly spaced frames from each of 9 pinned DUT tracking videos (01-08, 14), invisible frames skipped; script ml/scripts/dut63_tracking.py",
+  "automatic_validation": {
+    "records": 52,
+    "errors": 0,
+    "drone_size_px_sqrt_area": {
+      ">=30": 47,
+      "24-<30": 3,
+      "16-<24": 2
+    },
+    "duplicate_candidates": 5
+  },
+  "visual_check": {
+    "by": "AI agent viewing rendered frames with source boxes (not a human annotator review)",
+    "date": "2026-11-03",
+    "pairs": [
+      {
+        "a": "video01/00001.jpg",
+        "b": "video01/00421.jpg",
+        "a_sha256": "af782bd8de6364f6d81be2c1ade151d3745a330bf7e4fdc57983ab5bfebf3752",
+        "b_sha256": "9fb38951241c58d602e12720db83cca755444c8f9e4093cc7e22b8b57b98d7be",
+        "automatic": {
+          "kind": "near_candidate",
+          "dhash_hamming": 3,
+          "rgb_difference": 0.016993
+        },
+        "visual_check": "same video and sky background; drone scale and position differ strongly — correlated frames, not a duplicate",
+        "boxes_visually_on_drone": true
+      },
+      {
+        "a": "video02/00001.jpg",
+        "b": "video02/00017.jpg",
+        "a_sha256": "88cbb7423b3b4869ffb5172825bf4e626e256893e85a0c36d82da5fafd20eb61",
+        "b_sha256": "d88a51627cab297be53e3e8f8634bf8f49b77779ad48120a7bf737a817c36737",
+        "automatic": {
+          "kind": "near_candidate",
+          "dhash_hamming": 1,
+          "rgb_difference": 0.002614
+        },
+        "visual_check": "same static scene, drone shifted ~20 px — effectively the same observation (near-duplicate)",
+        "boxes_visually_on_drone": true
+      },
+      {
+        "a": "video14/00001.jpg",
+        "b": "video14/00119.jpg",
+        "a_sha256": "9c4c3ecef7b4dc7370db9d55c2f2d2a3cf014da6127298928e82f4ab51f63dc0",
+        "b_sha256": "1d9cc66227046db8366629dca48f61902a4434c95e320e45e99df736d5d017a0",
+        "automatic": {
+          "kind": "near_candidate",
+          "dhash_hamming": 1,
+          "rgb_difference": 0.0
+        },
+        "visual_check": "fixed camera, identical background; drone at a different place and scale — correlated, not a duplicate",
+        "boxes_visually_on_drone": true
+      },
+      {
+        "a": "video14/00237.jpg",
+        "b": "video14/00354.jpg",
+        "a_sha256": "29605b213539a099719a5ddcd4e006d5d9a08b75aff5bd295068c62a424dbc17",
+        "b_sha256": "26764d5d17a9cc0f066c1ec321a389641944f448405c35dbf80f0479fa545347",
+        "automatic": {
+          "kind": "near_candidate",
+          "dhash_hamming": 3,
+          "rgb_difference": 0.0
+        },
+        "visual_check": "fixed camera, identical background; drone at a different place — correlated, not a duplicate",
+        "boxes_visually_on_drone": true
+      },
+      {
+        "a": "video14/00472.jpg",
+        "b": "video14/00590.jpg",
+        "a_sha256": "7c87ce16475bf67d743882b936231006b667dc084b15d11794bbda14584139a6",
+        "b_sha256": "f58770d1834ddd0c3eff0c298de5a8432a332a712257e76a1e78af70bf4ba03e",
+        "automatic": {
+          "kind": "near_candidate",
+          "dhash_hamming": 4,
+          "rgb_difference": 0.001307
+        },
+        "visual_check": "fixed camera, identical background; drone at a different place — correlated, not a duplicate",
+        "boxes_visually_on_drone": true
+      }
+    ],
+    "conclusion": "No byte/pixel duplicates. All 5 candidates are frames of the same video; 1 pair is effectively the same observation. Tracking frames must be split by video and are not used for metrics in 6.3."
+  },
+  "manifest_record_ids_sha256": [
+    "05f6b17829151ef7fcb0ace150bc7a6f08f51135f3cf037a169c93adc8303781",
+    "0ed5e619fc6b5798c6961c68b47d12153b6c5ed507e37b9f3cbfdec8c4137c4d",
+    "1d9cc66227046db8366629dca48f61902a4434c95e320e45e99df736d5d017a0",
+    "26764d5d17a9cc0f066c1ec321a389641944f448405c35dbf80f0479fa545347",
+    "2892ade8ff2a7169b02d1183445077a40b8a1fe642b61f6096e3ecf703fe5672",
+    "29605b213539a099719a5ddcd4e006d5d9a08b75aff5bd295068c62a424dbc17",
+    "2e1bf45cefb2cde7e43f55a8824506682f1835ba4b856006d8ae25ddf5e9dde6",
+    "30fe4bf1ae81b0f92b2c9e8c79f626a6f3db1b123a037fe987e5474eebef943f",
+    "313ecb9643b37c1000e10efab46146a95d8e766a702857c0c04d2cd9846218be",
+    "35a134b6a7fabf04e2ca7ca0fc5b9810a8126667e849269562bd3a93efc5b2da",
+    "36f658e379983cd04d8bdade9162dbcdc2e9c97c86e513956993957482693cad",
+    "37e52c748b23cb7e8193f7b91482f68bde5384915351923ca794402feae1fae7",
+    "3ef9ec3beb3fd5a681359c61473c5ae92786231676a1f46a0b3c9962a9a30729",
+    "41578aae897e868ccde673950171bfdafa0d6129257955f923d9a81e8fb5a48e",
+    "4202b9c01ccfe6c828a7a3eb945c859374f3ae25c48ce4b5261d626a4e86f513",
+    "424576bc5d2513e02e0f80ff58543e8a78e012cbb3ac8ed91db7bc6f3222caa0",
+    "46a93fbc76a63dd4827e24cd3eac4ae6b6b54e7fe7c68ca664a3f9260d217c34",
+    "4aadea4017e21fcdc16a7dfae4158cec23d462797378e3c8c5374494e4e9eb56",
+    "4f422112d7377e4dd24804ba02468d15787ba078985764a56bbcd6e90417692b",
+    "54104ddf71ea718d55885ec5e30913562fce75128e6b2685f5193b11ee82ba50",
+    "561a4211754a77b5f148a14c3fad44742f9d07ff217fb88bb128dc36295ed1b5",
+    "56e0b5a2db876ecfaa67e509b84cf173601f354767b9f695e113f0d0dc0e26e7",
+    "5fa8e98c53faf216d39b82336793afeb99e832e7d8dbbc2c0a7ed90bcc120254",
+    "6f44df1281c22ef955ef3539e86d4da33e8c9275749ea9eae34b7c7a84336f2f",
+    "6f6763117fe6fb2484383dfc317361a6e4ee8bf0ff644a6022888eed16c1ad96",
+    "7c87ce16475bf67d743882b936231006b667dc084b15d11794bbda14584139a6",
+    "81b536ef215fb2e8a6238bdede3ab934c4b6c4bb591904644b8c9a83983df253",
+    "8447d88babd8323e176923c50a0da7a8278b8ef7d6ed448e678910230737c4ba",
+    "88cbb7423b3b4869ffb5172825bf4e626e256893e85a0c36d82da5fafd20eb61",
+    "91ed9e6dda8357aba0e201ab8b42a851ac1e314b99982508f79da67ae2118fde",
+    "97cc04977895f09398424d91e5fb962206210d7e39fc5b23eb8a57b4ac55d8df",
+    "9c4c3ecef7b4dc7370db9d55c2f2d2a3cf014da6127298928e82f4ab51f63dc0",
+    "9c61b42d959d16ebc9d2450e0b08e37a6c98fd6795b64d9234233f68af1bc544",
+    "9fb38951241c58d602e12720db83cca755444c8f9e4093cc7e22b8b57b98d7be",
+    "a55361ecdc2f3366e2d5c9fbeab9bd3065050af10ebe74a6e2748725dba2f577",
+    "ab59664642638747d6598d94e3c77ec77a8c0ae69414e7221a37bfb6b2269d8c",
+    "ab76ea590794072d272c9d7870589caa582776c3d186781408e0b218bc0e5658",
+    "af782bd8de6364f6d81be2c1ade151d3745a330bf7e4fdc57983ab5bfebf3752",
+    "b336e589a8adb44ea17c45d9bc02c29408b5e01aa77f20303d8cce3a4a84b873",
+    "b44db6a71b0e2cce33676e8ac4782041441a52b5c296f209665735f800b6c9b3",
+    "b49389fa567f4690e2e136c95d3898db8a17c15015c0eda7a592d3ca3cb067dc",
+    "b94478257e110e5cec9f1ebfb63e468c2b4164b6d5d279789eb4d89237ca2b7c",
+    "bb19dc0c9180bc79a6e52448a2a63afb74db4a4fb3cefd3022ac108ca62dc8d5",
+    "c1830539c0cfbe1c66b311e41f53946988fd1bbd2f82eab7e488c020cb905765",
+    "c7da0f15e3be3cebfef6988c2687981e2507a3808d2cf0bf5d2def2ae8cbcea0",
+    "d7a46e6a2cd828430c19e7a8b2a010ba25c19a5237f5d31089c4547737ad3160",
+    "d88a51627cab297be53e3e8f8634bf8f49b77779ad48120a7bf737a817c36737",
+    "db256097ff9a4b2c7181c1eeb1b6afe4398998ffc26278acff40092d31d09c36",
+    "ddfd411d0079a1af5ffcc7cad6e52a6436f6f91f56ff31f695663e524130982c",
+    "f58770d1834ddd0c3eff0c298de5a8432a332a712257e76a1e78af70bf4ba03e",
+    "f62cd91e3a3d748bee44f142a3c6a5fc33887d86533042b12cf4d26eb96554de",
+    "ff9ea044b21581c54d7418f6685d7a2b5bc15e25ff7f44c3f1593b1f0e0f86a2"
+  ]
+}

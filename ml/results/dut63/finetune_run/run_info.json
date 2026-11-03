@@ -1,0 +1,13 @@
+{
+  "last_pt_sha256": "7c0bc3d8a98cf40eb57cf00b11e86b3c8cc249f25291db21d648802218b9c8fa",
+  "last_pt_bytes": 19171603,
+  "best_pt_sha256_not_used": "9aacd12c3798372504712d93b96d128ddd97eb09f9ad398f5b5c0f69806da5d5",
+  "train_images": 934,
+  "train_ids_sha256": "de7fa81fb27c0219dab966ee0003fb247a47551db09ce5493e6e2c4f440fe425",
+  "manifest_sha256": "18ffca0a546be221c2ec74ce6246a3f8b9a1c8b4f0dc1577e7c1be593cb76d10",
+  "wall_time_s": 2992.6,
+  "hardware": "2 vCPU x86_64, 4 GB RAM, torch 2.6.0+cpu, no CUDA",
+  "batch_note": "batch 8 was killed (out of memory, no traceback); rerun with batch 4",
+  "results_csv_note": "epoch-3 metrics in results.csv come from Ultralytics final check on the TRAIN images (val=False, val key points to train); they measure fit, not generalisation",
+  "weights_committed": false
+}

@@ -1,0 +1,8 @@
+{
+  "name": "stage63-dut-limited-finetune-cpu",
+  "checkpoint_url": "https://huggingface.co/sapoepsilon/yolov11s-drone-detector/resolve/58897d6d6fadda9dfec979fd5dd7ad9040e73365/best.pt",
+  "checkpoint_sha256": "337390e1018eaf815474c02e172a224425095466d4a5cd2dbd11301b0aa01b78",
+  "ultralytics_version": "8.4.197",
+  "selection": "fixed epochs, final last.pt; validation is never used during training or for checkpoint selection",
+  "train": {"imgsz": 640, "epochs": 3, "batch": 4, "seed": 63, "deterministic": true, "workers": 2, "optimizer": "AdamW", "lr0": 0.0005, "warmup_epochs": 0.5, "pretrained": true, "amp": false, "close_mosaic": 1, "cache": false}
+}

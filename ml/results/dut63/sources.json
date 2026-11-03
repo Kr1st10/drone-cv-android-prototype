@@ -1,0 +1,75 @@
+{
+  "source": "https://huggingface.co/datasets/aegean-ai/dut-anti-uav",
+  "revision": "3ea69e5beb2d20cda3743ca4b487d07263e48547",
+  "source_repository": "https://github.com/wangdongdut/DUT-Anti-UAV",
+  "mirror_license": "Apache-2.0 as claimed by mirror; rights in primary content and independence from initial training require verification",
+  "files": [
+    {
+      "path": "tracking-parquet/video01.parquet",
+      "size_bytes": 151251402,
+      "sha256": "db6023e106632a718147c78f57330d7458f4d9749f7504d988d8739968e0f47d"
+    },
+    {
+      "path": "tracking-parquet/video02.parquet",
+      "size_bytes": 6987040,
+      "sha256": "7c5911f9b40c95a09f1afa0ac8e0ff322abd1c84be1bdf54db29599029c386ef"
+    },
+    {
+      "path": "tracking-parquet/video03.parquet",
+      "size_bytes": 2192657,
+      "sha256": "dabf2145c5a81e4614f01254f4b426b3091dc04491a04c92f759af825a38d94b"
+    },
+    {
+      "path": "tracking-parquet/video04.parquet",
+      "size_bytes": 13518081,
+      "sha256": "8c93ef4df22edf8d9d28dc3845fa16f70f652a08c95083cad922df04c7ecbc57"
+    },
+    {
+      "path": "tracking-parquet/video05.parquet",
+      "size_bytes": 39885586,
+      "sha256": "6e8f3c969644101d036ebdf045a3dc77df9b51e111ab06ddb2d089040c4b7774"
+    },
+    {
+      "path": "tracking-parquet/video06.parquet",
+      "size_bytes": 17236771,
+      "sha256": "dbfb13b1f653d5aab091766e5132c274ab0732454fb0e8d4cf8d1f7b3fd9b6d9"
+    },
+    {
+      "path": "tracking-parquet/video07.parquet",
+      "size_bytes": 177930427,
+      "sha256": "6c5cac86ad4d4fa789f665f874e67b09c596e13a3cea0feada267273c5ab0528"
+    },
+    {
+      "path": "tracking-parquet/video08.parquet",
+      "size_bytes": 151038432,
+      "sha256": "04ca8b5b71b4c68edc27a755078cde0bde37e49bbf16e1e74ce0ab6297570863"
+    },
+    {
+      "path": "tracking-parquet/video14.parquet",
+      "size_bytes": 79862533,
+      "sha256": "e822f99bff3fd76bf28281803c9af8ef61068af964d23048667dfec1e40e47ba"
+    }
+  ],
+  "detection_files": {
+    "validation": [
+      {
+        "path": "detection-parquet/val/val-00002.parquet",
+        "size_bytes": 99464982,
+        "sha256": "a74176c0834bdb7c01709ba773fb3e4a1a114a5781e1e152a7c4a0fb970da27d"
+      }
+    ],
+    "train": [
+      {
+        "path": "detection-parquet/train/train-00000.parquet",
+        "size_bytes": 92418643,
+        "sha256": "e1e9b2244c250f23efb8ae68b956097a9c4642ac76bafb4b7b49250d9dbd3ab5"
+      },
+      {
+        "path": "detection-parquet/train/train-00005.parquet",
+        "size_bytes": 29347705,
+        "sha256": "cf47dab7a03d1ce1a04542d2142a3956a8b6abc4bdb58a2da3fb694ff65b929a"
+      }
+    ]
+  },
+  "primary_license": "Apache-2.0 (LICENSE of github.com/wangdongdut/DUT-Anti-UAV, checked 2026-11-03); no separate image licence found. Images are still not committed."
+}
