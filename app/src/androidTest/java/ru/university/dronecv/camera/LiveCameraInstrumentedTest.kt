@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -89,6 +90,22 @@ class LiveCameraInstrumentedTest {
         compose.onNodeWithText("Камера").performClick()
         compose.onNodeWithText("Confidence: 80%").assertExists()
         compose.onNodeWithText("Начать детекцию").assertExists()
+    }
+
+    @Test fun threadSwitchStopsBeforeRecreatingAndCameraRunsAgain() {
+        openAndStart()
+        compose.onNodeWithTag("ort-threads-1").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Остановить").performScrollTo().performClick()
+        drainNativeWork()
+        for (threads in listOf(1, 4, 2)) {
+            compose.onNodeWithTag("ort-threads-$threads").performScrollTo().performClick()
+            drainNativeWork()
+            compose.onNodeWithText("Потоки ORT: $threads").assertExists()
+            compose.onNodeWithText("Начать детекцию").performScrollTo().performClick()
+            awaitResult()
+            compose.onNodeWithText("Остановить").performScrollTo().performClick()
+            drainNativeWork()
+        }
     }
 
     @Test fun diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable() {
