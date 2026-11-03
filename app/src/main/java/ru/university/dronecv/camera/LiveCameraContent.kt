@@ -43,9 +43,10 @@ import ru.university.dronecv.diagnostics.DiagnosticViewModel
 import ru.university.dronecv.diagnostics.DiagnosticPanel
 
 @Composable
-fun LiveCameraContent(
+internal fun LiveCameraContent(
     controller: LiveController<ImageProxy>,
     threadState: ThreadConfiguration,
+    probe: CameraProbeState,
     diagnostics: DiagnosticViewModel,
     running: Boolean,
     confidence: Float,
@@ -69,7 +70,7 @@ fun LiveCameraContent(
         val panelWidth = minOf(240.dp, maxWidth * 0.45f)
         val camera: @Composable (Modifier) -> Unit = { modifier ->
             Box(modifier.background(Color.Black)) {
-                CameraPreview(controller, running, confidence, Modifier.fillMaxSize(),
+                CameraPreview(controller, running, confidence, probe, Modifier.fillMaxSize(),
                     onError = onCameraError, onRecoverableIssue = onCameraIssue,
                     onInterruption = { diagnostics.stop(true, "Camera paused, rebound or interrupted") })
                 LiveOverlay(state, Modifier.fillMaxSize())
@@ -77,7 +78,7 @@ fun LiveCameraContent(
         }
         val controls: @Composable (Modifier) -> Unit = { modifier ->
             LiveControls(state, running, confidence, onRunningChange, onConfidenceChange,
-                recoverableIssue, diagnostics, threadState, controller::requestThreads, modifier)
+                recoverableIssue, diagnostics, threadState, controller::requestThreads, probe, controller, modifier)
         }
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
@@ -98,7 +99,7 @@ private fun LiveControls(
     state: LiveState, running: Boolean, confidence: Float,
     onRunningChange: (Boolean) -> Unit, onConfidenceChange: (Float) -> Unit,
     issue: String?, diagnostics: DiagnosticViewModel, threadState: ThreadConfiguration,
-    onThreadsChange: (Int) -> Boolean, modifier: Modifier,
+    onThreadsChange: (Int) -> Boolean, probe: CameraProbeState, controller: LiveController<ImageProxy>, modifier: Modifier,
 ) {
     val diagnosticUi by diagnostics.ui.collectAsStateWithLifecycle()
     Column(modifier.background(MaterialTheme.colorScheme.surface).verticalScroll(rememberScrollState())
@@ -139,6 +140,34 @@ private fun LiveControls(
         threadState.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING && !threadState.switching,
             confidence, threadState.threads, state.completedFrames)
+        Text("Камера ID: ${probe.logicalId ?: "неизвестно"}; физический запрос: ${probe.physicalId ?: "авто"} · запрошено ${probe.requestedZoom}× · текущий zoomRatio ${probe.actualZoom ?: "неизвестен"}", style = MaterialTheme.typography.bodySmall)
+        Text(sensorEvidence(probe.activePhysicalId, probe.physicalIds.toSet()), style = MaterialTheme.typography.bodySmall)
+        Text("Физический ID не доказывает тип объектива; 5× может быть цифровым.", style = MaterialTheme.typography.bodySmall)
+        fun change(zoom: Float, physical: String?) {
+            diagnostics.stop(true, "Camera zoom or physical camera changed")
+            controller.configure(false, confidence)
+            probe.activePhysicalId = null; probe.actualZoom = null; probe.warning = null; probe.loading = true
+            probe.physicalId = physical; probe.requestedZoom = zoom; probe.selectionEpoch++
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Button(enabled = !probe.loading, onClick = { change(1f, null) }, modifier = Modifier.weight(1f).testTag("zoom-one")) { Text("1×") }
+            Button(enabled = !probe.loading, onClick = {
+                when (val decision = zoomRequest(5f, probe.zoomRange)) {
+                    is ZoomDecision.Request -> change(decision.ratio, null)
+                    is ZoomDecision.Unavailable -> probe.warning = decision.reason
+                }
+            }, modifier = Modifier.weight(1f).testTag("zoom-five")) { Text("5×") }
+        }
+        if (probe.physicalIds.isEmpty()) Text("Прямой выбор физической камеры не доступен или не раскрыт API.", style = MaterialTheme.typography.bodySmall)
+        else {
+            Text("Запросить физическую камеру (поддержка комбинации потоков не гарантирована):", style = MaterialTheme.typography.bodySmall)
+            probe.physicalIds.forEach { id ->
+                Button(enabled = !probe.loading, onClick = { change(1f, id) }, modifier = Modifier.fillMaxWidth()) { Text("Физический ID $id") }
+            }
+        }
+        if (probe.loading) Text("Переключение камеры…", style = MaterialTheme.typography.bodySmall)
+        probe.warning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        CameraInventoryPanel()
     }
 }
 

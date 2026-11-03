@@ -1,6 +1,17 @@
 package ru.university.dronecv.camera
 
 import android.hardware.display.DisplayManager
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
+import android.os.Build
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.ZoomState
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -45,11 +56,13 @@ class CameraStateException(val code: Int) : Exception("Camera error, code=$code"
 /** Back camera only. Preview and analysis share a FILL_CENTER ViewPort, hence the same visible FOV.
  * No blocking work on main; CameraX keeps at most the latest pending frame on the shared ML worker.
  */
+@androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
 @Composable
-fun CameraPreview(
+internal fun CameraPreview(
     controller: LiveController<ImageProxy>,
     enabled: Boolean,
     confidence: Float,
+    probe: CameraProbeState,
     modifier: Modifier = Modifier,
     onError: (Throwable) -> Unit,
     onRecoverableIssue: (Int?) -> Unit = {},
@@ -130,7 +143,7 @@ fun CameraPreview(
         }
     }
 
-    DisposableEffect(owner, viewSize, rotation) {
+    DisposableEffect(owner, viewSize, rotation, probe.selectionEpoch) {
         val viewport = previewView.viewPort
         if (viewSize.width <= 0 || viewSize.height <= 0 || viewport == null) {
             onDispose { }
@@ -139,10 +152,25 @@ fun CameraPreview(
             controller.configure(false, currentConfidence)
             bound = false
             cameraBlocked = false
+            probe.loading = true
+            probe.actualZoom = null
+            probe.activePhysicalId = null
+            val selectedPhysical = probe.physicalId
+            val selectedZoom = probe.requestedZoom
             val future = ProcessCameraProvider.getInstance(context)
-            val preview = Preview.Builder().setTargetRotation(rotation).build().also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
+            var disposed = false
+            val handler = Handler(Looper.getMainLooper())
+            val captureCallback = object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        val id = result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+                        handler.post { if (!disposed && probe.activePhysicalId != id) probe.activePhysicalId = id }
+                    }
+                }
             }
+            val previewBuilder = Preview.Builder().setTargetRotation(rotation)
+            Camera2Interop.Extender(previewBuilder).setSessionCaptureCallback(captureCallback)
+            val preview = previewBuilder.build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
             val analysis = ImageAnalysis.Builder()
                 .setTargetRotation(rotation)
                 .setResolutionSelector(ResolutionSelector.Builder().setResolutionStrategy(
@@ -153,7 +181,25 @@ fun CameraPreview(
                 .build()
             var provider: ProcessCameraProvider? = null
             var camera: Camera? = null
-            var disposed = false
+            val zoomObserver = Observer<ZoomState> { z ->
+                if (!disposed && z != null) {
+                    probe.actualZoom = z.zoomRatio
+                    probe.zoomRange = ZoomRange(z.minZoomRatio, z.maxZoomRatio)
+                }
+            }
+            var recovering = false
+            fun recover(e: Throwable) {
+                if (disposed || recovering) return
+                recovering = true
+                controller.configure(false, currentConfidence)
+                probe.loading = false
+                if (selectedPhysical != null || selectedZoom != 1f) {
+                    probe.warning = "Выбранная камера или зум недоступны: ${e.message}. Возврат к 1×."
+                    probe.physicalId = null; probe.requestedZoom = 1f; probe.selectionEpoch++
+                } else {
+                    currentOnError(e)
+                }
+            }
             val cameraObserver = Observer<CameraState> { state ->
                 if (!disposed) {
                     val error = state.error
@@ -161,7 +207,7 @@ fun CameraPreview(
                     if (error != null) suspendAnalysis()
                     when {
                         error == null -> currentOnIssue(null)
-                        error.type == CameraState.ErrorType.CRITICAL -> currentOnError(CameraStateException(error.code))
+                        error.type == CameraState.ErrorType.CRITICAL -> recover(CameraStateException(error.code))
                         else -> currentOnIssue(error.code)
                     }
                 }
@@ -174,14 +220,27 @@ fun CameraPreview(
                         provider = available
                         val group = UseCaseGroup.Builder().setViewPort(viewport)
                             .addUseCase(preview).addUseCase(analysis).build()
-                        camera = available.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, group)
-                        camera?.cameraInfo?.cameraState?.observe(owner, cameraObserver)
-                        boundAnalysis = analysis
-                        bound = true
+                        val selector = if (selectedPhysical == null) CameraSelector.DEFAULT_BACK_CAMERA
+                            else CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                                .setPhysicalCameraId(selectedPhysical).build()
+                        camera = available.bindToLifecycle(owner, selector, group)
+                        val current = checkNotNull(camera)
+                        current.cameraInfo.cameraState.observe(owner, cameraObserver)
+                        current.cameraInfo.zoomState.observe(owner, zoomObserver)
+                        val logicalId = Camera2CameraInfo.from(current.cameraInfo).cameraId
+                        probe.logicalId = logicalId
+                        probe.physicalIds = if (Build.VERSION.SDK_INT >= 28) try {
+                            context.getSystemService(CameraManager::class.java).getCameraCharacteristics(logicalId).physicalCameraIds.sorted()
+                        } catch (_: Exception) { emptyList() } else emptyList()
+                        val zoom = current.cameraControl.setZoomRatio(selectedZoom)
+                        zoom.addListener({
+                            if (!disposed) try {
+                                zoom.get(); probe.loading = false; boundAnalysis = analysis; bound = true
+                            } catch (e: Exception) { recover(e) }
+                        }, ContextCompat.getMainExecutor(context))
                     } catch (e: Exception) {
-                        controller.configure(false, currentConfidence)
                         Log.e("CameraPreview", "Cannot bind preview and analysis", e)
-                        currentOnError(e)
+                        recover(e)
                     }
                 }
             }, ContextCompat.getMainExecutor(context))
@@ -192,6 +251,7 @@ fun CameraPreview(
                 controller.configure(false, currentConfidence)
                 analysis.clearAnalyzer()
                 camera?.cameraInfo?.cameraState?.removeObserver(cameraObserver)
+                camera?.cameraInfo?.zoomState?.removeObserver(zoomObserver)
                 provider?.unbind(preview, analysis) // do not unbind unrelated use cases.
             }
         }

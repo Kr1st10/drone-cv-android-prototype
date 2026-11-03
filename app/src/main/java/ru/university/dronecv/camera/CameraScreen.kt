@@ -54,6 +54,7 @@ import ru.university.dronecv.detection.DetectorWorker
 fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int) -> Unit, onConfidenceChange: (Float) -> Unit) {
     val context = LocalContext.current
     val diagnostics: DiagnosticViewModel = viewModel()
+    val cameraProbe = remember { CameraProbeState() }
     var running by rememberSaveable { mutableStateOf(false) }
     val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads) }
     DisposableEffect(controller) { onDispose { diagnostics.stop(true, "Camera screen disposed"); controller.close() } }
@@ -130,6 +131,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
                 LiveCameraContent(
                     controller = controller,
                     threadState = threadState,
+                    probe = cameraProbe,
                     diagnostics = diagnostics,
                     running = running,
                     confidence = confidence,

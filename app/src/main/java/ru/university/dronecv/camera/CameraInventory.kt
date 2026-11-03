@@ -6,11 +6,16 @@ import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Build
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.lifecycle.ProcessCameraProvider
+import java.util.concurrent.TimeUnit
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** Device-reported facts only; no lens type is inferred from the phone name. */
 internal object CameraInventory {
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
     fun collect(context: Context): JSONObject {
         val manager = context.getSystemService(CameraManager::class.java)
         val cameras = JSONArray()
@@ -54,7 +59,11 @@ internal object CameraInventory {
                 .put("yuv_sizes", sizes(map?.getOutputSizes(ImageFormat.YUV_420_888)))
                 .put("jpeg_sizes", sizes(map?.getOutputSizes(ImageFormat.JPEG))))
         }
-        return JSONObject().put("schema_version", 1).put("manufacturer", Build.MANUFACTURER)
+        val cameraX = try {
+            val provider = ProcessCameraProvider.getInstance(context).get(20, TimeUnit.SECONDS)
+            JSONObject().put("ids", JSONArray(provider.availableCameraInfos.map { Camera2CameraInfo.from(it).cameraId }.sorted()))
+        } catch (e: Exception) { JSONObject().put("error", e.javaClass.simpleName + ": " + e.message) }
+        return JSONObject().put("camerax", cameraX).put("schema_version", 1).put("manufacturer", Build.MANUFACTURER)
             .put("model", Build.MODEL).put("android_release", Build.VERSION.RELEASE)
             .put("android_sdk", Build.VERSION.SDK_INT).put("camera2_ids", JSONArray(ids))
             .put("cameras", cameras)
