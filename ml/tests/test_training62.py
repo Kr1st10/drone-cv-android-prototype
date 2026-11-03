@@ -48,3 +48,29 @@ def test_preflight_rejects_quarantined_pilot():
     pilot = Path('ml/results/dataset45/pilot_manifest.json')
     data = json.loads(pilot.read_text())
     assert all(r['review_status'] != 'reviewed' for r in data['records'])
+
+
+def test_prepare_materializes_train_validation_but_never_test(tmp_path):
+    from ml.train62 import prepare
+    rows, m, lock = prepared(tmp_path)
+    result = prepare(m, lock, [], tmp_path / 'materialized')
+    assignments, _, _ = make_split(rows, previous=json.loads(lock.read_text()))
+    dest = tmp_path / 'materialized'
+    for r in rows:
+        if assignments[r['id']] == 'test':
+            assert not list(dest.rglob(r['id'] + '*'))
+        else:
+            split = assignments[r['id']]
+            assert (dest / 'images' / split / (r['id'] + '.png')).exists()
+            assert (dest / 'labels' / split / (r['id'] + '.txt')).read_text().startswith('0 ')
+    assert result['counts']['test'] > 0
+    with pytest.raises(FileExistsError): prepare(m, lock, [], dest)
+
+
+def test_prepare_fails_before_copy_on_quarantine(tmp_path):
+    from ml.train62 import prepare
+    rows, m, lock = prepared(tmp_path)
+    rows[0]['review_status'] = 'unreviewed'; save_manifest(m, rows)
+    out = tmp_path / 'materialized'
+    with pytest.raises(ValueError): prepare(m, lock, [], out)
+    assert not out.exists()
