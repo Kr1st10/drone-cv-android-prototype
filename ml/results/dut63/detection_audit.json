@@ -1,0 +1,175 @@
+{
+  "sources_sha256": "190c9325b7f828b9fccb42b88669a01aa80bbde8e664efbc73ef997e4cbd5158",
+  "leak_max_hamming": 10,
+  "cluster_max_hamming": 4,
+  "validation": {
+    "images": 600,
+    "boxes": 600,
+    "size_bins_sqrt_area": {
+      "<16": 105,
+      "16-<24": 216,
+      "24-<30": 111,
+      ">=30": 168
+    },
+    "auto_issue_counts": {
+      "clipped_within_tolerance": 3
+    },
+    "images_with_issues": 3,
+    "near_duplicate_clusters": 40,
+    "images_in_clusters": 590,
+    "effective_images_after_cluster_collapse": 50,
+    "largest_clusters": [
+      [
+        "dut-det-validation-02481",
+        "dut-det-validation-02482",
+        "dut-det-validation-02483",
+        "dut-det-validation-02484",
+        "dut-det-validation-02485",
+        "..."
+      ],
+      [
+        "dut-det-validation-02291",
+        "dut-det-validation-02292",
+        "dut-det-validation-02293",
+        "dut-det-validation-02294",
+        "dut-det-validation-02295",
+        "..."
+      ],
+      [
+        "dut-det-validation-02237",
+        "dut-det-validation-02238",
+        "dut-det-validation-02239",
+        "dut-det-validation-02240",
+        "dut-det-validation-02241",
+        "..."
+      ],
+      [
+        "dut-det-validation-02033",
+        "dut-det-validation-02034",
+        "dut-det-validation-02035",
+        "dut-det-validation-02036",
+        "dut-det-validation-02037",
+        "..."
+      ],
+      [
+        "dut-det-validation-02265",
+        "dut-det-validation-02266",
+        "dut-det-validation-02267",
+        "dut-det-validation-02268",
+        "dut-det-validation-02269",
+        "..."
+      ]
+    ]
+  },
+  "train": {
+    "images": 1200,
+    "boxes": 1243,
+    "size_bins_sqrt_area": {
+      "<16": 19,
+      "16-<24": 74,
+      "24-<30": 75,
+      ">=30": 1075
+    },
+    "auto_issue_counts": {
+      "implausibly_large": 8,
+      "clipped_within_tolerance": 9,
+      "no_boxes": 3
+    },
+    "images_with_issues": 20,
+    "near_duplicate_clusters": 50,
+    "images_in_clusters": 430,
+    "effective_images_after_cluster_collapse": 820,
+    "largest_clusters": [
+      [
+        "dut-det-train-00943",
+        "dut-det-train-00944",
+        "dut-det-train-00945",
+        "dut-det-train-00946",
+        "dut-det-train-00947",
+        "..."
+      ],
+      [
+        "dut-det-train-05067",
+        "dut-det-train-05068",
+        "dut-det-train-05069",
+        "dut-det-train-05070",
+        "dut-det-train-05071",
+        "..."
+      ],
+      [
+        "dut-det-train-05001",
+        "dut-det-train-05002",
+        "dut-det-train-05003",
+        "dut-det-train-05004",
+        "dut-det-train-05005",
+        "..."
+      ],
+      [
+        "dut-det-train-05034",
+        "dut-det-train-05035",
+        "dut-det-train-05036",
+        "dut-det-train-05037",
+        "dut-det-train-05038",
+        "..."
+      ],
+      [
+        "dut-det-train-05137",
+        "dut-det-train-05138",
+        "dut-det-train-05139",
+        "dut-det-train-05140",
+        "dut-det-train-05141",
+        "..."
+      ]
+    ]
+  },
+  "exact_pixel_duplicates": [
+    [
+      "dut-det-train-00004",
+      "dut-det-train-00014"
+    ],
+    [
+      "dut-det-train-00020",
+      "dut-det-train-00158"
+    ],
+    [
+      "dut-det-train-00248",
+      "dut-det-train-00700"
+    ]
+  ],
+  "train_to_val_min_dhash_hamming_histogram": {
+    "0": 133,
+    "1": 40,
+    "2": 13,
+    "3": 6,
+    "4": 4,
+    "5": 2,
+    "6": 3,
+    "7": 8,
+    "8": 10,
+    "9": 17,
+    "10": 20,
+    "11": 22,
+    "12": 47,
+    "13": 58,
+    "14": 57,
+    "15": 48,
+    "16": 63,
+    "17": 52,
+    "18": 54,
+    "19": 86,
+    "20": 90,
+    "21": 77,
+    "22": 68,
+    "23": 71,
+    "24": 57,
+    "25": 38,
+    "26": 29,
+    "27": 16,
+    "28": 4,
+    "29": 3,
+    "30": 2,
+    "31": 2
+  },
+  "train_excluded_for_leakage": 256,
+  "train_usable": 934
+}

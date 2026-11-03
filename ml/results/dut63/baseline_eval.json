@@ -1,0 +1,771 @@
+{
+  "config": {
+    "model_id": "sapoepsilon/yolov11s-drone-detector@58897d6",
+    "model_sha256": "337390e1018eaf815474c02e172a224425095466d4a5cd2dbd11301b0aa01b78",
+    "imgsz": 640,
+    "confidence": 0.1,
+    "nms_iou": 0.45,
+    "matching_iou": 0.5,
+    "ultralytics": "8.4.197",
+    "torch": "2.6.0+cpu",
+    "timing_conditions": "x86_64 CPU, 2 torch threads, Ultralytics predict incl. pre/post, sandbox (not phone)",
+    "manifest_sha256": "18ffca0a546be221c2ec74ce6246a3f8b9a1c8b4f0dc1577e7c1be593cb76d10",
+    "note": "post-NMS boxes with score>0.1 kept (equivalent to greedy NMS at conf 0.1); coordinates rounded to 0.1 px"
+  },
+  "by_confidence": {
+    "0.25": {
+      "counts": {
+        "tp": 173,
+        "fp": 224,
+        "fn": 427,
+        "images": 600
+      },
+      "precision_all": 0.4357682619647355,
+      "recall": 0.28833333333333333,
+      "recall_by_size": {
+        "<16": {
+          "n": 105,
+          "tp": 5,
+          "recall": 0.047619047619047616
+        },
+        "16-<24": {
+          "n": 216,
+          "tp": 31,
+          "recall": 0.14351851851851852
+        },
+        "24-<30": {
+          "n": 111,
+          "tp": 36,
+          "recall": 0.32432432432432434
+        },
+        ">=30": {
+          "n": 168,
+          "tp": 101,
+          "recall": 0.6011904761904762
+        }
+      },
+      "negative_images": {},
+      "timing_ms": {
+        "mean": 151.16266666666667,
+        "median": 149.1
+      },
+      "diagnostic_match_iou_0.3": {
+        "counts": {
+          "tp": 308,
+          "fp": 89,
+          "fn": 292,
+          "images": 600
+        },
+        "precision_all": 0.7758186397984886,
+        "recall": 0.5133333333333333,
+        "recall_by_size": {
+          "<16": {
+            "n": 105,
+            "tp": 33,
+            "recall": 0.3142857142857143
+          },
+          "16-<24": {
+            "n": 216,
+            "tp": 113,
+            "recall": 0.5231481481481481
+          },
+          "24-<30": {
+            "n": 111,
+            "tp": 58,
+            "recall": 0.5225225225225225
+          },
+          ">=30": {
+            "n": 168,
+            "tp": 104,
+            "recall": 0.6190476190476191
+          }
+        }
+      },
+      "fp_by_pred_size": {
+        "<16": 0,
+        "16-<24": 35,
+        "24-<30": 53,
+        ">=30": 136
+      },
+      "fn_by_size": {
+        "<16": 100,
+        "16-<24": 185,
+        "24-<30": 75,
+        ">=30": 67
+      },
+      "fp_localization": {
+        "overlaps_gt_iou_0.1_to_0.5": 151,
+        "no_gt_overlap_iou_lt_0.1": 73
+      },
+      "cluster_bootstrap": {
+        "units": 50,
+        "precision_ci95": [
+          0.3229,
+          0.5597
+        ],
+        "recall_ci95": [
+          0.2159,
+          0.3608
+        ],
+        "resamples": 2000,
+        "seed": 63
+      },
+      "examples": {
+        "top_fp": [
+          {
+            "id": "dut-det-validation-02034",
+            "box": [
+              1123.7,
+              0.0,
+              1918.9,
+              533.6
+            ],
+            "score": 0.7709,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.026
+          },
+          {
+            "id": "dut-det-validation-02487",
+            "box": [
+              1332.1,
+              317.5,
+              1390.8,
+              352.7
+            ],
+            "score": 0.7695,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.474
+          },
+          {
+            "id": "dut-det-validation-02508",
+            "box": [
+              1212.3,
+              542.0,
+              1258.9,
+              565.7
+            ],
+            "score": 0.7663,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.456
+          },
+          {
+            "id": "dut-det-validation-02440",
+            "box": [
+              0.2,
+              51.9,
+              126.0,
+              157.6
+            ],
+            "score": 0.7464,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.455
+          },
+          {
+            "id": "dut-det-validation-02497",
+            "box": [
+              704.6,
+              367.2,
+              768.3,
+              395.1
+            ],
+            "score": 0.7248,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.432
+          },
+          {
+            "id": "dut-det-validation-02502",
+            "box": [
+              1523.7,
+              619.7,
+              1555.9,
+              636.8
+            ],
+            "score": 0.7218,
+            "size_bin": "16-<24",
+            "max_iou_gt": 0.331
+          },
+          {
+            "id": "dut-det-validation-02311",
+            "box": [
+              1350.5,
+              510.5,
+              1395.2,
+              535.2
+            ],
+            "score": 0.7216,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.495
+          },
+          {
+            "id": "dut-det-validation-02485",
+            "box": [
+              1494.5,
+              280.9,
+              1541.5,
+              308.4
+            ],
+            "score": 0.7185,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.476
+          }
+        ],
+        "fn": [
+          {
+            "id": "dut-det-validation-02025",
+            "box": [
+              890.0,
+              662.0,
+              906.0,
+              674.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02050",
+            "box": [
+              1248.0,
+              945.0,
+              1276.0,
+              953.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5635
+          },
+          {
+            "id": "dut-det-validation-02052",
+            "box": [
+              1232.0,
+              879.0,
+              1255.0,
+              888.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.4315
+          },
+          {
+            "id": "dut-det-validation-02053",
+            "box": [
+              1231.0,
+              978.0,
+              1251.0,
+              986.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.4501
+          },
+          {
+            "id": "dut-det-validation-02054",
+            "box": [
+              1193.0,
+              938.0,
+              1219.0,
+              945.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5598
+          },
+          {
+            "id": "dut-det-validation-02059",
+            "box": [
+              1651.0,
+              586.0,
+              1670.0,
+              595.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5749
+          },
+          {
+            "id": "dut-det-validation-02060",
+            "box": [
+              1718.0,
+              719.0,
+              1734.0,
+              726.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5993
+          },
+          {
+            "id": "dut-det-validation-02070",
+            "box": [
+              747.0,
+              495.0,
+              768.0,
+              506.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.555
+          },
+          {
+            "id": "dut-det-validation-02073",
+            "box": [
+              201.0,
+              621.0,
+              217.0,
+              629.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5618
+          },
+          {
+            "id": "dut-det-validation-02075",
+            "box": [
+              1246.0,
+              555.0,
+              1260.0,
+              563.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5332
+          },
+          {
+            "id": "dut-det-validation-02076",
+            "box": [
+              1157.0,
+              378.0,
+              1175.0,
+              390.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5929
+          },
+          {
+            "id": "dut-det-validation-02083",
+            "box": [
+              1495.0,
+              798.0,
+              1510.0,
+              805.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.3745
+          },
+          {
+            "id": "dut-det-validation-02085",
+            "box": [
+              695.0,
+              558.0,
+              717.0,
+              567.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.6186
+          },
+          {
+            "id": "dut-det-validation-02086",
+            "box": [
+              910.0,
+              726.0,
+              932.0,
+              735.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02088",
+            "box": [
+              949.0,
+              565.0,
+              970.0,
+              575.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2573
+          },
+          {
+            "id": "dut-det-validation-02089",
+            "box": [
+              1089.0,
+              552.0,
+              1105.0,
+              558.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          }
+        ]
+      }
+    },
+    "0.5": {
+      "counts": {
+        "tp": 157,
+        "fp": 160,
+        "fn": 443,
+        "images": 600
+      },
+      "precision_all": 0.4952681388012618,
+      "recall": 0.26166666666666666,
+      "recall_by_size": {
+        "<16": {
+          "n": 105,
+          "tp": 2,
+          "recall": 0.01904761904761905
+        },
+        "16-<24": {
+          "n": 216,
+          "tp": 25,
+          "recall": 0.11574074074074074
+        },
+        "24-<30": {
+          "n": 111,
+          "tp": 35,
+          "recall": 0.3153153153153153
+        },
+        ">=30": {
+          "n": 168,
+          "tp": 95,
+          "recall": 0.5654761904761905
+        }
+      },
+      "negative_images": {},
+      "timing_ms": {
+        "mean": 151.16266666666667,
+        "median": 149.1
+      },
+      "diagnostic_match_iou_0.3": {
+        "counts": {
+          "tp": 275,
+          "fp": 42,
+          "fn": 325,
+          "images": 600
+        },
+        "precision_all": 0.8675078864353313,
+        "recall": 0.4583333333333333,
+        "recall_by_size": {
+          "<16": {
+            "n": 105,
+            "tp": 23,
+            "recall": 0.21904761904761905
+          },
+          "16-<24": {
+            "n": 216,
+            "tp": 100,
+            "recall": 0.46296296296296297
+          },
+          "24-<30": {
+            "n": 111,
+            "tp": 54,
+            "recall": 0.4864864864864865
+          },
+          ">=30": {
+            "n": 168,
+            "tp": 98,
+            "recall": 0.5833333333333334
+          }
+        }
+      },
+      "fp_by_pred_size": {
+        "<16": 0,
+        "16-<24": 24,
+        "24-<30": 48,
+        ">=30": 88
+      },
+      "fn_by_size": {
+        "<16": 103,
+        "16-<24": 191,
+        "24-<30": 76,
+        ">=30": 73
+      },
+      "fp_localization": {
+        "overlaps_gt_iou_0.1_to_0.5": 129,
+        "no_gt_overlap_iou_lt_0.1": 31
+      },
+      "cluster_bootstrap": {
+        "units": 50,
+        "precision_ci95": [
+          0.3811,
+          0.6256
+        ],
+        "recall_ci95": [
+          0.195,
+          0.334
+        ],
+        "resamples": 2000,
+        "seed": 63
+      },
+      "examples": {
+        "top_fp": [
+          {
+            "id": "dut-det-validation-02034",
+            "box": [
+              1123.7,
+              0.0,
+              1918.9,
+              533.6
+            ],
+            "score": 0.7709,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.026
+          },
+          {
+            "id": "dut-det-validation-02487",
+            "box": [
+              1332.1,
+              317.5,
+              1390.8,
+              352.7
+            ],
+            "score": 0.7695,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.474
+          },
+          {
+            "id": "dut-det-validation-02508",
+            "box": [
+              1212.3,
+              542.0,
+              1258.9,
+              565.7
+            ],
+            "score": 0.7663,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.456
+          },
+          {
+            "id": "dut-det-validation-02440",
+            "box": [
+              0.2,
+              51.9,
+              126.0,
+              157.6
+            ],
+            "score": 0.7464,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.455
+          },
+          {
+            "id": "dut-det-validation-02497",
+            "box": [
+              704.6,
+              367.2,
+              768.3,
+              395.1
+            ],
+            "score": 0.7248,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.432
+          },
+          {
+            "id": "dut-det-validation-02502",
+            "box": [
+              1523.7,
+              619.7,
+              1555.9,
+              636.8
+            ],
+            "score": 0.7218,
+            "size_bin": "16-<24",
+            "max_iou_gt": 0.331
+          },
+          {
+            "id": "dut-det-validation-02311",
+            "box": [
+              1350.5,
+              510.5,
+              1395.2,
+              535.2
+            ],
+            "score": 0.7216,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.495
+          },
+          {
+            "id": "dut-det-validation-02485",
+            "box": [
+              1494.5,
+              280.9,
+              1541.5,
+              308.4
+            ],
+            "score": 0.7185,
+            "size_bin": ">=30",
+            "max_iou_gt": 0.476
+          }
+        ],
+        "fn": [
+          {
+            "id": "dut-det-validation-02025",
+            "box": [
+              890.0,
+              662.0,
+              906.0,
+              674.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02050",
+            "box": [
+              1248.0,
+              945.0,
+              1276.0,
+              953.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5635
+          },
+          {
+            "id": "dut-det-validation-02052",
+            "box": [
+              1232.0,
+              879.0,
+              1255.0,
+              888.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.4315
+          },
+          {
+            "id": "dut-det-validation-02053",
+            "box": [
+              1231.0,
+              978.0,
+              1251.0,
+              986.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.4501
+          },
+          {
+            "id": "dut-det-validation-02054",
+            "box": [
+              1193.0,
+              938.0,
+              1219.0,
+              945.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5598
+          },
+          {
+            "id": "dut-det-validation-02059",
+            "box": [
+              1651.0,
+              586.0,
+              1670.0,
+              595.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5749
+          },
+          {
+            "id": "dut-det-validation-02060",
+            "box": [
+              1718.0,
+              719.0,
+              1734.0,
+              726.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5993
+          },
+          {
+            "id": "dut-det-validation-02070",
+            "box": [
+              747.0,
+              495.0,
+              768.0,
+              506.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.555
+          },
+          {
+            "id": "dut-det-validation-02073",
+            "box": [
+              201.0,
+              621.0,
+              217.0,
+              629.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5618
+          },
+          {
+            "id": "dut-det-validation-02075",
+            "box": [
+              1246.0,
+              555.0,
+              1260.0,
+              563.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5332
+          },
+          {
+            "id": "dut-det-validation-02076",
+            "box": [
+              1157.0,
+              378.0,
+              1175.0,
+              390.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.5929
+          },
+          {
+            "id": "dut-det-validation-02083",
+            "box": [
+              1495.0,
+              798.0,
+              1510.0,
+              805.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.3745
+          },
+          {
+            "id": "dut-det-validation-02085",
+            "box": [
+              695.0,
+              558.0,
+              717.0,
+              567.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.6186
+          },
+          {
+            "id": "dut-det-validation-02086",
+            "box": [
+              910.0,
+              726.0,
+              932.0,
+              735.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          },
+          {
+            "id": "dut-det-validation-02088",
+            "box": [
+              949.0,
+              565.0,
+              970.0,
+              575.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": 0.2573
+          },
+          {
+            "id": "dut-det-validation-02089",
+            "box": [
+              1089.0,
+              552.0,
+              1105.0,
+              558.0
+            ],
+            "size_bin": "<16",
+            "best_pred_score": null
+          }
+        ]
+      }
+    }
+  },
+  "split": "DUT official val shard (development validation, not independent test)",
+  "predictions_sha256": "625c224802d74ea1c12edc87517a03ca99f69e7b7d72c1b1f29521a010ad3d1c"
+}

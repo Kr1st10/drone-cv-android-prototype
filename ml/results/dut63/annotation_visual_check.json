@@ -1,0 +1,300 @@
+{
+ "by": "AI agent visual inspection of 2.5x-context crops (not a human annotator)",
+ "date": "2026-11-03",
+ "sampling": "random.seed(630), 12 boxes per size bin from 600 validation boxes",
+ "n": 48,
+ "drone_visible_box_tight": 42,
+ "object_too_faint_to_confirm": 6,
+ "clearly_wrong": 0,
+ "items": [
+  {
+   "idx": 0,
+   "id": "dut-det-validation-02338",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 1,
+   "id": "dut-det-validation-02094",
+   "size_bin": "<16",
+   "verdict": "unclear_faint"
+  },
+  {
+   "idx": 2,
+   "id": "dut-det-validation-02357",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 3,
+   "id": "dut-det-validation-02076",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 4,
+   "id": "dut-det-validation-02427",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 5,
+   "id": "dut-det-validation-02246",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 6,
+   "id": "dut-det-validation-02119",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 7,
+   "id": "dut-det-validation-02159",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 8,
+   "id": "dut-det-validation-02516",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 9,
+   "id": "dut-det-validation-02096",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 10,
+   "id": "dut-det-validation-02256",
+   "size_bin": "<16",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 11,
+   "id": "dut-det-validation-02397",
+   "size_bin": "<16",
+   "verdict": "unclear_faint"
+  },
+  {
+   "idx": 12,
+   "id": "dut-det-validation-02072",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 13,
+   "id": "dut-det-validation-02158",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 14,
+   "id": "dut-det-validation-02149",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 15,
+   "id": "dut-det-validation-02262",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 16,
+   "id": "dut-det-validation-02322",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 17,
+   "id": "dut-det-validation-02370",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 18,
+   "id": "dut-det-validation-02486",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 19,
+   "id": "dut-det-validation-02173",
+   "size_bin": "16-<24",
+   "verdict": "unclear_faint"
+  },
+  {
+   "idx": 20,
+   "id": "dut-det-validation-02518",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 21,
+   "id": "dut-det-validation-02121",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 22,
+   "id": "dut-det-validation-02278",
+   "size_bin": "16-<24",
+   "verdict": "unclear_faint"
+  },
+  {
+   "idx": 23,
+   "id": "dut-det-validation-02579",
+   "size_bin": "16-<24",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 24,
+   "id": "dut-det-validation-02006",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 25,
+   "id": "dut-det-validation-02524",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 26,
+   "id": "dut-det-validation-02015",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 27,
+   "id": "dut-det-validation-02589",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 28,
+   "id": "dut-det-validation-02420",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 29,
+   "id": "dut-det-validation-02266",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 30,
+   "id": "dut-det-validation-02024",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 31,
+   "id": "dut-det-validation-02352",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 32,
+   "id": "dut-det-validation-02198",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 33,
+   "id": "dut-det-validation-02387",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 34,
+   "id": "dut-det-validation-02541",
+   "size_bin": "24-<30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 35,
+   "id": "dut-det-validation-02045",
+   "size_bin": "24-<30",
+   "verdict": "unclear_faint"
+  },
+  {
+   "idx": 36,
+   "id": "dut-det-validation-02196",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 37,
+   "id": "dut-det-validation-02474",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 38,
+   "id": "dut-det-validation-02152",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 39,
+   "id": "dut-det-validation-02297",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 40,
+   "id": "dut-det-validation-02546",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 41,
+   "id": "dut-det-validation-02332",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 42,
+   "id": "dut-det-validation-02574",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 43,
+   "id": "dut-det-validation-02487",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 44,
+   "id": "dut-det-validation-02340",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 45,
+   "id": "dut-det-validation-02588",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 46,
+   "id": "dut-det-validation-02501",
+   "size_bin": ">=30",
+   "verdict": "confirmed"
+  },
+  {
+   "idx": 47,
+   "id": "dut-det-validation-02043",
+   "size_bin": ">=30",
+   "verdict": "unclear_faint"
+  }
+ ],
+ "note": "Unclear = not refuted; faint or camouflaged object consistent with a drone. Sample check only; remaining 552 boxes have automatic checks only."
+}
