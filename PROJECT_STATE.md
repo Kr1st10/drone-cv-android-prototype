@@ -1,6 +1,14 @@
 # PROJECT_STATE.md
 
-_Обновлено: 2026-11-03. Этап 6.3, ветка `research/real-drone-data-6.3` от `main` @ `caf23d3`, Draft PR #18._
+_Обновлено: 2026-11-03. Этап 6.4, ветка `research/small-drones-6.4` от `main` @ `28e516a`, PR #19 (не объединять без проверки)._
+
+## Этап 6.4 — маленькие дроны и FP на птицах/самолётах (реальные открытые данные)
+
+- `ml/scripts/real64_prepare.py` (импорт Halmstad/Flying в манифест dataset45), `ml/scripts/real64_eval.py` (split/predict/evaluate/train/compare), `ml/scripts/real64_examples.py`; источники и лицензии — `ml/results/real64/sources.json`; результаты — `ml/results/real64/README.md`. Изображения, предсказания и веса не коммитятся.
+- Данные: Halmstad (CC0-1.0) 2988 кадров из 273 видео (225 собственных, 48 с YouTube — только eval), Flying Object (MIT) 1630 кадров без дронов, 1 сцена. 1105 рамок дронов, <16 px — **10**, 16–<24 — 234. Все записи `unreviewed`; агентская визуальная проверка 110 crops — сдвигов не найдено, рамки Halmstad свободные. CSIO и WOSDETC — нужны формы от пользователя.
+- Split групповой с учётом места съёмки: 58 групп, 7 с дронами (одна группа — 101 видео одного места, в train). Test запечатан (`sealed_test.json`, 293 кадра).
+- Baseline: отклик ≥24 px ≈98 %, 16–<24 px 75 %, R@IoU0.3 0.44; FP на 81–95 % кадров с птицами/самолётами/вертолётами (conf 0.25). Дообучение 3 эпохи на CPU подавило FP, но потеряло маленькие дроны и DUT (R 0.288 → 0) — **не принято**.
+- Проверки: Python `ml/tests` **96 passed** (87 + 9 новых `test_real64.py`). Android, DJI, модель в APK и пороги не менялись; ONNX/QNN не затронуты.
 
 ## Этап 6.3 — реальные данные DUT-Anti-UAV, baseline и ограниченное дообучение
 
