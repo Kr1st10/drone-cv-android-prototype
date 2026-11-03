@@ -76,7 +76,7 @@ def analyze(d, filename='', digest=''):
     windows = []
     for start in range(0, math.ceil(duration), 60000):
         end = min(start + 60000, duration)
-        selected = [r for r in frames if start <= r['offset_ms'] < end]
+        selected = [r for r in frames if start <= r['offset_ms'] < end or (end == duration and r['offset_ms'] == end)]
         windows.append({'start_ms': start, 'end_ms': end, 'frames': len(selected),
                         'fps': len(selected)*1000/(end-start),
                         'pipeline': summary([r['pipeline_ms'] for r in selected]),

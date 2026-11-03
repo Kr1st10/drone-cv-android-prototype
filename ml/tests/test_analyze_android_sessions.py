@@ -49,3 +49,17 @@ def test_empty_zero_duration():
 def test_unsupported_version():
     d=sample(); d['schema_version']=2
     with pytest.raises(ValueError): a.analyze(d)
+
+
+def test_frame_at_stop_is_counted_in_last_window():
+    d=sample(); d['frames'][-1]['offset_ms']=d['duration_ms']
+    r=a.analyze(d); assert sum(w['frames'] for w in r['minute_windows']) == d['completed_frames']
+
+
+def test_cli_rejects_incompatible_configs(tmp_path):
+    import json, subprocess, sys
+    one=sample(); two=copy.deepcopy(one); two['device']='different'
+    for i, item in enumerate([one,two]): (tmp_path / f'{i}.json').write_text(json.dumps(item))
+    out=tmp_path / 'out.json'
+    result=subprocess.run([sys.executable, str(Path(__file__).parents[1] / 'scripts/analyze_android_sessions.py'),str(tmp_path/'0.json'),str(tmp_path/'1.json'),'--output',str(out)],capture_output=True)
+    assert result.returncode != 0 and json.loads(out.read_text())['config_mismatches']
