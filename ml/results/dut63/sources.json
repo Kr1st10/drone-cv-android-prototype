@@ -1,0 +1,33 @@
+{
+  "source": "https://huggingface.co/datasets/aegean-ai/dut-anti-uav",
+  "revision": "3ea69e5beb2d20cda3743ca4b487d07263e48547",
+  "source_repository": "https://github.com/wangdongdut/DUT-Anti-UAV",
+  "mirror_license": "Apache-2.0 as claimed by mirror; rights in primary content and independence from initial training require verification",
+  "files": [
+    {
+      "path": "tracking-parquet/video02.parquet",
+      "size_bytes": 6987040,
+      "sha256": "7c5911f9b40c95a09f1afa0ac8e0ff322abd1c84be1bdf54db29599029c386ef"
+    },
+    {
+      "path": "tracking-parquet/video03.parquet",
+      "size_bytes": 2192657,
+      "sha256": "dabf2145c5a81e4614f01254f4b426b3091dc04491a04c92f759af825a38d94b"
+    },
+    {
+      "path": "tracking-parquet/video04.parquet",
+      "size_bytes": 13518081,
+      "sha256": "8c93ef4df22edf8d9d28dc3845fa16f70f652a08c95083cad922df04c7ecbc57"
+    },
+    {
+      "path": "tracking-parquet/video05.parquet",
+      "size_bytes": 39885586,
+      "sha256": "6e8f3c969644101d036ebdf045a3dc77df9b51e111ab06ddb2d089040c4b7774"
+    },
+    {
+      "path": "tracking-parquet/video06.parquet",
+      "size_bytes": 17236771,
+      "sha256": "dbfb13b1f653d5aab091766e5132c274ab0732454fb0e8d4cf8d1f7b3fd9b6d9"
+    }
+  ]
+}
