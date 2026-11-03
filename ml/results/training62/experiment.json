@@ -1,0 +1,8 @@
+{
+  "name": "stage62-yolo11s-drone-baseline-finetune",
+  "checkpoint_url": "https://huggingface.co/sapoepsilon/yolov11s-drone-detector/resolve/58897d6d6fadda9dfec979fd5dd7ad9040e73365/best.pt",
+  "checkpoint_sha256": "337390e1018eaf815474c02e172a224425095466d4a5cd2dbd11301b0aa01b78",
+  "license": "Model card Apache-2.0; checkpoint metadata AGPL-3.0. Treat as AGPL until clarified.",
+  "ultralytics_version": "8.4.197",
+  "train": {"imgsz": 640, "epochs": 10, "batch": 8, "seed": 62, "deterministic": true, "workers": 0, "optimizer": "AdamW", "patience": 10, "pretrained": true, "amp": false}
+}

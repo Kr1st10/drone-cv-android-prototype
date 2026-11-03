@@ -1,0 +1,55 @@
+{
+  "checkpoint_sha256": "337390e1018eaf815474c02e172a224425095466d4a5cd2dbd11301b0aa01b78",
+  "onnx_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+  "input": {
+    "name": "images",
+    "shape": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "type": "tensor(float)"
+  },
+  "output": {
+    "name": "output0",
+    "shape": [
+      1,
+      5,
+      8400
+    ],
+    "type": "tensor(float)"
+  },
+  "absolute_tolerance": {
+    "box_px": 0.1,
+    "score": 0.001
+  },
+  "samples": [
+    {
+      "image_name": "00001.jpg",
+      "image_sha256": "d5296f7aa4f41d4f301187ad17ec7fcf11639a7c5c9e78136c8d420bf18a7860",
+      "max_abs_box_px": 0.0020751953125,
+      "max_abs_score": 6.556510925292969e-07
+    },
+    {
+      "image_name": "00022.jpg",
+      "image_sha256": "0a4b3a106d793919dc68f92fc0a5b59fe46d357699e6b9ff6c5a22990ce36977",
+      "max_abs_box_px": 0.00189208984375,
+      "max_abs_score": 8.344650268554688e-07
+    },
+    {
+      "image_name": "000000400922.jpg",
+      "image_sha256": "d928bf0f109d0bbcd081eec02d3d84a9136b4b44c1d0001392a25253b51a9cd5",
+      "max_abs_box_px": 0.0015106201171875,
+      "max_abs_score": 5.364418029785156e-07
+    }
+  ],
+  "versions": {
+    "python": "3.13.15",
+    "torch": "2.6.0+cpu",
+    "ultralytics": "8.4.197",
+    "onnx": "1.23.2",
+    "onnxruntime": "1.31.1"
+  },
+  "note": "Raw pre-NMS outputs; parity is not accuracy, latency, Android or QNN compatibility."
+}
