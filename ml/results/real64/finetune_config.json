@@ -1,0 +1,39 @@
+{
+ "name": "stage64-halmstad-own-train-limited-finetune-cpu",
+ "checkpoint_url": "https://huggingface.co/sapoepsilon/yolov11s-drone-detector/resolve/58897d6d6fadda9dfec979fd5dd7ad9040e73365/best.pt",
+ "checkpoint_sha256": "337390e1018eaf815474c02e172a224425095466d4a5cd2dbd11301b0aa01b78",
+ "ultralytics_version": "8.4.197",
+ "data": "Halmstad own-recorded videos in the train split only (no DUT, no YouTube-sourced videos, no Flying Object); bird/airplane/helicopter frames are empty-label background; label_absent frames excluded",
+ "selection": "fixed epochs, final last.pt; validation and eval_only are never used during training or for checkpoint selection",
+ "train": {
+  "imgsz": 640,
+  "epochs": 3,
+  "batch": 4,
+  "seed": 64,
+  "deterministic": true,
+  "workers": 2,
+  "optimizer": "AdamW",
+  "lr0": 0.0005,
+  "warmup_epochs": 0.5,
+  "pretrained": true,
+  "amp": false,
+  "close_mosaic": 1,
+  "cache": false
+ },
+ "run": {
+  "train_frames": 1662,
+  "train_frames_with_drones": 738,
+  "train_drone_groups": 1,
+  "epochs_run": 3,
+  "checkpoint": "last.pt",
+  "last_pt_sha256": "b9354203030600188c9ecc52935aab8fef8c06cacce3e5dd5d2eba4a439c9fe5",
+  "wall_clock": "~95 min CPU (2 vCPU), ~4.1 s/it batch 4",
+  "final_ultralytics_val_on_train_images": {
+   "P": 0.682,
+   "R": 0.764,
+   "mAP50": 0.75,
+   "mAP50-95": 0.281,
+   "note": "train images, not a quality estimate"
+  }
+ }
+}

@@ -111,8 +111,8 @@ def cmd_split(a):
 
 
 def selected(manifest, split_file, splits):
-    recs = load_manifest(manifest)['records']; s = json.loads(Path(split_file).read_text())['assignments']
     if 'test' in splits: raise ValueError('test is sealed for the future final evaluation')
+    recs = load_manifest(manifest)['records']; s = json.loads(Path(split_file).read_text())['assignments']
     return [r for r in recs if s[r['id']] in splits], s
 
 
@@ -145,6 +145,7 @@ def frame_stats(r, preds, conf):
     for j, g in enumerate(res['gt']):
         g['best_iou'] = float(iou[:, j].max()) if len(P) else 0.0
         g['response'] = bool(any(near(x, gt[j]) for x in p))
+        g['centre_in_gt'] = bool(any(gt[j][0] <= (x[0] + x[2]) / 2 <= gt[j][2] and gt[j][1] <= (x[1] + x[3]) / 2 <= gt[j][3] for x in p))
     unmatched = [x for x, t in zip(p, res['tp0.3']) if not t]
     others = [o for o in r['annotations'] if o['class'] != 'drone'] + r.get('other_objects', [])
     fp_cls = Counter()
@@ -163,12 +164,13 @@ def summarize(recs, preds, conf, groups):
         f = frame_stats(r, by[r['id']], conf); gid = groups[r['id']]
         has_drone = bool(f['gt'])
         for g, h5, h3 in zip(f['gt'], f['hit0.5'], f['hit0.3']):
-            b = bins[g['bin']]; b.update(n=1, tp05=int(h5), tp03=int(h3), response=int(g['response']))
+            b = bins[g['bin']]; b.update(n=1, tp05=int(h5), tp03=int(h3), response=int(g['response']), centre=int(g['centre_in_gt']))
             if h3: ious.append(g['best_iou'])
             per_group[gid].update(n=1, tp05=int(h5), tp03=int(h3))
         if has_drone:
             T['drone_frames'].update(frames=1, tp05=int(f['tp0.5'].sum()), fp05=int((~f['tp0.5']).sum()), tp03=int(f['tp0.3'].sum()), fp03=int((~f['tp0.3']).sum()))
             per_group[gid].update(fp05=int((~f['tp0.5']).sum()), fp03=int((~f['tp0.3']).sum()))
+            for c, v in f['fp_by_target'].items(): T['drone_frames_fp_iou0.3_by_target'][c] += v
         else:
             kinds = sorted({o['class'] for o in r['annotations'] + r.get('other_objects', [])}) or ['empty']
             k = '+'.join(kinds); neg[k].update(frames=1, frames_with_fp=int(f['n_pred'] > 0), fp=f['n_pred'])
@@ -177,10 +179,10 @@ def summarize(recs, preds, conf, groups):
                 objects[o['class']] += 1; obj_groups[o['class']].add(gid)
             neg[k]['objects'] += len(r['annotations'] + r.get('other_objects', []))
             per_group[gid].update(neg_frames=1, neg_fp=f['n_pred'])
-    out = {'conf': conf, 'drone_frames': dict(T['drone_frames']), 'recall_by_size': {}, 'negatives': {k: dict(v) for k, v in neg.items()}}
+    out = {'conf': conf, 'drone_frames': dict(T['drone_frames']), 'drone_frames_fp_iou0.3_by_target': dict(T['drone_frames_fp_iou0.3_by_target']), 'recall_by_size': {}, 'negatives': {k: dict(v) for k, v in neg.items()}}
     for k, v in bins.items():
-        n = v['n']; out['recall_by_size'][k] = {'n': n, 'tp_iou0.5': v['tp05'], 'tp_iou0.3': v['tp03'], 'response': v['response'],
-            'recall_iou0.5': v['tp05'] / n if n else None, 'recall_iou0.3': v['tp03'] / n if n else None, 'response_rate': v['response'] / n if n else None}
+        n = v['n']; out['recall_by_size'][k] = {'n': n, 'tp_iou0.5': v['tp05'], 'tp_iou0.3': v['tp03'], 'response': v['response'], 'centre_in_gt': v['centre'],
+            'recall_iou0.5': v['tp05'] / n if n else None, 'recall_iou0.3': v['tp03'] / n if n else None, 'response_rate': v['response'] / n if n else None, 'centre_in_gt_rate': v['centre'] / n if n else None}
     n = sum(v['n'] for v in bins.values()); t5 = sum(v['tp05'] for v in bins.values()); t3 = sum(v['tp03'] for v in bins.values()); d = T['drone_frames']
     out['overall'] = {'gt': n, 'recall_iou0.5': t5 / n if n else None, 'recall_iou0.3': t3 / n if n else None,
                       'precision_iou0.5_drone_frames': d['tp05'] / (d['tp05'] + d['fp05']) if d['tp05'] + d['fp05'] else None,
@@ -203,8 +205,14 @@ def summarize(recs, preds, conf, groups):
 
 def cmd_evaluate(a):
     recs, s = selected(a.manifest, a.split, a.splits); data = json.loads(a.predictions.read_text())
-    if {e['id'] for e in data['records']} != {r['id'] for r in recs}: raise ValueError('predictions do not cover the selected frames exactly')
-    g, _ = groups_for([r for r in load_manifest(a.manifest)['records'] if r['id'] in {x['id'] for x in recs}])
+    ids = {r['id'] for r in recs}
+    if not ids <= {e['id'] for e in data['records']}: raise ValueError('predictions do not cover the selected frames')
+    data['records'] = [e for e in data['records'] if e['id'] in ids]
+    lock = json.loads(Path(a.split).read_text()); seq2g = {}
+    for gk, seqs in lock.get('groups', {}).get('halmstad', {}).get('group_sequences', {}).items():
+        for q in seqs: seq2g[q] = gk
+    # bootstrap units = split groups (site-aware); ungrouped (internet-sourced, Flying Object) = their own video/sequence
+    g = {r['id']: seq2g.get(r['sequence_id'], r['sequence_id']) for r in recs}
     result = {'config': data['config'], 'splits': a.splits, 'predictions_sha256': sha_file(a.predictions), 'by_dataset': {}}
     for ds in ('halmstad', 'flying'):
         sub = [r for r in recs if r['dataset'] == ds]
@@ -212,6 +220,66 @@ def cmd_evaluate(a):
     a.output.write_text(json.dumps(result, indent=1, ensure_ascii=False) + '\n')
     for ds, v in result['by_dataset'].items():
         for c, x in v.items(): print(ds, c, json.dumps({k: x[k] for k in ('overall', 'recall_by_size', 'localisation', 'groups')})[:1500]); print(' neg', json.dumps(x['negatives']))
+
+
+def yolo_label(r):
+    w, h = r['width'], r['height']; lines = []
+    for x in r['annotations']:
+        if x['class'] != 'drone': continue
+        b = x['xyxy']; lines.append(f"0 {(b[0] + b[2]) / 2 / w:.6f} {(b[1] + b[3]) / 2 / h:.6f} {(b[2] - b[0]) / w:.6f} {(b[3] - b[1]) / h:.6f}")
+    return '\n'.join(lines) + ('\n' if lines else '')
+
+
+def cmd_train(a):
+    """Limited fine-tune on own-recorded Halmstad *train* groups only (drones + bird/airplane/helicopter as background).
+
+    Fixed epochs, final last.pt; validation/eval_only are never used for training or checkpoint selection.
+    """
+    config = json.loads(a.config.read_text())
+    if sha_file(a.weights) != config['checkpoint_sha256']: raise ValueError('checkpoint SHA mismatch')
+    recs, s = selected(a.manifest, a.split, ['train'])
+    recs = [r for r in recs if r['dataset'] == 'halmstad' and not r['internet_sourced'] and not r.get('label_absent')]
+    d = a.workdir / 'data'
+    if d.exists(): raise ValueError('workdir/data must not exist')
+    (d / 'images' / 'train').mkdir(parents=True); (d / 'labels' / 'train').mkdir(parents=True); root = a.manifest.parent
+    for r in recs:
+        (d / 'images' / 'train' / (r['id'] + '.png')).symlink_to((root / r['file']).resolve())
+        (d / 'labels' / 'train' / (r['id'] + '.txt')).write_text(yolo_label(r))
+    (d / 'data.yaml').write_text(json.dumps({'path': str(d.resolve()), 'train': 'images/train', 'val': 'images/train', 'names': {0: 'drone'}}) + '\n')
+    (a.workdir / 'train_ids.json').write_text(json.dumps(sorted(r['id'] for r in recs)) + '\n')
+    print('train frames', len(recs), 'with drones', sum(1 for r in recs if yolo_label(r)))
+    from ultralytics import YOLO
+    import torch; torch.set_num_threads(2)
+    YOLO(str(a.weights)).train(data=str(d / 'data.yaml'), project=str(a.workdir.resolve()), name='run', exist_ok=False, device='cpu', val=False, plots=False, **config['train'])
+
+
+def group_neg_fp(recs, preds, conf, groups):
+    by = {e['id']: e['predictions'] for e in preds}; G = defaultdict(lambda: [0, 0, 0])
+    for r in recs:
+        if r.get('label_absent') or any(x['class'] == 'drone' for x in r['annotations']): continue
+        n = sum(1 for x in by[r['id']] if x[4] > conf); g = G[groups[r['id']]]; g[0] += 1; g[1] += int(n > 0); g[2] += n
+    return G
+
+
+def cmd_compare(a):
+    """Paired group bootstrap baseline vs candidate on the same frames: share of drone-free frames with any FP."""
+    recs, _ = selected(a.manifest, a.split, a.splits); lock = json.loads(Path(a.split).read_text()); seq2g = {}
+    for gk, seqs in lock.get('groups', {}).get('halmstad', {}).get('group_sequences', {}).items():
+        for q in seqs: seq2g[q] = gk
+    groups = {r['id']: seq2g.get(r['sequence_id'], r['sequence_id']) for r in recs}
+    B = json.loads(a.baseline.read_text())['records']; C = json.loads(a.candidate.read_text())['records']; out = {'splits': a.splits}
+    for ds in ('halmstad', 'flying'):
+        sub = [r for r in recs if r['dataset'] == ds]
+        for c in a.conf:
+            gb, gc = group_neg_fp(sub, B, c, groups), group_neg_fp(sub, C, c, groups); keys = sorted(gb)
+            if not keys: continue
+            A = np.array([[gb[k][0], gb[k][1], gc[k][1]] for k in keys], float); rng = np.random.default_rng(64); D = []
+            for _ in range(2000):
+                t = A[rng.integers(0, len(A), len(A))].sum(0); D.append((t[2] - t[1]) / t[0])
+            t = A.sum(0)
+            out[f'{ds}@{c}'] = {'negative_frames': int(t[0]), 'groups': len(keys), 'baseline_fp_frame_share': t[1] / t[0], 'candidate_fp_frame_share': t[2] / t[0],
+                                 'delta': (t[2] - t[1]) / t[0], 'delta_ci95_group_bootstrap': [float(np.percentile(D, 2.5)), float(np.percentile(D, 97.5))]}
+    a.output.write_text(json.dumps(out, indent=1) + '\n'); print(json.dumps(out, indent=1))
 
 
 def main(argv=None):
@@ -225,6 +293,12 @@ def main(argv=None):
             q.add_argument('--imgsz', type=int, default=640); q.add_argument('--min-conf', type=float, default=0.1)
         else:
             q.add_argument('--predictions', type=Path, required=True); q.add_argument('--conf', type=float, nargs='+', default=[0.25, 0.5])
-    a = p.parse_args(argv); {'split': cmd_split, 'predict': cmd_predict, 'evaluate': cmd_evaluate}[a.cmd](a)
+    q = s.add_parser('train'); q.add_argument('--manifest', type=Path, required=True); q.add_argument('--split', type=Path, required=True)
+    q.add_argument('--weights', type=Path, required=True); q.add_argument('--config', type=Path, default=Path('ml/results/real64/finetune_config.json'))
+    q.add_argument('--workdir', type=Path, required=True)
+    q = s.add_parser('compare'); q.add_argument('--manifest', type=Path, required=True); q.add_argument('--split', type=Path, required=True)
+    q.add_argument('--splits', nargs='+', default=['validation', 'eval_only']); q.add_argument('--baseline', type=Path, required=True)
+    q.add_argument('--candidate', type=Path, required=True); q.add_argument('--output', type=Path, required=True); q.add_argument('--conf', type=float, nargs='+', default=[0.25, 0.5])
+    a = p.parse_args(argv); {'split': cmd_split, 'predict': cmd_predict, 'evaluate': cmd_evaluate, 'train': cmd_train, 'compare': cmd_compare}[a.cmd](a)
 
 if __name__ == '__main__': main()
