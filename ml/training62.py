@@ -17,7 +17,7 @@ def preflight(manifest: Path, lock_path: Path, references: list[Path]) -> dict:
         raise ValueError('dataset failed validation: inspect dataset45 validate report')
     lock_data = json.loads(lock_path.read_text())
     lock = lock_data.get('lock', lock_data)
-    if not lock.get('test_frozen'):
+    if lock.get('test_frozen') is not True:
         raise ValueError('test lock must be frozen before training')
     if set(lock.get('records', {})) != {r['id'] for r in data['records']}:
         raise ValueError('manifest and lock record sets must match exactly')

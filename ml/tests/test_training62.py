@@ -38,6 +38,8 @@ def test_preflight_fails_unfrozen_and_reference_changes(tmp_path):
     lock = json.loads(path.read_text()); lock['test_frozen'] = False
     path.write_text(json.dumps(lock))
     with pytest.raises(ValueError, match='frozen'): preflight(m, path, [])
+    lock['test_frozen'] = 'false'; path.write_text(json.dumps(lock))
+    with pytest.raises(ValueError, match='frozen'): preflight(m, path, [])
     lock['test_frozen'] = True; lock['reference_sha256'] = ['a' * 64]
     path.write_text(json.dumps(lock))
     with pytest.raises(ValueError, match='references'): preflight(m, path, [])
