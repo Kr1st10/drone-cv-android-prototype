@@ -1,0 +1,497 @@
+{
+ "seed": "stage64-v1",
+ "rule": "own Halmstad videos: union same video + dataset45 near-duplicate pairs; whole groups visited in sha256(seed:min video id) order, test then validation filled to ~15% of drone boxes each; a group with >25% of drone boxes stays in train; drone-free groups by hash 70/15/15. Internet-sourced videos and Flying Object -> eval_only. Test is sealed.",
+ "manifest_sha256": "7fbd72e83f78006747946311a0fa996b4764864598adf4fd4edf6f446d923233",
+ "groups": {
+  "halmstad": {
+   "frames": 2988,
+   "sequences": 273,
+   "grouped_frames": 2460,
+   "groups": 58,
+   "largest_groups_videos": [
+    101,
+    16,
+    13,
+    11,
+    6
+   ],
+   "dup_pairs": 46465,
+   "cross_sequence_pairs": 39428,
+   "group_splits": {
+    "halmstad:V_AIRPLANE_001": "train",
+    "halmstad:V_AIRPLANE_002": "train",
+    "halmstad:V_AIRPLANE_003": "validation",
+    "halmstad:V_AIRPLANE_004": "train",
+    "halmstad:V_AIRPLANE_005": "train",
+    "halmstad:V_AIRPLANE_006": "train",
+    "halmstad:V_AIRPLANE_007": "test",
+    "halmstad:V_AIRPLANE_008": "train",
+    "halmstad:V_AIRPLANE_009": "train",
+    "halmstad:V_AIRPLANE_013": "train",
+    "halmstad:V_AIRPLANE_015": "train",
+    "halmstad:V_AIRPLANE_016": "test",
+    "halmstad:V_AIRPLANE_018": "train",
+    "halmstad:V_AIRPLANE_019": "validation",
+    "halmstad:V_AIRPLANE_021": "train",
+    "halmstad:V_AIRPLANE_023": "train",
+    "halmstad:V_AIRPLANE_032": "test",
+    "halmstad:V_AIRPLANE_049": "train",
+    "halmstad:V_AIRPLANE_050": "train",
+    "halmstad:V_AIRPLANE_051": "validation",
+    "halmstad:V_AIRPLANE_058": "train",
+    "halmstad:V_AIRPLANE_059": "test",
+    "halmstad:V_BIRD_001": "train",
+    "halmstad:V_BIRD_007": "train",
+    "halmstad:V_BIRD_008": "train",
+    "halmstad:V_BIRD_010": "train",
+    "halmstad:V_BIRD_011": "train",
+    "halmstad:V_BIRD_012": "test",
+    "halmstad:V_BIRD_013": "train",
+    "halmstad:V_BIRD_014": "train",
+    "halmstad:V_BIRD_025": "train",
+    "halmstad:V_BIRD_027": "train",
+    "halmstad:V_BIRD_028": "train",
+    "halmstad:V_BIRD_030": "test",
+    "halmstad:V_BIRD_031": "train",
+    "halmstad:V_BIRD_036": "test",
+    "halmstad:V_BIRD_037": "test",
+    "halmstad:V_BIRD_038": "train",
+    "halmstad:V_BIRD_042": "train",
+    "halmstad:V_BIRD_044": "train",
+    "halmstad:V_BIRD_046": "validation",
+    "halmstad:V_BIRD_047": "train",
+    "halmstad:V_BIRD_049": "train",
+    "halmstad:V_DRONE_026": "test",
+    "halmstad:V_DRONE_036": "test",
+    "halmstad:V_DRONE_042": "test",
+    "halmstad:V_DRONE_045": "validation",
+    "halmstad:V_DRONE_049": "validation",
+    "halmstad:V_DRONE_069": "validation",
+    "halmstad:V_HELICOPTER_005": "validation",
+    "halmstad:V_HELICOPTER_007": "validation",
+    "halmstad:V_HELICOPTER_009": "train",
+    "halmstad:V_HELICOPTER_011": "train",
+    "halmstad:V_HELICOPTER_018": "validation",
+    "halmstad:V_HELICOPTER_057": "train",
+    "halmstad:V_HELICOPTER_059": "train",
+    "halmstad:V_HELICOPTER_060": "train",
+    "halmstad:V_HELICOPTER_061": "train"
+   },
+   "group_drone_boxes": {
+    "halmstad:V_AIRPLANE_001": 0,
+    "halmstad:V_AIRPLANE_002": 0,
+    "halmstad:V_AIRPLANE_003": 0,
+    "halmstad:V_AIRPLANE_004": 0,
+    "halmstad:V_AIRPLANE_005": 0,
+    "halmstad:V_AIRPLANE_006": 0,
+    "halmstad:V_AIRPLANE_007": 0,
+    "halmstad:V_AIRPLANE_008": 0,
+    "halmstad:V_AIRPLANE_009": 0,
+    "halmstad:V_AIRPLANE_013": 0,
+    "halmstad:V_AIRPLANE_015": 738,
+    "halmstad:V_AIRPLANE_016": 0,
+    "halmstad:V_AIRPLANE_018": 0,
+    "halmstad:V_AIRPLANE_019": 0,
+    "halmstad:V_AIRPLANE_021": 0,
+    "halmstad:V_AIRPLANE_023": 0,
+    "halmstad:V_AIRPLANE_032": 0,
+    "halmstad:V_AIRPLANE_049": 0,
+    "halmstad:V_AIRPLANE_050": 0,
+    "halmstad:V_AIRPLANE_051": 0,
+    "halmstad:V_AIRPLANE_058": 0,
+    "halmstad:V_AIRPLANE_059": 0,
+    "halmstad:V_BIRD_001": 0,
+    "halmstad:V_BIRD_007": 0,
+    "halmstad:V_BIRD_008": 0,
+    "halmstad:V_BIRD_010": 0,
+    "halmstad:V_BIRD_011": 0,
+    "halmstad:V_BIRD_012": 0,
+    "halmstad:V_BIRD_013": 0,
+    "halmstad:V_BIRD_014": 0,
+    "halmstad:V_BIRD_025": 0,
+    "halmstad:V_BIRD_027": 0,
+    "halmstad:V_BIRD_028": 0,
+    "halmstad:V_BIRD_030": 0,
+    "halmstad:V_BIRD_031": 0,
+    "halmstad:V_BIRD_036": 0,
+    "halmstad:V_BIRD_037": 0,
+    "halmstad:V_BIRD_038": 0,
+    "halmstad:V_BIRD_042": 0,
+    "halmstad:V_BIRD_044": 0,
+    "halmstad:V_BIRD_046": 0,
+    "halmstad:V_BIRD_047": 0,
+    "halmstad:V_BIRD_049": 0,
+    "halmstad:V_DRONE_026": 108,
+    "halmstad:V_DRONE_036": 39,
+    "halmstad:V_DRONE_042": 30,
+    "halmstad:V_DRONE_045": 40,
+    "halmstad:V_DRONE_049": 49,
+    "halmstad:V_DRONE_069": 101,
+    "halmstad:V_HELICOPTER_005": 0,
+    "halmstad:V_HELICOPTER_007": 0,
+    "halmstad:V_HELICOPTER_009": 0,
+    "halmstad:V_HELICOPTER_011": 0,
+    "halmstad:V_HELICOPTER_018": 0,
+    "halmstad:V_HELICOPTER_057": 0,
+    "halmstad:V_HELICOPTER_059": 0,
+    "halmstad:V_HELICOPTER_060": 0,
+    "halmstad:V_HELICOPTER_061": 0
+   },
+   "group_sequences": {
+    "halmstad:V_AIRPLANE_001": [
+     "halmstad:V_AIRPLANE_001"
+    ],
+    "halmstad:V_AIRPLANE_002": [
+     "halmstad:V_AIRPLANE_002"
+    ],
+    "halmstad:V_AIRPLANE_003": [
+     "halmstad:V_AIRPLANE_003"
+    ],
+    "halmstad:V_AIRPLANE_004": [
+     "halmstad:V_AIRPLANE_004"
+    ],
+    "halmstad:V_AIRPLANE_005": [
+     "halmstad:V_AIRPLANE_005",
+     "halmstad:V_AIRPLANE_014",
+     "halmstad:V_AIRPLANE_028",
+     "halmstad:V_AIRPLANE_033",
+     "halmstad:V_AIRPLANE_034",
+     "halmstad:V_AIRPLANE_052",
+     "halmstad:V_BIRD_032",
+     "halmstad:V_BIRD_033",
+     "halmstad:V_BIRD_034",
+     "halmstad:V_BIRD_035",
+     "halmstad:V_BIRD_039",
+     "halmstad:V_BIRD_040",
+     "halmstad:V_BIRD_041",
+     "halmstad:V_BIRD_045",
+     "halmstad:V_BIRD_050",
+     "halmstad:V_BIRD_051"
+    ],
+    "halmstad:V_AIRPLANE_006": [
+     "halmstad:V_AIRPLANE_006"
+    ],
+    "halmstad:V_AIRPLANE_007": [
+     "halmstad:V_AIRPLANE_007"
+    ],
+    "halmstad:V_AIRPLANE_008": [
+     "halmstad:V_AIRPLANE_008"
+    ],
+    "halmstad:V_AIRPLANE_009": [
+     "halmstad:V_AIRPLANE_009",
+     "halmstad:V_AIRPLANE_010",
+     "halmstad:V_AIRPLANE_011",
+     "halmstad:V_AIRPLANE_012"
+    ],
+    "halmstad:V_AIRPLANE_013": [
+     "halmstad:V_AIRPLANE_013"
+    ],
+    "halmstad:V_AIRPLANE_015": [
+     "halmstad:V_AIRPLANE_015",
+     "halmstad:V_AIRPLANE_020",
+     "halmstad:V_AIRPLANE_022",
+     "halmstad:V_AIRPLANE_024",
+     "halmstad:V_AIRPLANE_025",
+     "halmstad:V_AIRPLANE_026",
+     "halmstad:V_AIRPLANE_027",
+     "halmstad:V_AIRPLANE_029",
+     "halmstad:V_AIRPLANE_030",
+     "halmstad:V_AIRPLANE_031",
+     "halmstad:V_AIRPLANE_035",
+     "halmstad:V_AIRPLANE_036",
+     "halmstad:V_AIRPLANE_037",
+     "halmstad:V_AIRPLANE_053",
+     "halmstad:V_AIRPLANE_054",
+     "halmstad:V_AIRPLANE_055",
+     "halmstad:V_AIRPLANE_056",
+     "halmstad:V_AIRPLANE_057",
+     "halmstad:V_BIRD_002",
+     "halmstad:V_BIRD_029",
+     "halmstad:V_BIRD_043",
+     "halmstad:V_DRONE_001",
+     "halmstad:V_DRONE_002",
+     "halmstad:V_DRONE_003",
+     "halmstad:V_DRONE_004",
+     "halmstad:V_DRONE_005",
+     "halmstad:V_DRONE_006",
+     "halmstad:V_DRONE_007",
+     "halmstad:V_DRONE_008",
+     "halmstad:V_DRONE_009",
+     "halmstad:V_DRONE_010",
+     "halmstad:V_DRONE_011",
+     "halmstad:V_DRONE_012",
+     "halmstad:V_DRONE_013",
+     "halmstad:V_DRONE_014",
+     "halmstad:V_DRONE_015",
+     "halmstad:V_DRONE_016",
+     "halmstad:V_DRONE_017",
+     "halmstad:V_DRONE_018",
+     "halmstad:V_DRONE_019",
+     "halmstad:V_DRONE_020",
+     "halmstad:V_DRONE_021",
+     "halmstad:V_DRONE_022",
+     "halmstad:V_DRONE_023",
+     "halmstad:V_DRONE_024",
+     "halmstad:V_DRONE_025",
+     "halmstad:V_DRONE_040",
+     "halmstad:V_DRONE_054",
+     "halmstad:V_DRONE_055",
+     "halmstad:V_DRONE_056",
+     "halmstad:V_DRONE_057",
+     "halmstad:V_DRONE_058",
+     "halmstad:V_DRONE_059",
+     "halmstad:V_DRONE_060",
+     "halmstad:V_DRONE_061",
+     "halmstad:V_DRONE_062",
+     "halmstad:V_DRONE_063",
+     "halmstad:V_DRONE_064",
+     "halmstad:V_DRONE_065",
+     "halmstad:V_DRONE_066",
+     "halmstad:V_DRONE_067",
+     "halmstad:V_DRONE_068",
+     "halmstad:V_DRONE_070",
+     "halmstad:V_DRONE_071",
+     "halmstad:V_DRONE_072",
+     "halmstad:V_DRONE_073",
+     "halmstad:V_DRONE_074",
+     "halmstad:V_DRONE_075",
+     "halmstad:V_DRONE_076",
+     "halmstad:V_DRONE_077",
+     "halmstad:V_DRONE_078",
+     "halmstad:V_DRONE_079",
+     "halmstad:V_DRONE_080",
+     "halmstad:V_DRONE_081",
+     "halmstad:V_DRONE_082",
+     "halmstad:V_DRONE_083",
+     "halmstad:V_DRONE_084",
+     "halmstad:V_DRONE_085",
+     "halmstad:V_DRONE_086",
+     "halmstad:V_DRONE_087",
+     "halmstad:V_DRONE_088",
+     "halmstad:V_DRONE_089",
+     "halmstad:V_DRONE_090",
+     "halmstad:V_DRONE_091",
+     "halmstad:V_DRONE_092",
+     "halmstad:V_DRONE_093",
+     "halmstad:V_DRONE_094",
+     "halmstad:V_DRONE_095",
+     "halmstad:V_DRONE_096",
+     "halmstad:V_DRONE_097",
+     "halmstad:V_DRONE_098",
+     "halmstad:V_DRONE_099",
+     "halmstad:V_DRONE_100",
+     "halmstad:V_DRONE_101",
+     "halmstad:V_DRONE_102",
+     "halmstad:V_HELICOPTER_001",
+     "halmstad:V_HELICOPTER_002",
+     "halmstad:V_HELICOPTER_003",
+     "halmstad:V_HELICOPTER_004",
+     "halmstad:V_HELICOPTER_015",
+     "halmstad:V_HELICOPTER_016"
+    ],
+    "halmstad:V_AIRPLANE_016": [
+     "halmstad:V_AIRPLANE_016",
+     "halmstad:V_AIRPLANE_017"
+    ],
+    "halmstad:V_AIRPLANE_018": [
+     "halmstad:V_AIRPLANE_018"
+    ],
+    "halmstad:V_AIRPLANE_019": [
+     "halmstad:V_AIRPLANE_019"
+    ],
+    "halmstad:V_AIRPLANE_021": [
+     "halmstad:V_AIRPLANE_021"
+    ],
+    "halmstad:V_AIRPLANE_023": [
+     "halmstad:V_AIRPLANE_023"
+    ],
+    "halmstad:V_AIRPLANE_032": [
+     "halmstad:V_AIRPLANE_032"
+    ],
+    "halmstad:V_AIRPLANE_049": [
+     "halmstad:V_AIRPLANE_049"
+    ],
+    "halmstad:V_AIRPLANE_050": [
+     "halmstad:V_AIRPLANE_050"
+    ],
+    "halmstad:V_AIRPLANE_051": [
+     "halmstad:V_AIRPLANE_051"
+    ],
+    "halmstad:V_AIRPLANE_058": [
+     "halmstad:V_AIRPLANE_058"
+    ],
+    "halmstad:V_AIRPLANE_059": [
+     "halmstad:V_AIRPLANE_059"
+    ],
+    "halmstad:V_BIRD_001": [
+     "halmstad:V_BIRD_001"
+    ],
+    "halmstad:V_BIRD_007": [
+     "halmstad:V_BIRD_007"
+    ],
+    "halmstad:V_BIRD_008": [
+     "halmstad:V_BIRD_008"
+    ],
+    "halmstad:V_BIRD_010": [
+     "halmstad:V_BIRD_010"
+    ],
+    "halmstad:V_BIRD_011": [
+     "halmstad:V_BIRD_011"
+    ],
+    "halmstad:V_BIRD_012": [
+     "halmstad:V_BIRD_012"
+    ],
+    "halmstad:V_BIRD_013": [
+     "halmstad:V_BIRD_013",
+     "halmstad:V_BIRD_016",
+     "halmstad:V_BIRD_018",
+     "halmstad:V_BIRD_019",
+     "halmstad:V_BIRD_024",
+     "halmstad:V_BIRD_048"
+    ],
+    "halmstad:V_BIRD_014": [
+     "halmstad:V_BIRD_014"
+    ],
+    "halmstad:V_BIRD_025": [
+     "halmstad:V_BIRD_025",
+     "halmstad:V_BIRD_026"
+    ],
+    "halmstad:V_BIRD_027": [
+     "halmstad:V_BIRD_027"
+    ],
+    "halmstad:V_BIRD_028": [
+     "halmstad:V_BIRD_028"
+    ],
+    "halmstad:V_BIRD_030": [
+     "halmstad:V_BIRD_030"
+    ],
+    "halmstad:V_BIRD_031": [
+     "halmstad:V_BIRD_031"
+    ],
+    "halmstad:V_BIRD_036": [
+     "halmstad:V_BIRD_036"
+    ],
+    "halmstad:V_BIRD_037": [
+     "halmstad:V_BIRD_037"
+    ],
+    "halmstad:V_BIRD_038": [
+     "halmstad:V_BIRD_038"
+    ],
+    "halmstad:V_BIRD_042": [
+     "halmstad:V_BIRD_042"
+    ],
+    "halmstad:V_BIRD_044": [
+     "halmstad:V_BIRD_044"
+    ],
+    "halmstad:V_BIRD_046": [
+     "halmstad:V_BIRD_046"
+    ],
+    "halmstad:V_BIRD_047": [
+     "halmstad:V_BIRD_047"
+    ],
+    "halmstad:V_BIRD_049": [
+     "halmstad:V_BIRD_049"
+    ],
+    "halmstad:V_DRONE_026": [
+     "halmstad:V_DRONE_026",
+     "halmstad:V_DRONE_027",
+     "halmstad:V_DRONE_028",
+     "halmstad:V_DRONE_029",
+     "halmstad:V_DRONE_030",
+     "halmstad:V_DRONE_031",
+     "halmstad:V_DRONE_032",
+     "halmstad:V_DRONE_033",
+     "halmstad:V_DRONE_034",
+     "halmstad:V_DRONE_035",
+     "halmstad:V_DRONE_041"
+    ],
+    "halmstad:V_DRONE_036": [
+     "halmstad:V_DRONE_036",
+     "halmstad:V_DRONE_037",
+     "halmstad:V_DRONE_038",
+     "halmstad:V_DRONE_039"
+    ],
+    "halmstad:V_DRONE_042": [
+     "halmstad:V_DRONE_042",
+     "halmstad:V_DRONE_043",
+     "halmstad:V_DRONE_044"
+    ],
+    "halmstad:V_DRONE_045": [
+     "halmstad:V_DRONE_045",
+     "halmstad:V_DRONE_046",
+     "halmstad:V_DRONE_047",
+     "halmstad:V_DRONE_048"
+    ],
+    "halmstad:V_DRONE_049": [
+     "halmstad:V_DRONE_049",
+     "halmstad:V_DRONE_050",
+     "halmstad:V_DRONE_051",
+     "halmstad:V_DRONE_052",
+     "halmstad:V_DRONE_053"
+    ],
+    "halmstad:V_DRONE_069": [
+     "halmstad:V_DRONE_069",
+     "halmstad:V_DRONE_103",
+     "halmstad:V_DRONE_104",
+     "halmstad:V_DRONE_105",
+     "halmstad:V_DRONE_106",
+     "halmstad:V_DRONE_107",
+     "halmstad:V_DRONE_108",
+     "halmstad:V_DRONE_109",
+     "halmstad:V_DRONE_110",
+     "halmstad:V_DRONE_111",
+     "halmstad:V_DRONE_112",
+     "halmstad:V_DRONE_113",
+     "halmstad:V_DRONE_114"
+    ],
+    "halmstad:V_HELICOPTER_005": [
+     "halmstad:V_HELICOPTER_005",
+     "halmstad:V_HELICOPTER_006",
+     "halmstad:V_HELICOPTER_017"
+    ],
+    "halmstad:V_HELICOPTER_007": [
+     "halmstad:V_HELICOPTER_007",
+     "halmstad:V_HELICOPTER_008"
+    ],
+    "halmstad:V_HELICOPTER_009": [
+     "halmstad:V_HELICOPTER_009",
+     "halmstad:V_HELICOPTER_010"
+    ],
+    "halmstad:V_HELICOPTER_011": [
+     "halmstad:V_HELICOPTER_011",
+     "halmstad:V_HELICOPTER_012",
+     "halmstad:V_HELICOPTER_013",
+     "halmstad:V_HELICOPTER_014"
+    ],
+    "halmstad:V_HELICOPTER_018": [
+     "halmstad:V_HELICOPTER_018"
+    ],
+    "halmstad:V_HELICOPTER_057": [
+     "halmstad:V_HELICOPTER_057",
+     "halmstad:V_HELICOPTER_058"
+    ],
+    "halmstad:V_HELICOPTER_059": [
+     "halmstad:V_HELICOPTER_059"
+    ],
+    "halmstad:V_HELICOPTER_060": [
+     "halmstad:V_HELICOPTER_060"
+    ],
+    "halmstad:V_HELICOPTER_061": [
+     "halmstad:V_HELICOPTER_061"
+    ]
+   }
+  },
+  "flying": {
+   "frames": 1630,
+   "sequences": 1,
+   "grouped_frames": 0,
+   "groups": 0,
+   "largest_groups_videos": [],
+   "dup_pairs": 0,
+   "cross_sequence_pairs": 0,
+   "group_splits": {},
+   "group_drone_boxes": {},
+   "group_sequences": {}
+  }
+ }
+}
