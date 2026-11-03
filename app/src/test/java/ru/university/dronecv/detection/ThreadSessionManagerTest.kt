@@ -37,6 +37,14 @@ class ThreadSessionManagerTest {
         try { m.switchTo(4); fail() } catch (_: IllegalStateException) { }
         assertEquals(listOf("open:2"), events); assertEquals(2, m.threads)
     }
+    @Test fun repeatedCloseFailureNeverOpensReplacement() {
+        val events = mutableListOf<String>()
+        val m = ThreadSessionManager<AutoCloseable> { n -> events.add("open:$n"); AutoCloseable { events.add("close"); error("release failed") } }
+        m.session()
+        repeat(2) { try { m.switchTo(4); fail() } catch (_: IllegalStateException) { } }
+        assertEquals(listOf("open:2", "close", "close"), events)
+        assertEquals(2, m.threads)
+    }
     @Test fun invalidThreadCountsRejected() {
         try { ThreadSessionManager<Session>(3) { n -> Session(n, mutableListOf()) }; fail() } catch (_: IllegalArgumentException) { }
         val m = ThreadSessionManager { n -> Session(n, mutableListOf()) }

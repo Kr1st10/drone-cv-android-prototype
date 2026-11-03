@@ -127,8 +127,9 @@ class YoloOnnxEngine private constructor(
     override fun close() {
         synchronized(lock) {
             if (closed) return
-            closed = true
+            // If release fails, do not mark closed: a retry must not silently allow a replacement.
             session.close() // OrtEnvironment — общий синглтон процесса, его не закрываем.
+            closed = true
         }
     }
 
