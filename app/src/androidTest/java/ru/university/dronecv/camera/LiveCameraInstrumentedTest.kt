@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -106,6 +107,16 @@ class LiveCameraInstrumentedTest {
             compose.onNodeWithText("Остановить").performScrollTo().performClick()
             drainNativeWork()
         }
+    }
+
+    @Test fun zoomRequestKeepsCameraRunningAndCanReturnToOne() {
+        openAndStart()
+        compose.onNodeWithTag("zoom-five").performScrollTo().performClick()
+        // 5x may be unsupported on the emulator; either an explanation or a successful rebind is valid.
+        compose.waitUntil(90_000) { compose.onAllNodesWithText("Переключение камеры…").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("zoom-one").performScrollTo().performClick()
+        awaitResult()
+        compose.onNodeWithTag("live-frame-ready").assertExists()
     }
 
     @Test fun diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable() {

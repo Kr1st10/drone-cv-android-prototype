@@ -25,6 +25,12 @@ class CameraGeometryTest {
         }
     }
 
+    @Test fun alreadyZoomedAnalysisCoordinatesAreNotZoomedASecondTime() {
+        // Zoom changes the image reaching analysis; a fresh normalized box still maps directly.
+        val box = NormalizedBox(.25f, .25f, .75f, .75f)
+        assertArrayEquals(floatArrayOf(250f, 125f, 750f, 375f), CameraGeometry.map(box, 1000f, 500f), 0f)
+    }
+
     @Test fun rejectsUnmeasuredViewport() {
         val box = NormalizedBox(0f, 0f, 1f, 1f)
         assertThrows(IllegalArgumentException::class.java) { CameraGeometry.map(box, 0f, 1920f) }
