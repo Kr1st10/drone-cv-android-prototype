@@ -1,0 +1,42 @@
+{
+  "checked": "2026-11-03",
+  "obtained": [
+    {
+      "name": "Halmstad Drone-detection-dataset (Svanström, Englund, Alonso-Fernandez), visible videos",
+      "url": "https://github.com/DroneDetectionThesis/Drone-detection-dataset",
+      "download": "https://zenodo.org/records/5500576/files/DroneDetectionThesis/Drone-detection-dataset-v1.0.0.zip",
+      "doi": "10.5281/zenodo.5500576",
+      "file_sha256": "53deda08127dc7896e96454cf35e866e8d6bee336f25d290b26e1f5324e23c81",
+      "file_md5_zenodo": "5d9b891a87857b3d9ee8872e8a1f0f0f",
+      "size_bytes": 311348350,
+      "description_xlsx": {"url": "https://raw.githubusercontent.com/DroneDetectionThesis/Drone-detection-dataset/master/Data/Video_dataset_description.xlsx", "sha256": "0544022ae732a6b088af4b6555a18c53a9364c2c02721d38e30d73af1c684cab"},
+      "license": "CC0-1.0 (repository LICENSE; README: free to download, use and edit). 49 visible videos are marked in the description as taken from a YouTube channel (38 helicopter, 11 airplane): third-party rights, local evaluation only, never training/publication.",
+      "label_decoder": "mcos-decoder 0.1.0 (PyPI, MIT), local data-prep dependency only",
+      "use": "evaluation + training candidate (own recordings only)"
+    },
+    {
+      "name": "Flying Object Dataset (sekilab, University of Tokyo)",
+      "url": "https://github.com/sekilab/FlyingObjectDataset",
+      "download": "https://open-research-data.s3.ap-northeast-1.amazonaws.com/skymonioring.tar",
+      "file_sha256": "27b1b6153c8227f974b3f737487515e648c7881c7f54f71b2368e8497bbfbb64",
+      "size_bytes": 102916608,
+      "license": "MIT (repository LICENSE). Contains no drones: bird / helicopter / airplane only.",
+      "use": "hard negatives (birds, airplanes, helicopters)"
+    }
+  ],
+  "inspected_not_used": [
+    {
+      "name": "CSIR-CSIO YOLOBirDrone (Drone vs Bird) dataset",
+      "url": "https://www.csio.res.in/CommonNew.php?ds=401&page=1",
+      "terms": "Non-commercial research free of charge; commercial use needs written permission; redistribution or public sharing prohibited; access by request form https://forms.gle/pirheAhBfkG9YbdC7",
+      "sample": {"url": "https://www.csio.res.in/upload/DroneDataSet/Sample_Dataset.zip", "sha256": "0ba913e5c45d6262fcf41a13d415fd6619ecbb3404edf9e99a2bef3f00b37fcd", "files": "10 JPEG + 10 YOLO txt", "note": "server omits SSL.com intermediate; fetched with the official AIA intermediate added to the trust bundle. 10 images: not used for metrics."},
+      "status": "full dataset requires the user to submit the form"
+    },
+    {
+      "name": "Drone-vs-Bird Detection Challenge (WOSDETC)",
+      "url": "https://github.com/wosdetc/challenge",
+      "terms": "Data by email request to wosdetc@googlegroups.com and a signed data usage agreement; research use only. Repository holds annotations only.",
+      "status": "requires the user to sign the agreement; not obtained"
+    }
+  ]
+}

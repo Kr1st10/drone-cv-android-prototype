@@ -1,0 +1,142 @@
+{
+ "config": {
+  "model_id": "stage64-halmstad-ft-last",
+  "model_sha256": "b9354203030600188c9ecc52935aab8fef8c06cacce3e5dd5d2eba4a439c9fe5",
+  "imgsz": 640,
+  "confidence": 0.1,
+  "nms_iou": 0.45,
+  "matching_iou": 0.5,
+  "ultralytics": "8.4.197",
+  "torch": "2.6.0+cpu",
+  "timing_conditions": "x86_64 CPU, 2 torch threads, Ultralytics predict incl. pre/post, sandbox (not phone)",
+  "manifest_sha256": "18ffca0a546be221c2ec74ce6246a3f8b9a1c8b4f0dc1577e7c1be593cb76d10"
+ },
+ "split": "DUT official val shard (development validation, not independent test)",
+ "predictions_sha256": "c2b6f4064fe25824f1474b598fd0a3a7f6328ea1c002d3ac898ce9faafb3d287",
+ "by_confidence": {
+  "0.1": {
+   "counts": {
+    "tp": 1,
+    "fp": 158,
+    "fn": 599,
+    "images": 600
+   },
+   "recall_by_size": {
+    "<16": {
+     "n": 105,
+     "tp": 0,
+     "recall": 0.0
+    },
+    "16-<24": {
+     "n": 216,
+     "tp": 0,
+     "recall": 0.0
+    },
+    "24-<30": {
+     "n": 111,
+     "tp": 0,
+     "recall": 0.0
+    },
+    ">=30": {
+     "n": 168,
+     "tp": 1,
+     "recall": 0.005952380952380952
+    }
+   },
+   "diagnostic_match_iou_0.3": {
+    "counts": {
+     "tp": 18,
+     "fp": 141,
+     "fn": 582,
+     "images": 600
+    },
+    "precision_all": 0.11320754716981132,
+    "recall": 0.03,
+    "recall_by_size": {
+     "<16": {
+      "n": 105,
+      "tp": 0,
+      "recall": 0.0
+     },
+     "16-<24": {
+      "n": 216,
+      "tp": 0,
+      "recall": 0.0
+     },
+     "24-<30": {
+      "n": 111,
+      "tp": 0,
+      "recall": 0.0
+     },
+     ">=30": {
+      "n": 168,
+      "tp": 18,
+      "recall": 0.10714285714285714
+     }
+    }
+   }
+  },
+  "0.25": {
+   "counts": {
+    "tp": 0,
+    "fp": 62,
+    "fn": 600,
+    "images": 600
+   },
+   "recall_by_size": {
+    "<16": {
+     "n": 105,
+     "tp": 0,
+     "recall": 0.0
+    },
+    "16-<24": {
+     "n": 216,
+     "tp": 0,
+     "recall": 0.0
+    },
+    "24-<30": {
+     "n": 111,
+     "tp": 0,
+     "recall": 0.0
+    },
+    ">=30": {
+     "n": 168,
+     "tp": 0,
+     "recall": 0.0
+    }
+   },
+   "diagnostic_match_iou_0.3": {
+    "counts": {
+     "tp": 11,
+     "fp": 51,
+     "fn": 589,
+     "images": 600
+    },
+    "precision_all": 0.1774193548387097,
+    "recall": 0.018333333333333333,
+    "recall_by_size": {
+     "<16": {
+      "n": 105,
+      "tp": 0,
+      "recall": 0.0
+     },
+     "16-<24": {
+      "n": 216,
+      "tp": 0,
+      "recall": 0.0
+     },
+     "24-<30": {
+      "n": 111,
+      "tp": 0,
+      "recall": 0.0
+     },
+     ">=30": {
+      "n": 168,
+      "tp": 11,
+      "recall": 0.06547619047619048
+     }
+    }
+   }
+  }
+ }
+}

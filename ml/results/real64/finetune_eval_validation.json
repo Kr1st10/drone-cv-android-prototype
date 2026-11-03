@@ -1,0 +1,256 @@
+{
+ "config": {
+  "model_id": "stage64-halmstad-ft-last",
+  "model_sha256": "b9354203030600188c9ecc52935aab8fef8c06cacce3e5dd5d2eba4a439c9fe5",
+  "imgsz": 640,
+  "min_conf": 0.1,
+  "nms_iou": 0.45,
+  "ultralytics": "8.4.197",
+  "torch": "2.6.0+cpu",
+  "splits": [
+   "validation",
+   "eval_only"
+  ],
+  "manifest_sha256": "7fbd72e83f78006747946311a0fa996b4764864598adf4fd4edf6f446d923233",
+  "split_sha256": "467297ff616761b7f4656c1a4d0a2bad85d7349850b2a9657aed122158f6eb4a",
+  "platform": "x86_64"
+ },
+ "splits": [
+  "validation"
+ ],
+ "predictions_sha256": "839ff601ddb0767c9cc52c47ed9ea516276e5e527251e93643fde73ea0b03647",
+ "by_dataset": {
+  "halmstad": {
+   "0.25": {
+    "conf": 0.25,
+    "drone_frames": {
+     "frames": 190,
+     "tp05": 51,
+     "fp05": 7,
+     "tp03": 56,
+     "fp03": 2
+    },
+    "drone_frames_fp_iou0.3_by_target": {
+     "background": 2
+    },
+    "recall_by_size": {
+     "<16": {
+      "n": 6,
+      "tp_iou0.5": 0,
+      "tp_iou0.3": 0,
+      "response": 0,
+      "centre_in_gt": 0,
+      "recall_iou0.5": 0.0,
+      "recall_iou0.3": 0.0,
+      "response_rate": 0.0,
+      "centre_in_gt_rate": 0.0
+     },
+     "16-<24": {
+      "n": 91,
+      "tp_iou0.5": 5,
+      "tp_iou0.3": 6,
+      "response": 6,
+      "centre_in_gt": 6,
+      "recall_iou0.5": 0.054945054945054944,
+      "recall_iou0.3": 0.06593406593406594,
+      "response_rate": 0.06593406593406594,
+      "centre_in_gt_rate": 0.06593406593406594
+     },
+     "24-<30": {
+      "n": 39,
+      "tp_iou0.5": 14,
+      "tp_iou0.3": 15,
+      "response": 15,
+      "centre_in_gt": 15,
+      "recall_iou0.5": 0.358974358974359,
+      "recall_iou0.3": 0.38461538461538464,
+      "response_rate": 0.38461538461538464,
+      "centre_in_gt_rate": 0.38461538461538464
+     },
+     ">=30": {
+      "n": 54,
+      "tp_iou0.5": 32,
+      "tp_iou0.3": 35,
+      "response": 35,
+      "centre_in_gt": 35,
+      "recall_iou0.5": 0.5925925925925926,
+      "recall_iou0.3": 0.6481481481481481,
+      "response_rate": 0.6481481481481481,
+      "centre_in_gt_rate": 0.6481481481481481
+     }
+    },
+    "negatives": {
+     "airplane": {
+      "frames": 33,
+      "frames_with_fp": 5,
+      "fp": 5,
+      "objects": 33,
+      "fp_on_airplane": 5
+     },
+     "bird": {
+      "frames": 10,
+      "frames_with_fp": 0,
+      "fp": 0,
+      "objects": 10
+     },
+     "helicopter": {
+      "frames": 66,
+      "frames_with_fp": 2,
+      "fp": 2,
+      "objects": 66,
+      "fp_on_helicopter": 2
+     }
+    },
+    "overall": {
+     "gt": 190,
+     "recall_iou0.5": 0.26842105263157895,
+     "recall_iou0.3": 0.29473684210526313,
+     "precision_iou0.5_drone_frames": 0.8793103448275862,
+     "precision_iou0.3_drone_frames": 0.9655172413793104
+    },
+    "localisation": {
+     "matched_iou0.3": 56,
+     "median_best_iou": 0.6550492246168061,
+     "share_iou_below_0.5_among_iou0.3_matches": 0.08928571428571429
+    },
+    "groups": {
+     "drone_groups": 3,
+     "negative_groups": 7,
+     "negative_groups_with_any_fp": 2,
+     "non_drone_objects": {
+      "airplane": 33,
+      "bird": 10,
+      "helicopter": 66
+     },
+     "non_drone_object_groups": {
+      "airplane": 3,
+      "bird": 1,
+      "helicopter": 3
+     },
+     "recall_ci95_iou0.5": [
+      0.0612,
+      0.396
+     ],
+     "recall_ci95_iou0.3": [
+      0.0612,
+      0.4158
+     ],
+     "median_group_recall_iou0.3": 0.275
+    }
+   },
+   "0.5": {
+    "conf": 0.5,
+    "drone_frames": {
+     "frames": 190,
+     "tp05": 0,
+     "fp05": 0,
+     "tp03": 0,
+     "fp03": 0
+    },
+    "drone_frames_fp_iou0.3_by_target": {},
+    "recall_by_size": {
+     "<16": {
+      "n": 6,
+      "tp_iou0.5": 0,
+      "tp_iou0.3": 0,
+      "response": 0,
+      "centre_in_gt": 0,
+      "recall_iou0.5": 0.0,
+      "recall_iou0.3": 0.0,
+      "response_rate": 0.0,
+      "centre_in_gt_rate": 0.0
+     },
+     "16-<24": {
+      "n": 91,
+      "tp_iou0.5": 0,
+      "tp_iou0.3": 0,
+      "response": 0,
+      "centre_in_gt": 0,
+      "recall_iou0.5": 0.0,
+      "recall_iou0.3": 0.0,
+      "response_rate": 0.0,
+      "centre_in_gt_rate": 0.0
+     },
+     "24-<30": {
+      "n": 39,
+      "tp_iou0.5": 0,
+      "tp_iou0.3": 0,
+      "response": 0,
+      "centre_in_gt": 0,
+      "recall_iou0.5": 0.0,
+      "recall_iou0.3": 0.0,
+      "response_rate": 0.0,
+      "centre_in_gt_rate": 0.0
+     },
+     ">=30": {
+      "n": 54,
+      "tp_iou0.5": 0,
+      "tp_iou0.3": 0,
+      "response": 0,
+      "centre_in_gt": 0,
+      "recall_iou0.5": 0.0,
+      "recall_iou0.3": 0.0,
+      "response_rate": 0.0,
+      "centre_in_gt_rate": 0.0
+     }
+    },
+    "negatives": {
+     "airplane": {
+      "frames": 33,
+      "frames_with_fp": 0,
+      "fp": 0,
+      "objects": 33
+     },
+     "bird": {
+      "frames": 10,
+      "frames_with_fp": 0,
+      "fp": 0,
+      "objects": 10
+     },
+     "helicopter": {
+      "frames": 66,
+      "frames_with_fp": 0,
+      "fp": 0,
+      "objects": 66
+     }
+    },
+    "overall": {
+     "gt": 190,
+     "recall_iou0.5": 0.0,
+     "recall_iou0.3": 0.0,
+     "precision_iou0.5_drone_frames": null,
+     "precision_iou0.3_drone_frames": null
+    },
+    "localisation": {
+     "matched_iou0.3": 0,
+     "median_best_iou": null,
+     "share_iou_below_0.5_among_iou0.3_matches": null
+    },
+    "groups": {
+     "drone_groups": 3,
+     "negative_groups": 7,
+     "negative_groups_with_any_fp": 0,
+     "non_drone_objects": {
+      "airplane": 33,
+      "bird": 10,
+      "helicopter": 66
+     },
+     "non_drone_object_groups": {
+      "airplane": 3,
+      "bird": 1,
+      "helicopter": 3
+     },
+     "recall_ci95_iou0.5": [
+      0.0,
+      0.0
+     ],
+     "recall_ci95_iou0.3": [
+      0.0,
+      0.0
+     ],
+     "median_group_recall_iou0.3": 0.0
+    }
+   }
+  }
+ }
+}

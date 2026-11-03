@@ -1,0 +1,41 @@
+{
+ "counts": {
+  "images": 4618,
+  "drone_images": 1105,
+  "unreviewed": 4618,
+  "split_eligible": 0
+ },
+ "drone_size_px_sqrt_area": {
+  ">=30": 542,
+  "24-<30": 319,
+  "16-<24": 234,
+  "<16": 10
+ },
+ "scenes_multilabel": {
+  "airplane": 647,
+  "medium": 1379,
+  "close": 767,
+  "distant": 842,
+  "bird": 439,
+  "drone": 1245,
+  "helicopter": 657,
+  "sky": 1630,
+  "city": 1630
+ },
+ "duplicate_pairs": 47793,
+ "issues": {
+  "records": 4618,
+  "errors": {},
+  "warnings": {
+   "not reviewed by a human": 4618,
+   "independence from training is not verified": 4618,
+   "prior use is not known to be unused": 4618,
+   "empty annotations: review negative image explicitly": 2265,
+   "annotation 0: touches image edge": 21,
+   "annotation 1: touches image edge": 1,
+   "annotation 0: dimension below 2 px": 1
+  }
+ },
+ "error_count": 0,
+ "note": "Metadata and annotations may be incorrect. Hash matching cannot prove independence or visual truth."
+}

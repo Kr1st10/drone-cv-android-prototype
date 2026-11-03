@@ -1,0 +1,940 @@
+{
+ "reviewer": "agent (Notion AI), visual inspection of rendered crops; NOT a human annotation review",
+ "date": "2026-11-03",
+ "seed": 64,
+ "samples": {
+  "size_bin_crops": [
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "9c35282416183dcaa5b7631ccdb146573755b55be1e587d018b58382c9e572a8",
+    "xyxy": [
+     167.07,
+     393.0,
+     181.36,
+     405.93
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "75108f6add3e045d66d041e06ca4153fda2787dd65831abb6556da2e41b33221",
+    "xyxy": [
+     407.91,
+     264.0,
+     425.43,
+     278.06
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "b8a1f2d009d350675c2e02bc72eaf3240011caa1fc790aa6a55f3fd7f0484c24",
+    "xyxy": [
+     157.0,
+     392.1,
+     170.3,
+     403.7
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "dc936325a5be05c603b671ca60105e7bb531a0d2db08161235cb3fcccd7fd167",
+    "xyxy": [
+     272.0,
+     347.0,
+     293.0,
+     359.0
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "f9999142da1f57a663b976c2ad1536f6183b2499fb85e057ada488797d11e062",
+    "xyxy": [
+     149.02,
+     389.51,
+     163.22,
+     402.71
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "6972fbd3c4bc3cbd8300928b0c56319cf4811a0ae53bc3759ae692786ed8fbc9",
+    "xyxy": [
+     415.51,
+     256.94,
+     430.31,
+     270.59
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "ec1da84ff4b7b46e784f59816bc07ac45294bc8640c51ff2cf96428fe1504707",
+    "xyxy": [
+     185.44,
+     392.63,
+     200.07,
+     407.37
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "f06896d9e8f80ff7eefe8e381b6e8bcae9e7ace6076944e42ecd0ca37aed0733",
+    "xyxy": [
+     359.0,
+     254.0,
+     376.0,
+     269.0
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "d7b6461e7dcaba494d39f1b678866d364dd0be589082c60667bc105591ef9176",
+    "xyxy": [
+     207.11,
+     392.07,
+     221.19,
+     407.93
+    ]
+   },
+   {
+    "cat": "halmstad/drone/<16",
+    "id": "58522ad4a4e7fe16b1c71693ada409949ffab3e09aba758e69510d66d6432e18",
+    "xyxy": [
+     375.32,
+     254.86,
+     392.42,
+     268.66
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "66c95ff745db2a7affbff3aa6c9fd127b4a4e7c15846a82453af72cb2132eeee",
+    "xyxy": [
+     366.19,
+     135.87,
+     388.28,
+     151.17
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "fa366392beace6b02517657905106944d6c7b4445b75c614cb8ff3d34d07a2fc",
+    "xyxy": [
+     223.94,
+     311.0,
+     244.94,
+     333.37
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "d42bd65e6832a03e1830a4e95b9641352af1329111148c0ca458f4276ab8c3c7",
+    "xyxy": [
+     355.0,
+     213.0,
+     380.0,
+     236.0
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "82070050fdf81cccbcae4464c854fadb8fac9e47c7353368ef9d9f9646f6a2d3",
+    "xyxy": [
+     341.0,
+     165.0,
+     364.0,
+     189.0
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "d9249c23743e291c23324947d3625bca251aaac21fbaf231c0ea9087ce6b7b90",
+    "xyxy": [
+     355.16,
+     283.83,
+     381.81,
+     301.12
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "53e7791fd5cd4b21fcd63c3abd6b92dc4c70c62c6250ff94b68d9285b8af09aa",
+    "xyxy": [
+     241.52,
+     29.06,
+     269.77,
+     49.15
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "66551e96202f21cf570a3f386912897443bafb66bd82315791372b50437433ce",
+    "xyxy": [
+     562.21,
+     414.34,
+     589.68,
+     435.24
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "9c54850f2b52e8cee39e589a18d071e87a37a48a2c83b7aacf7f069f749f9850",
+    "xyxy": [
+     411.37,
+     121.82,
+     437.69,
+     137.5
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "125e7792af9b5aafadb7198afa5dd30b16b07d0f3952a0b65b434136466ac01e",
+    "xyxy": [
+     296.0,
+     334.0,
+     322.0,
+     349.0
+    ]
+   },
+   {
+    "cat": "halmstad/drone/16-24",
+    "id": "0973f0acafa8ae00543e89e1cd39524b0f87a3dc6fac2b03cdc9ea4da69b2b1e",
+    "xyxy": [
+     463.37,
+     196.17,
+     490.42,
+     217.03
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "ccebf1067ca0e07b7bb620d699449c34ba91c58fd26b24dd688353ad84431795",
+    "xyxy": [
+     346.03,
+     156.4,
+     374.23,
+     177.37
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "a459b31828aa6db009cd1d73c703da07081839df8857a322318b3b678ff439f8",
+    "xyxy": [
+     431.08,
+     135.77,
+     463.58,
+     160.22
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "79e7e0179ae5c2a935821553c9a581765f811a717560b32b54c79f4876a9480c",
+    "xyxy": [
+     399.55,
+     252.71,
+     427.14,
+     274.37
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "306a6ede70ef4a0006d68f6dfd86bc607c9d8df90c92fc0b63b5913c39728d39",
+    "xyxy": [
+     390.96,
+     224.75,
+     415.7,
+     249.49
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "8d89b3ed7f0bc3729179c79a56587727d0d6c6ad683948526c596708435c7674",
+    "xyxy": [
+     317.11,
+     218.58,
+     344.32,
+     249.72
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "b9cb37320b6abec3428d68e527044b2a4cd2f86f69220b6880a7e92fb858ef94",
+    "xyxy": [
+     434.0,
+     138.0,
+     462.0,
+     164.0
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "88058788c1608c6a162f1b4a9e472ea92d5eb5810a2433c5d503a61727a25011",
+    "xyxy": [
+     179.53,
+     210.43,
+     207.29,
+     242.25
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "84984ce74b0a8413993a6a1ff4e2cc256b32af08b4e98231108f9973a90fd9ba",
+    "xyxy": [
+     374.97,
+     151.77,
+     404.97,
+     180.78
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "afa8a6e6760e95957e7c62b63ca675e6512e59f2afc0d92d9785b1c449c64905",
+    "xyxy": [
+     263.87,
+     308.39,
+     296.07,
+     332.64
+    ]
+   },
+   {
+    "cat": "halmstad/drone/24-30",
+    "id": "f81fab0e6a9b5340b7a12ffdcf43eaac65bcef18601c08461e65eff3c706e603",
+    "xyxy": [
+     452.56,
+     172.77,
+     479.66,
+     196.99
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "194a7ed8e098eba7b58561451a2ba7319a79bcbbbdc7a11c5a63f1121f297f54",
+    "xyxy": [
+     343.26,
+     222.06,
+     403.25,
+     265.13
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "e5e93d846e614cb687cef05359358611c50985fd1bbd6858efe66309afb7ad40",
+    "xyxy": [
+     427.35,
+     313.99,
+     469.37,
+     335.98
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "44dc75d306d1225420115fc563a7ed812ed05c8d4c59422102f74e6b5fceec45",
+    "xyxy": [
+     281.05,
+     56.42,
+     324.17,
+     82.72
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "a96597b6dc929b04f5f25885afd30d636f11897d8fff9c7fe01ef371936e56df",
+    "xyxy": [
+     430.59,
+     139.91,
+     474.64,
+     170.15
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "d51bdff007cd447f529e74beab9093ff1bed816f88b4ce4bc7b01757dc158e18",
+    "xyxy": [
+     450.29,
+     293.84,
+     499.45,
+     333.24
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "538af84588997b4a65048a999f921d33020b85ce168749ceecc21b37cde19692",
+    "xyxy": [
+     236.53,
+     171.16,
+     283.62,
+     202.62
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "50608c338394621d35fb77ee86524603a8f7d0bfc36566e390f3b87d1ebf9790",
+    "xyxy": [
+     256.24,
+     155.13,
+     305.28,
+     194.81
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "6d17d3f38dea0a71705c6845e49868a411c61bfbe491e1ffa9769504f9c4f7b2",
+    "xyxy": [
+     390.42,
+     51.11,
+     429.52,
+     75.86
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "6a621357541f39a4f67e222b75c22559a3346c88007f7c6e0e1595d0cba933cf",
+    "xyxy": [
+     475.77,
+     95.55,
+     540.73,
+     141.21
+    ]
+   },
+   {
+    "cat": "halmstad/drone/>=30",
+    "id": "337517cb86d4a6982b5942717409f746bf0de09f474bb757332d0f91893642b9",
+    "xyxy": [
+     439.81,
+     196.56,
+     482.57,
+     234.25
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "424d28e59be35b95c6b2f5729137d6fcafff47a24739d00378e740f44b047ad7",
+    "xyxy": [
+     284.62,
+     223.0,
+     302.75,
+     245.25
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "fba7f323d96eaeef554b59ebfaf6d77dc36d753c7caa28161928d680cf0380cb",
+    "xyxy": [
+     299.0,
+     316.21,
+     318.36,
+     339.57
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "d38c78c8377aee31ebe2a6598603d62a826870c6f2845ba424c4d55dfb059830",
+    "xyxy": [
+     362.84,
+     349.14,
+     385.15,
+     373.21
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "2af3758b4f67df54999c13a87fe909569b559f9f1c3e6012c66791ee08630eb6",
+    "xyxy": [
+     228.06,
+     285.69,
+     252.5,
+     309.06
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "d1ee9047dfd272f5630feb06a32c38102959cbaf9b8f56ff7a3cf0e52c0c5ac6",
+    "xyxy": [
+     318.0,
+     306.0,
+     341.0,
+     328.0
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "498daaf4de37c0118fc0b863bae008ff648d5d057edb8854bd7d3810183d0226",
+    "xyxy": [
+     310.13,
+     286.91,
+     331.0,
+     310.35
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "f4f2345f11d8430a436abac517272db7450406b15019911c3baeacc5e394019c",
+    "xyxy": [
+     577.71,
+     294.29,
+     599.5,
+     316.0
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "022932d5f844c54142f6af19648804f3624ddddd80e6ac8a314b01040c3cbc3f",
+    "xyxy": [
+     319.23,
+     217.23,
+     342.23,
+     238.69
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "c89b716e72812a0cf0161f1bc0eca17007f1c34057b7d8d97d0dbe044aa11c3a",
+    "xyxy": [
+     246.44,
+     264.65,
+     269.86,
+     284.31
+    ]
+   },
+   {
+    "cat": "halmstad/bird/16-24",
+    "id": "7382d091a7fde5e42b27cccac0bab7525abda18b34829cd4f01e23bf43a10fd5",
+    "xyxy": [
+     306.92,
+     240.24,
+     331.8,
+     261.72
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "d6299c4fdb28c0e20dd9ee309c8b03b64eb442f887df03b242cae76ca0069ff1",
+    "xyxy": [
+     148.5,
+     223.5,
+     179.5,
+     253.5
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "5f954ac7b35ccb8de1057da7ff8ccc6b8da4915fefdbff796ecf5dc6e5a5edca",
+    "xyxy": [
+     104.42,
+     210.47,
+     137.47,
+     238.74
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "b659a69910a639b5ca7fbc5f7f53bb59c4ef553b10fe630ebf7b364d67f754ff",
+    "xyxy": [
+     158.41,
+     161.87,
+     201.03,
+     205.41
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "2b62d4ef1470bb549dcfedbaeb1063bb44665d9a7e243697998845a5deb84cdf",
+    "xyxy": [
+     88.67,
+     263.33,
+     124.33,
+     290.0
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "df26a8de2905bbf36ef341ff94d60bcefbaa17a6ad1c543150f0e45b6e16156b",
+    "xyxy": [
+     163.25,
+     211.5,
+     201.38,
+     245.63
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "04215399c9ba89abf7d27ca382ae07cc3f34f0bd189a0f7deb2bbc785e34b11c",
+    "xyxy": [
+     213.82,
+     193.53,
+     250.53,
+     227.24
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "c1da0952747834417bacaf9bda893b96999ba664bb2a65a51d2080a1cd952d11",
+    "xyxy": [
+     389.0,
+     293.0,
+     430.0,
+     322.0
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "d24c7d4d0142f9399827240804b392405c8b98f99777dc2d824c5bb47d057394",
+    "xyxy": [
+     228.13,
+     133.4,
+     259.73,
+     165.4
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "651671b760b6971341ef5ba3d81bc1e94caf480b25bdd0831cf4542a97574cb9",
+    "xyxy": [
+     376.78,
+     93.32,
+     402.29,
+     133.16
+    ]
+   },
+   {
+    "cat": "halmstad/bird/>=30",
+    "id": "31a7a9475f55f47d34b21336d4b331fa8f42f0edf72fb2cf7298193ce6bf1a68",
+    "xyxy": [
+     297.23,
+     159.38,
+     329.46,
+     196.38
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "96df1e53985c64d3ff38bf142abcc7ec7dddf1e2d417a3ea3fac92bd968dbc60",
+    "xyxy": [
+     590.0,
+     96.0,
+     613.0,
+     119.0
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "e0d453d0786e5680c90f9c9c011b8e9bd20de317316447809a56087060481749",
+    "xyxy": [
+     390.0,
+     256.4,
+     410.0,
+     273.2
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "def072de55dfaa44702c35aaa8842a54cf57d0de424ae49d24b3e5bed08284e5",
+    "xyxy": [
+     410.11,
+     134.58,
+     433.25,
+     153.86
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "34795410921faf92fed871e6065c9f5a02851c4c4b1634c2b27f7c56df2cf2f8",
+    "xyxy": [
+     319.47,
+     250.24,
+     350.47,
+     268.62
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "42a639e52796812a752839494da73b728fe9f4b3c9d8779a73542d2afb1b115d",
+    "xyxy": [
+     462.89,
+     85.42,
+     486.75,
+     106.14
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "d004764e61ea76d236e44c497a7de4910ce4db17bd4f2a7afae9a30c0e26bbb0",
+    "xyxy": [
+     414.0,
+     254.55,
+     432.91,
+     270.91
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "6a1a40fc8cb85473249619f7718d861552f2ca7067158f55e977b37adc5ad3af",
+    "xyxy": [
+     423.31,
+     122.29,
+     446.63,
+     141.93
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "86a3398d83f706a154fab2b3603baa7d3fe17a3497e085375c807b79d2a39cd5",
+    "xyxy": [
+     426.0,
+     252.36,
+     443.27,
+     269.27
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "3adc11fa9e11b245d37c071338800590563053a6d28e0373c457cc5fc58280a9",
+    "xyxy": [
+     201.74,
+     314.84,
+     225.05,
+     337.16
+    ]
+   },
+   {
+    "cat": "halmstad/airplane/16-24",
+    "id": "bd0356098c517c2259993fd43e77ab92d288361c78b516f9502d2504a8cb5127",
+    "xyxy": [
+     481.5,
+     180.1,
+     503.8,
+     204.25
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "4748e95c8682c9cde265209387900089febbbd4a710c6843e66aa67c99111ecc",
+    "xyxy": [
+     566.0,
+     82.0,
+     586.0,
+     93.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "9c1b54ab060e2ae7e3912aca90faebd1846e6b2baae3a8973d80cb2bde21caf2",
+    "xyxy": [
+     327.0,
+     595.0,
+     356.0,
+     600.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "ec6aa1c75f2d49f1e2a4ae779baedca8b37c78341823f0afd2f141428bfc312c",
+    "xyxy": [
+     58.0,
+     172.0,
+     75.0,
+     184.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "6f34e72750945718536c9044c706e5c33e32b81d6f7f1c1ec2bca4edb88b2c30",
+    "xyxy": [
+     217.0,
+     82.0,
+     235.0,
+     93.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "9c1b54ab060e2ae7e3912aca90faebd1846e6b2baae3a8973d80cb2bde21caf2",
+    "xyxy": [
+     331.0,
+     505.0,
+     353.0,
+     516.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "9bb437ea0463a6ffcd774e95d03ba4ab7da47771fd1d33b06280cb5cfc3db605",
+    "xyxy": [
+     577.0,
+     1.0,
+     600.0,
+     12.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "aec64dece669b6da6501cda278504dc8d7c09eb99a61a841807eeb4ca3024f2a",
+    "xyxy": [
+     121.0,
+     188.0,
+     136.0,
+     196.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "783ebc890ff0ba7c92832dab79ef597c0105932a4468747d260efcdade477b92",
+    "xyxy": [
+     504.0,
+     59.0,
+     519.0,
+     70.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "d58c9e4357477c7d08863dd4693b4aacb9d0778cc4545f7916965f7b4aa46a58",
+    "xyxy": [
+     398.0,
+     296.0,
+     419.0,
+     307.0
+    ]
+   },
+   {
+    "cat": "flying/bird/<16",
+    "id": "5fd4ac9829a26d986b6160dbc1ff14c3fda35d4fdd7569c20d8b545497ca2a40",
+    "xyxy": [
+     577.0,
+     594.0,
+     600.0,
+     600.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "f5948385ce79c6672f2c04246ee15c73eaaa7196f6df1988c9c41048faff72a2",
+    "xyxy": [
+     245.0,
+     6.0,
+     259.0,
+     12.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "28f6acb70319e4025ac53beb88beb9d75050f6b83aee8b14d69c5fb123bc3881",
+    "xyxy": [
+     559.0,
+     556.0,
+     574.0,
+     568.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "b52fcdf4fe72fcd69aa5fab5cde9dd67ed4cdd0d95aba9b3a898a2c8934cc914",
+    "xyxy": [
+     307.0,
+     2.0,
+     323.0,
+     13.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "0cdd5c25e35e8c334d78b78c9bc6de3760063ec9f449b3769efc8dc3179b9941",
+    "xyxy": [
+     448.0,
+     563.0,
+     465.0,
+     576.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "8f1793213100e7f8eb7b7f22ea1744e425eb8d6d581421383b859e2f22f40112",
+    "xyxy": [
+     501.0,
+     558.0,
+     519.0,
+     570.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "171a556aa32340750302ba6a7ff7e700ffef68e26b71f1a6d7f6583bccd28fcf",
+    "xyxy": [
+     296.0,
+     596.0,
+     311.0,
+     600.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "e3cf144402d228a91b57fcea61ccdd2377d4d95e98525e577826a20ab3c34fa6",
+    "xyxy": [
+     575.0,
+     3.0,
+     590.0,
+     13.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "ed9a08ecb8e2c2c9c5b1dbf19c308dca2a12d8b03136af1d236705dbc2742b8f",
+    "xyxy": [
+     265.0,
+     1.0,
+     281.0,
+     4.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "0fcb2f071e986ea80d0bfdaf8a59d1dab51950ba135a2616687352dd0974232a",
+    "xyxy": [
+     530.0,
+     540.0,
+     550.0,
+     549.0
+    ]
+   },
+   {
+    "cat": "flying/airplane/<16",
+    "id": "da0956fb58a61c77e4a004bc3a453e1dcf24f1b471d53fbd0eed3de6e6486a0e",
+    "xyxy": [
+     356.0,
+     574.0,
+     372.0,
+     585.0
+    ]
+   }
+  ],
+  "last_annotated_frame_per_video": [
+   "5dbf98a7696ff5159ba1146d21f1b9142ad53e18c7308ee7ffa1f37fcf5b1bcb",
+   "35803623f32c76f73d3a90524de21d6ae43edff1b076c6cfdca70fe3142c8548",
+   "7455ee05f253f855a7f950b733c81260181411892638f73f72ef0f9946a5481f",
+   "c9adbae2e72d6413d1134fa52ff7efc30e79a8c2cae6470334b1bf8b00424cd5",
+   "1358b5bc8a11dc3203df922e44b715c8ddc469afd5517b3a65d6c4d9c614ab51",
+   "1d0e833aa04e0b5fab5f8575e0555e12c439cc65fe7f52b67728c4005a1909b2",
+   "ffe296c6aa5aca1b2840b9b4bbfaf11b36cd1b206996b10698a6529b35ed5f52",
+   "a87d12eae062303f4157eab2fcd469d1ef567ecb3ec7ecaddf014b9a4916eb06",
+   "247d31c0aa0f9c1139c542c7c53d1c24d1c45c63ae011590cd791890c2b9ee67",
+   "6c0370b8d8a350c006934b4ac24913505f8012c65f0e9f7576baf3e9110ba9c3",
+   "b002230d896f9cd62bf84d4db446529cf97a433f79041b98a47928182dd54479",
+   "162859dbdbc05f3b822c3de404589fbb95c1126932641b2c73e97f0c7ff275fe",
+   "9d39adbd074b2651ea1780a43ad7c9e9fb027d87a20845cc9790b244316d1dcb",
+   "42fc377888e82bdd4adef92df6d9b688df9cbe1e9c2390e0f822018aa67fa03d",
+   "0f5e16dec7321c00cb6573355ca8a59e13215ca8c55196a90c639e83f4d9273c",
+   "212603ebb587eb943eccf561ad68243ac1bab221b64ce6f2cba7c0bd89f21098",
+   "851f99b0b0ec2aaf564149593feaf7449d5da586aada0bb5e079bdc5900c5e4f",
+   "7d57a79bef6187f66554efde097a1814a84943b79983d503836cc29afd846019",
+   "1a159e563e32f8dfaedef9b55b6e06eaab96f722949deeb1a8aa72a8845d2d66",
+   "49176c66d9b4a1d1d012a2d01a3f974d160e8b983d5cd524ec31571de69e1df5"
+  ]
+ },
+ "findings": [
+  "Halmstad boxes after MATLAB 1-based -> 0-based shift are centred on the object in all 90 sampled crops; no systematic 1 px offset visible.",
+  "Last annotated sampled frame of 20 videos (frame ~300): object inside the box in 20/20, so no +/-1 frame drift visible at the end of videos.",
+  "Halmstad boxes are loose for small objects: in the <16, 16-24 and many bird/airplane crops the visible object is clearly smaller than the box (often ~half the side). Size bins are bins of the annotated box, the real object is smaller; IoU 0.5 is pessimistic for these, IoU 0.3 and centre response are reported separately.",
+  "Halmstad drone <16 px: only 10 boxes, several from one cloudy-sky video group; not enough for any conclusion.",
+  "Flying Object boxes are tight; some tiles cut objects at the 600x600 tile border (box touches the edge).",
+  "Visual split check: the largest duplicate group (101 own videos) is the same recording site (birch tree line / field, Halmstad); the dHash edges are real scene similarity, not only empty-sky artefacts. Texture-gated edges did not split it (thresholds 1-3 keep a 75-82 video group)."
+ ],
+ "status": "all records remain review_status=unreviewed"
+}

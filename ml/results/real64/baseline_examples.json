@@ -1,0 +1,511 @@
+{
+ "conf": 0.25,
+ "counts": {
+  "fn_no_response": 60,
+  "response_but_iou_below_0.3": 460,
+  "fp_on_drone_free_frames": 2954
+ },
+ "fn_no_response": [
+  {
+   "id": "01abc875cd1cfa023df6a75bffa37ef1b909916da5e2b8a4d2592af1ce5ede83",
+   "sequence": "halmstad:V_DRONE_114",
+   "frame": 60,
+   "gt": [
+    216.31,
+    308.62,
+    236.62,
+    330.69
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.0
+  },
+  {
+   "id": "14690604e27b8124baaa042199a812503c355de6ec96f884ae8d256de2d98db9",
+   "sequence": "halmstad:V_DRONE_111",
+   "frame": 240,
+   "gt": [
+    259.0,
+    376.0,
+    278.0,
+    403.0
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.0
+  },
+  {
+   "id": "2b92bc290f59b7ee911ad058d7658127ec9ec4aa318604004ea0c543975c35b3",
+   "sequence": "halmstad:V_DRONE_111",
+   "frame": 150,
+   "gt": [
+    271.93,
+    414.53,
+    301.73,
+    432.67
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.0
+  },
+  {
+   "id": "4906707feadb77637e35be6fd22daed72fb818dccae6a12fc6893328433ea0e5",
+   "sequence": "halmstad:V_DRONE_111",
+   "frame": 30,
+   "gt": [
+    327.0,
+    367.0,
+    352.0,
+    391.0
+   ],
+   "bin": "24-<30",
+   "best_iou": 0.0
+  },
+  {
+   "id": "6d2bc206262dec766212871dccc6d448d77a72b36048cd3f5db164fc462ce547",
+   "sequence": "halmstad:V_DRONE_098",
+   "frame": 180,
+   "gt": [
+    146.0,
+    28.0,
+    180.0,
+    54.0
+   ],
+   "bin": "24-<30",
+   "best_iou": 0.0
+  },
+  {
+   "id": "88158db6b28e0958ce55b78e3489340b0301ce22d5c1ec891068f093715001fc",
+   "sequence": "halmstad:V_DRONE_105",
+   "frame": 90,
+   "gt": [
+    75.62,
+    357.87,
+    93.87,
+    375.12
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.0
+  },
+  {
+   "id": "9c35282416183dcaa5b7631ccdb146573755b55be1e587d018b58382c9e572a8",
+   "sequence": "halmstad:V_DRONE_105",
+   "frame": 240,
+   "gt": [
+    167.07,
+    393.0,
+    181.36,
+    405.93
+   ],
+   "bin": "<16",
+   "best_iou": 0.0
+  },
+  {
+   "id": "bf3f91ecbb833fe0b633aac33be5948b1b12b957c760ff8004796f61353ae28a",
+   "sequence": "halmstad:V_DRONE_111",
+   "frame": 210,
+   "gt": [
+    254.91,
+    420.91,
+    272.0,
+    443.0
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.0
+  },
+  {
+   "id": "d57bbb79b59a289156a2b0d1d3d5b8f57e04004022dbe4de555c9dd33992d5fe",
+   "sequence": "halmstad:V_DRONE_111",
+   "frame": 120,
+   "gt": [
+    300.69,
+    401.85,
+    322.62,
+    422.46
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.0
+  },
+  {
+   "id": "e13f4aa2480a2795ee3f220650ae0a336ebf7ddf9e6877ec7dbf7407e1cc9c8b",
+   "sequence": "halmstad:V_DRONE_105",
+   "frame": 60,
+   "gt": [
+    57.53,
+    336.82,
+    79.41,
+    361.47
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.0
+  },
+  {
+   "id": "eee7b3c496a9d137d8fe79d6d45e166152593ad34b24c79d5a38f3f414d53f19",
+   "sequence": "halmstad:V_DRONE_114",
+   "frame": 150,
+   "gt": [
+    219.85,
+    307.95,
+    238.15,
+    329.95
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.0
+  },
+  {
+   "id": "f9999142da1f57a663b976c2ad1536f6183b2499fb85e057ada488797d11e062",
+   "sequence": "halmstad:V_DRONE_105",
+   "frame": 180,
+   "gt": [
+    149.02,
+    389.51,
+    163.22,
+    402.71
+   ],
+   "bin": "<16",
+   "best_iou": 0.0
+  }
+ ],
+ "response_but_iou_below_0.3": [
+  {
+   "id": "0055e1511254a698d1a6eda7f9584246ce74cfbd7141bd03b7f34fce99aba31f",
+   "sequence": "halmstad:V_DRONE_005",
+   "frame": 90,
+   "gt": [
+    283.53,
+    117.12,
+    327.46,
+    144.08
+   ],
+   "bin": ">=30",
+   "best_iou": 0.264
+  },
+  {
+   "id": "19e1d16b31eae741f29aad1789423fb5928fe127c767a81a9d06b4f77130e318",
+   "sequence": "halmstad:V_DRONE_099",
+   "frame": 30,
+   "gt": [
+    506.52,
+    139.96,
+    539.38,
+    161.07
+   ],
+   "bin": "24-<30",
+   "best_iou": 0.295
+  },
+  {
+   "id": "2a1beafd952adb432dee8d129f26811890f617dc23067eccd28de5cb5f621dd9",
+   "sequence": "halmstad:V_DRONE_057",
+   "frame": 270,
+   "gt": [
+    289.41,
+    210.23,
+    310.7,
+    228.45
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.197
+  },
+  {
+   "id": "3b65930419de3399ac0296ff6173987f74355050b64f3c91bbc73095944725a2",
+   "sequence": "halmstad:V_DRONE_072",
+   "frame": 60,
+   "gt": [
+    151.52,
+    315.37,
+    217.31,
+    352.73
+   ],
+   "bin": ">=30",
+   "best_iou": 0.29
+  },
+  {
+   "id": "4e2db4388b0c1390ebbf0d1d34fa40beb2c7b3d309488a8de28f6d481210fac2",
+   "sequence": "halmstad:V_DRONE_060",
+   "frame": 30,
+   "gt": [
+    291.0,
+    159.57,
+    333.44,
+    192.02
+   ],
+   "bin": ">=30",
+   "best_iou": 0.227
+  },
+  {
+   "id": "64364c9525c5978afef9e656d99051d4b7c6ca56fc36fda904c5f939506a4d45",
+   "sequence": "halmstad:V_DRONE_049",
+   "frame": 90,
+   "gt": [
+    368.62,
+    216.43,
+    404.44,
+    242.43
+   ],
+   "bin": ">=30",
+   "best_iou": 0.147
+  },
+  {
+   "id": "7ced906561271ce6aea158f886a8971646c1a99a27a367a1d9aaadeb028004c9",
+   "sequence": "halmstad:V_DRONE_051",
+   "frame": 210,
+   "gt": [
+    369.0,
+    278.0,
+    389.0,
+    295.0
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.191
+  },
+  {
+   "id": "8dbe2babbd2c0c846727d32efcc037605a7896e0fb689de11d966fe270f5623c",
+   "sequence": "halmstad:V_DRONE_090",
+   "frame": 90,
+   "gt": [
+    486.0,
+    78.24,
+    551.78,
+    124.58
+   ],
+   "bin": ">=30",
+   "best_iou": 0.058
+  },
+  {
+   "id": "9c54850f2b52e8cee39e589a18d071e87a37a48a2c83b7aacf7f069f749f9850",
+   "sequence": "halmstad:V_DRONE_009",
+   "frame": 300,
+   "gt": [
+    411.37,
+    121.82,
+    437.69,
+    137.5
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.183
+  },
+  {
+   "id": "b6f0dc026091f711cd9c523292b139b40f8964a6fd0858271705c7ce1b1c19bf",
+   "sequence": "halmstad:V_DRONE_011",
+   "frame": 180,
+   "gt": [
+    288.6,
+    250.78,
+    317.33,
+    273.65
+   ],
+   "bin": "24-<30",
+   "best_iou": 0.218
+  },
+  {
+   "id": "cfa56bd058134829aba42da43ecf644aa4b52991d4c98e7518edd214357803a9",
+   "sequence": "halmstad:V_DRONE_009",
+   "frame": 180,
+   "gt": [
+    308.56,
+    171.18,
+    334.7,
+    192.28
+   ],
+   "bin": "16-<24",
+   "best_iou": 0.146
+  },
+  {
+   "id": "ead162dfb26f647226e4ce0fe20ee422197a5439da8810435095a7e547d514f7",
+   "sequence": "halmstad:V_DRONE_009",
+   "frame": 150,
+   "gt": [
+    292.02,
+    179.98,
+    320.96,
+    203.5
+   ],
+   "bin": "24-<30",
+   "best_iou": 0.143
+  }
+ ],
+ "top_fp": [
+  {
+   "id": "254de4e8693edd6ab75d9f998d63eeccb8c75de70e2de25b4fd834516fb801c0",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_044",
+   "pred": [
+    376.5,
+    176.8,
+    446.3,
+    228.6
+   ],
+   "score": 0.9217,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "2d682398cdbffd7a94eddc03aeffbc92fc40b2acb1cfcb57b43239847fdb634c",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_042",
+   "pred": [
+    224.9,
+    92.1,
+    468.0,
+    345.2
+   ],
+   "score": 0.921,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "cce44986ee08aac54724fd1d211814f2628e19f2e2d32e9e0c1431b90b108735",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_044",
+   "pred": [
+    306.0,
+    150.4,
+    413.0,
+    225.7
+   ],
+   "score": 0.918,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "4ea78d12f7eec0882b2d20b2bb1c13bf8957dd69ff2381eb2764b510b638d607",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_HELICOPTER_049",
+   "pred": [
+    155.0,
+    194.6,
+    404.6,
+    335.5
+   ],
+   "score": 0.9176,
+   "objects": [
+    "helicopter"
+   ]
+  },
+  {
+   "id": "ffa638cff23352e0642c32bec29e2193ce23a5945099eea88aa5d14d0cb8566e",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_HELICOPTER_028",
+   "pred": [
+    250.2,
+    164.7,
+    352.8,
+    244.6
+   ],
+   "score": 0.9139,
+   "objects": [
+    "helicopter"
+   ]
+  },
+  {
+   "id": "5fae2c51308da042d4f81cec941edde0866b5ea98baa928d17cc7ebf50c9ddee",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_044",
+   "pred": [
+    345.9,
+    260.8,
+    403.7,
+    306.8
+   ],
+   "score": 0.9119,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "5e4818db1b0891a5af1edbbf24caea524ed5f70b5104c6060c2c5c9883b8339b",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_044",
+   "pred": [
+    380.5,
+    204.1,
+    439.7,
+    250.4
+   ],
+   "score": 0.909,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "fecaceeca7de909c73cdf6a47ea56390bcaf54a58a1e6497bc589658849f3d90",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_040",
+   "pred": [
+    296.0,
+    113.1,
+    363.6,
+    194.6
+   ],
+   "score": 0.9068,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "ae0e6806f174b13ef888f23771dea7d53206d53eb9e9e081753be5201c479a55",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_044",
+   "pred": [
+    365.0,
+    224.5,
+    423.2,
+    271.9
+   ],
+   "score": 0.9057,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "6fa33cf30e5ac2f429f4569c10d83218eca4bcd3cd2df64926dd128237ae5101",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_044",
+   "pred": [
+    335.5,
+    280.2,
+    392.4,
+    324.7
+   ],
+   "score": 0.9056,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "a72881bc1f61dfe4b551695465782813bab0324dd5282da737d14514ddb13b52",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_AIRPLANE_044",
+   "pred": [
+    357.1,
+    181.3,
+    420.0,
+    229.9
+   ],
+   "score": 0.9055,
+   "objects": [
+    "airplane"
+   ]
+  },
+  {
+   "id": "cad4e08f6213f3c6f51000ef49dd1192a386ed2702c098ae8131a6a5027a9f54",
+   "dataset": "halmstad",
+   "sequence": "halmstad:V_HELICOPTER_002",
+   "pred": [
+    344.0,
+    212.4,
+    417.4,
+    279.7
+   ],
+   "score": 0.9047,
+   "objects": [
+    "helicopter"
+   ]
+  }
+ ],
+ "fp_by_object": {
+  "bird": 368,
+  "airplane": 663,
+  "helicopter": 1923
+ }
+}
