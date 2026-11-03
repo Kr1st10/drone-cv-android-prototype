@@ -21,6 +21,7 @@ internal object CameraInventory {
         val cameras = JSONArray()
         val ids = manager.cameraIdList.toList().sorted()
         for (id in ids) {
+            try {
             val c = manager.getCameraCharacteristics(id)
             val physical = if (Build.VERSION.SDK_INT >= 28) c.physicalCameraIds.sorted() else emptyList()
             val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
@@ -58,6 +59,9 @@ internal object CameraInventory {
                 .put("preview_sizes", sizes(map?.getOutputSizes(SurfaceTexture::class.java)))
                 .put("yuv_sizes", sizes(map?.getOutputSizes(ImageFormat.YUV_420_888)))
                 .put("jpeg_sizes", sizes(map?.getOutputSizes(ImageFormat.JPEG))))
+            } catch (e: Exception) {
+                cameras.put(JSONObject().put("id", id).put("error", e.javaClass.simpleName + ": " + e.message))
+            }
         }
         val cameraX = try {
             val provider = ProcessCameraProvider.getInstance(context).get(20, TimeUnit.SECONDS)

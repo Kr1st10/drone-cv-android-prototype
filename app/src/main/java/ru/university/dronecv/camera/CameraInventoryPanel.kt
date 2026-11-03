@@ -14,16 +14,28 @@ import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import org.json.JSONArray
 
 @Composable
-internal fun CameraInventoryPanel() {
+internal fun CameraInventoryPanel(probe: CameraProbeState) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var json by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
-        val data = json
+        val data = json?.let { saved ->
+            JSONObject(saved).put("current_camera", JSONObject()
+                .put("logical_id", probe.logicalId ?: JSONObject.NULL)
+                .put("requested_physical_id", probe.physicalId ?: JSONObject.NULL)
+                .put("active_physical_id", probe.activePhysicalId ?: JSONObject.NULL)
+                .put("physical_ids", JSONArray(probe.physicalIds))
+                .put("requested_zoom_ratio", probe.requestedZoom)
+                .put("current_zoom_ratio", probe.actualZoom ?: JSONObject.NULL)
+                .put("switching", probe.loading)
+                .put("warning", probe.warning ?: JSONObject.NULL)).toString(2)
+        }
         if (uri != null && data != null) scope.launch {
             error = try { withContext(Dispatchers.IO) {
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(data) }
@@ -39,6 +51,7 @@ internal fun CameraInventoryPanel() {
         finally { busy = false }
     } }, modifier = Modifier.fillMaxWidth().testTag("camera-inventory-refresh")) { Text(if (busy) "Получение…" else "Обновить список камер") }
     json?.let { data ->
+        Text("Инвентаризация завершена; характеристики ниже. При экспорте текущий zoom и активный ID снимаются в момент сохранения.", style = MaterialTheme.typography.bodySmall)
         Text(data, style = MaterialTheme.typography.bodySmall)
         Button(onClick = { save.launch("camera-inventory.json") }, modifier = Modifier.fillMaxWidth().testTag("camera-inventory-export")) { Text("Экспорт камер JSON") }
     }

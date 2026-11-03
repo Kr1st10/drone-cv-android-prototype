@@ -20,6 +20,6 @@ internal fun zoomRequest(value: Float, range: ZoomRange?): ZoomDecision = when {
 /** Physical ID metadata can be absent even when the device uses a physical camera. */
 internal fun sensorEvidence(activeId: String?, physicalIds: Set<String>): String = when {
     activeId == null -> "Активный физический ID недоступен; объектив не подтверждён"
-    activeId !in physicalIds -> "Активный физический ID: $activeId (не найден в списке физических ID)"
-    else -> "Активный физический ID: $activeId (доступно подтверждение смены сенсора сравнением с 1×)"
+    activeId !in physicalIds -> "Активный физический ID логического потока: $activeId (не найден в списке физических ID)"
+    else -> "Активный физический ID логического потока: $activeId (доступно подтверждение смены сенсора сравнением с 1×)"
 }

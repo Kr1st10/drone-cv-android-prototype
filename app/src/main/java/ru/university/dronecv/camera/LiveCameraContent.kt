@@ -167,7 +167,7 @@ private fun LiveControls(
         }
         if (probe.loading) Text("Переключение камеры…", style = MaterialTheme.typography.bodySmall)
         probe.warning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-        CameraInventoryPanel()
+        CameraInventoryPanel(probe)
     }
 }
 

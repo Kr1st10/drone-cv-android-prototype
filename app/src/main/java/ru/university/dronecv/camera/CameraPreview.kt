@@ -156,15 +156,16 @@ internal fun CameraPreview(
             probe.actualZoom = null
             probe.activePhysicalId = null
             val selectedPhysical = probe.physicalId
+            val selectionEpoch = probe.selectionEpoch
             val selectedZoom = probe.requestedZoom
             val future = ProcessCameraProvider.getInstance(context)
             var disposed = false
             val handler = Handler(Looper.getMainLooper())
             val captureCallback = object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                    if (Build.VERSION.SDK_INT >= 28) {
+                    if (Build.VERSION.SDK_INT >= 29) {
                         val id = result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
-                        handler.post { if (!disposed && probe.activePhysicalId != id) probe.activePhysicalId = id }
+                        handler.post { if (!disposed && probe.selectionEpoch == selectionEpoch && probe.activePhysicalId != id) probe.activePhysicalId = id }
                     }
                 }
             }
@@ -182,14 +183,14 @@ internal fun CameraPreview(
             var provider: ProcessCameraProvider? = null
             var camera: Camera? = null
             val zoomObserver = Observer<ZoomState> { z ->
-                if (!disposed && z != null) {
+                if (!disposed && probe.selectionEpoch == selectionEpoch) {
                     probe.actualZoom = z.zoomRatio
                     probe.zoomRange = ZoomRange(z.minZoomRatio, z.maxZoomRatio)
                 }
             }
             var recovering = false
             fun recover(e: Throwable) {
-                if (disposed || recovering) return
+                if (disposed || probe.selectionEpoch != selectionEpoch || recovering) return
                 recovering = true
                 controller.configure(false, currentConfidence)
                 probe.loading = false
@@ -201,7 +202,7 @@ internal fun CameraPreview(
                 }
             }
             val cameraObserver = Observer<CameraState> { state ->
-                if (!disposed) {
+                if (!disposed && probe.selectionEpoch == selectionEpoch) {
                     val error = state.error
                     cameraBlocked = error != null
                     if (error != null) suspendAnalysis()
@@ -213,7 +214,7 @@ internal fun CameraPreview(
                 }
             }
             future.addListener({
-                if (!disposed) {
+                if (!disposed && probe.selectionEpoch == selectionEpoch) {
                     try {
                         val available = future.get()
                         if (!available.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) throw CameraUnavailableException()
@@ -234,7 +235,7 @@ internal fun CameraPreview(
                         } catch (_: Exception) { emptyList() } else emptyList()
                         val zoom = current.cameraControl.setZoomRatio(selectedZoom)
                         zoom.addListener({
-                            if (!disposed) try {
+                            if (!disposed && probe.selectionEpoch == selectionEpoch) try {
                                 zoom.get(); probe.loading = false; boundAnalysis = analysis; bound = true
                             } catch (e: Exception) { recover(e) }
                         }, ContextCompat.getMainExecutor(context))
