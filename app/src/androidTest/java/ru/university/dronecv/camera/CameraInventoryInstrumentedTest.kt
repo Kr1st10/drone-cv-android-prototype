@@ -25,5 +25,11 @@ class CameraInventoryInstrumentedTest {
         assertTrue(report.getJSONArray("camera2_ids").length() > 0)
         assertTrue(report.getJSONArray("cameras").length() > 0)
         assertTrue(report.has("camerax"))
+        val probe = CameraProbeState().apply { requestedZoom = 5f; actualZoom = null; physicalIds = listOf("physical-test") }
+        val exported = JSONObject(exportCameraInventory(report.toString(), probe)).getJSONObject("current_camera")
+        assertEquals(5.0, exported.getDouble("requested_zoom_ratio"), 0.0)
+        assertTrue(exported.isNull("current_zoom_ratio"))
+        assertTrue(exported.isNull("active_physical_id"))
+        assertEquals("physical-test", exported.getJSONArray("physical_ids").getString(0))
     }
 }
