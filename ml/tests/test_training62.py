@@ -48,6 +48,8 @@ def test_preflight_rejects_quarantined_pilot():
     pilot = Path('ml/results/dataset45/pilot_manifest.json')
     data = json.loads(pilot.read_text())
     assert all(r['review_status'] != 'reviewed' for r in data['records'])
+    with pytest.raises(ValueError, match='quarantine'):
+        make_split(data['records'])
 
 
 def test_prepare_materializes_train_validation_but_never_test(tmp_path):
@@ -73,4 +75,32 @@ def test_prepare_fails_before_copy_on_quarantine(tmp_path):
     rows[0]['review_status'] = 'unreviewed'; save_manifest(m, rows)
     out = tmp_path / 'materialized'
     with pytest.raises(ValueError): prepare(m, lock, [], out)
+    assert not out.exists()
+
+
+def test_validation_curve_reuses_matcher_and_preserves_negative_slices(tmp_path):
+    from ml.compare62 import curve
+    a, b = record(tmp_path, 1), record(tmp_path, 2)
+    b['annotations'] = [{'class': 'bird', 'xyxy': [1, 1, 8, 8]}]
+    b['negative_verified'] = True
+    pred = [{'id': a['id'], 'predictions': [[2, 3, 12, 13, .8]]},
+            {'id': b['id'], 'predictions': [[1, 1, 8, 8, .6]]}]
+    points = curve([a, b], pred)
+    at25 = next(x for x in points if x['confidence'] == .25)
+    assert at25['metrics']['counts']['tp'] == 1
+    assert at25['metrics']['counts']['fp'] == 1
+    assert at25['metrics']['precision_all'] == .5
+    assert at25['negative_class_slices']['bird']['fp'] == 1
+    assert at25['fp_geometry']['fp_overlap_bird_iou_ge_0.1'] == 1
+    at70 = next(x for x in points if x['confidence'] == .7)
+    assert at70['metrics']['precision_all'] == 1
+
+
+def test_checkpoint_mismatch_stops_before_data_copy(tmp_path):
+    from ml.train62 import main
+    _, m, lock = prepared(tmp_path)
+    checkpoint = tmp_path / 'fake.pt'; checkpoint.write_bytes(b'not a checkpoint')
+    out = tmp_path / 'prepared'
+    with pytest.raises(ValueError, match='checkpoint SHA mismatch'):
+        main(['--manifest', str(m), '--lock', str(lock), '--checkpoint', str(checkpoint), '--output', str(out)])
     assert not out.exists()

@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import platform
+from importlib.metadata import version, PackageNotFoundError
 import shutil
 from pathlib import Path
 from ml.dataset45.cli import image_path
@@ -60,10 +61,14 @@ def main(argv=None):
     if a.output.resolve().is_relative_to(a.manifest.parent.resolve()): raise ValueError('output must be outside dataset directory')
     import ultralytics
     if ultralytics.__version__ != config['ultralytics_version']: raise ValueError('incorrect ultralytics version')
+    dependencies = {}
+    for package in ('ultralytics', 'torch', 'torchvision', 'numpy', 'onnx', 'onnxruntime', 'opencv-python-headless', 'Pillow'):
+        try: dependencies[package] = version(package)
+        except PackageNotFoundError: dependencies[package] = None
     report = prepare(a.manifest, a.lock, a.reference, a.output)
     metadata = {'status': 'prepared', 'config': config, 'config_sha256': sha256_bytes(a.config.read_bytes()),
                 'checkpoint_sha256': digest(a.checkpoint), 'dataset': report, 'python': platform.python_version(),
-                'ultralytics': ultralytics.__version__, 'device_requested': a.device,
+                'ultralytics': ultralytics.__version__, 'dependencies': dependencies, 'device_requested': a.device,
                 'warning': 'Do not select thresholds on test; dataset rights and independence require human verification.'}
     meta_path = a.output / 'run.json'
     def save(): meta_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + '\n')
