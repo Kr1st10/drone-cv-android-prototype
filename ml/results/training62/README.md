@@ -63,3 +63,5 @@ python ml/scripts/parity62.py --checkpoint ml/weights/best.pt --onnx ml/weights/
 ## Проверки
 
 Linux x86_64: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=2 python -m pytest ml/tests -q` — 80 passed. Дополнительно на искусственных данных из генератора `ml/tests/test_dataset45.py` выполнены preflight, materialize (21 train / 8 validation / 1 test), validation inference и отдельный CPU smoke-run **1 эпоха** с batch 2; test не копировался. Этот прогон проверяет работоспособность обучения, а не качество модели; фиктивные изображения и веса не публикуются. Реального обучения на разрешённых данных и новых сравнительных метрик нет.
+
+Локально Android: `assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug` — BUILD SUCCESSFUL, JVM 117 passed / 2 skipped (отсутствуют Python parity fixtures), lint 0 ошибок / 43 предупреждения. Инструментальные тесты собраны, но не запускались локально на устройстве. GitHub Actions проверяется отдельно.
