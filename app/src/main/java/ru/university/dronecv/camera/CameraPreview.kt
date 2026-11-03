@@ -53,11 +53,13 @@ fun CameraPreview(
     modifier: Modifier = Modifier,
     onError: (Throwable) -> Unit,
     onRecoverableIssue: (Int?) -> Unit = {},
+    onInterruption: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val currentOnError by rememberUpdatedState(onError)
     val currentOnIssue by rememberUpdatedState(onRecoverableIssue)
+    val currentOnInterruption by rememberUpdatedState(onInterruption)
     val currentConfidence by rememberUpdatedState(confidence)
     val previewView = remember {
         PreviewView(context).apply {
@@ -75,6 +77,7 @@ fun CameraPreview(
     var activationEpoch by remember { mutableLongStateOf(0L) }
 
     fun suspendAnalysis() {
+        currentOnInterruption()
         controller.configure(false, currentConfidence)
         activationEpoch++ // even pause/resume coalesced before recomposition needs a new analyzer token.
     }

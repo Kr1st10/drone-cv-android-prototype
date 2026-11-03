@@ -39,10 +39,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import ru.university.dronecv.diagnostics.DiagnosticViewModel
+import ru.university.dronecv.diagnostics.DiagnosticPanel
 
 @Composable
 fun LiveCameraContent(
     controller: LiveController<ImageProxy>,
+    diagnostics: DiagnosticViewModel,
     running: Boolean,
     confidence: Float,
     onRunningChange: (Boolean) -> Unit,
@@ -66,13 +69,14 @@ fun LiveCameraContent(
         val camera: @Composable (Modifier) -> Unit = { modifier ->
             Box(modifier.background(Color.Black)) {
                 CameraPreview(controller, running, confidence, Modifier.fillMaxSize(),
-                    onError = onCameraError, onRecoverableIssue = onCameraIssue)
+                    onError = onCameraError, onRecoverableIssue = onCameraIssue,
+                    onInterruption = { diagnostics.stop(true, "Camera paused, rebound or interrupted") })
                 LiveOverlay(state, Modifier.fillMaxSize())
             }
         }
         val controls: @Composable (Modifier) -> Unit = { modifier ->
             LiveControls(state, running, confidence, onRunningChange, onConfidenceChange,
-                recoverableIssue, modifier)
+                recoverableIssue, diagnostics, modifier)
         }
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
@@ -92,7 +96,7 @@ fun LiveCameraContent(
 private fun LiveControls(
     state: LiveState, running: Boolean, confidence: Float,
     onRunningChange: (Boolean) -> Unit, onConfidenceChange: (Float) -> Unit,
-    issue: String?, modifier: Modifier,
+    issue: String?, diagnostics: DiagnosticViewModel, modifier: Modifier,
 ) {
     Column(modifier.background(MaterialTheme.colorScheme.surface).verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -121,6 +125,7 @@ private fun LiveControls(
         state.result?.let {
             Text("YOLO11s · CPU / 2 потока · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
         }
+        DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING, confidence)
     }
 }
 

@@ -4,6 +4,7 @@ import java.util.concurrent.Executor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import ru.university.dronecv.detection.Detection
+import ru.university.dronecv.diagnostics.DiagnosticFrames
 
 enum class LivePhase { STOPPED, STARTING, RUNNING, ERROR }
 
@@ -12,6 +13,9 @@ data class LiveInference(
     val width: Int,
     val height: Int,
     val inferenceMs: Double,
+    val conversionMs: Double? = null,
+    val preprocessMs: Double? = null,
+    val postprocessMs: Double? = null,
 )
 
 data class LiveState(
@@ -38,6 +42,7 @@ interface LiveBackend<Frame> : AutoCloseable {
 class LiveController<Frame : AutoCloseable>(
     private val backend: LiveBackend<Frame>,
     private val worker: Executor,
+    private val diagnostics: DiagnosticFrames? = null,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     private val lock = Any()
@@ -83,12 +88,18 @@ class LiveController<Frame : AutoCloseable>(
                     mutableState.value.phase == LivePhase.ERROR) null
                 else { busy = true; generation to confidence }
             } ?: return
+            val token = diagnostics?.currentToken()
+            if (token != null) diagnostics?.received(token)
             try {
                 val start = nanoTime()
                 val result = backend.infer(frame, request.second)
                 val end = nanoTime()
                 synchronized(lock) {
                     if (!closed && active && generation == request.first) {
+                        if (token != null && result.conversionMs != null && result.preprocessMs != null && result.postprocessMs != null) {
+                            diagnostics?.completed(token, end, result.conversionMs, result.preprocessMs,
+                                result.inferenceMs, result.postprocessMs, (end - start) / 1_000_000.0)
+                        }
                         completions.addLast(end)
                         while (completions.size > 30 ||
                             (completions.size > 2 && end - completions.first() > 3_000_000_000L)) {

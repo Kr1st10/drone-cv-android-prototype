@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.FileInputStream
@@ -88,6 +89,17 @@ class LiveCameraInstrumentedTest {
         compose.onNodeWithText("Камера").performClick()
         compose.onNodeWithText("Confidence: 80%").assertExists()
         compose.onNodeWithText("Начать детекцию").assertExists()
+    }
+
+    @Test fun diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable() {
+        openAndStart()
+        compose.onNodeWithTag("diagnostic-start").performScrollTo().performClick()
+        compose.onNodeWithTag("diagnostic-stop").assertExists()
+        compose.onNodeWithText("Фото").performClick()
+        drainNativeWork()
+        compose.onNodeWithText("Камера").performClick()
+        compose.onNodeWithTag("diagnostic-export").performScrollTo().assertExists()
+        compose.onNodeWithText("Прервана:", substring = true).assertExists()
     }
 
     @Test fun backgroundRecreationAndBothLandscapeDirectionsResumeInference() {
