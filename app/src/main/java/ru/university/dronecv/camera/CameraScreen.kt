@@ -51,13 +51,15 @@ import ru.university.dronecv.detection.DetectorWorker
 
 /** Главный экран: запрос разрешения, видеопревью и обработка ошибок камеры. */
 @Composable
-fun CameraScreen(confidence: Float, onConfidenceChange: (Float) -> Unit) {
+fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int) -> Unit, onConfidenceChange: (Float) -> Unit) {
     val context = LocalContext.current
     val diagnostics: DiagnosticViewModel = viewModel()
     var running by rememberSaveable { mutableStateOf(false) }
-    val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context), DetectorWorker.executor, diagnostics.frames) }
+    val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads) }
     DisposableEffect(controller) { onDispose { diagnostics.stop(true, "Camera screen disposed"); controller.close() } }
     val liveState by controller.state.collectAsStateWithLifecycle()
+    val threadState by controller.threadConfiguration.collectAsStateWithLifecycle()
+    LaunchedEffect(threadState.threads) { onThreadsChanged(threadState.threads) }
     LaunchedEffect(liveState.phase) {
         if (liveState.phase == LivePhase.ERROR) diagnostics.stop(true, "Detector error: ${liveState.error}")
     }
@@ -127,6 +129,7 @@ fun CameraScreen(confidence: Float, onConfidenceChange: (Float) -> Unit) {
             else -> key(bindAttempt) {
                 LiveCameraContent(
                     controller = controller,
+                    threadState = threadState,
                     diagnostics = diagnostics,
                     running = running,
                     confidence = confidence,

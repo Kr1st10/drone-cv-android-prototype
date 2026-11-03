@@ -31,7 +31,10 @@ data class LiveState(
 /** All backend methods run on the same worker, including release after pause or failure. */
 interface LiveBackend<Frame> : AutoCloseable {
     fun infer(frame: Frame, confidence: Float): LiveInference
+    fun changeThreads(threads: Int) { throw UnsupportedOperationException("Thread switching unsupported") }
 }
+
+data class ThreadConfiguration(val threads: Int = 2, val switching: Boolean = false, val error: String? = null)
 
 /**
  * Synchronous analyzer: CameraX KEEP_ONLY_LATEST owns scheduling; there is no second frame queue.
@@ -43,11 +46,14 @@ class LiveController<Frame : AutoCloseable>(
     private val backend: LiveBackend<Frame>,
     private val worker: Executor,
     private val diagnostics: DiagnosticFrames? = null,
+    initialThreads: Int = 2,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     private val lock = Any()
     private val mutableState = MutableStateFlow(LiveState())
     val state = mutableState.asStateFlow()
+    private val mutableThreads = MutableStateFlow(ThreadConfiguration(initialThreads))
+    val threadConfiguration = mutableThreads.asStateFlow()
     private var active = false
     private var closed = false
     private var busy = false
@@ -59,7 +65,7 @@ class LiveController<Frame : AutoCloseable>(
 
     fun configure(enabled: Boolean, threshold: Float) = synchronized(lock) {
         require(threshold in 0.01f..1f)
-        if (closed || (active == enabled && confidence == threshold)) return@synchronized
+        if (closed || (enabled && mutableThreads.value.switching) || (active == enabled && confidence == threshold)) return@synchronized
         val wasActive = active
         active = enabled
         confidence = threshold
@@ -70,6 +76,35 @@ class LiveController<Frame : AutoCloseable>(
             revision = ++revision,
         )
         if (wasActive && !active) worker.execute { backend.close() }
+    }
+
+    /** Apply only after stopping detection and recording; all session work is ordered on the ML worker. */
+    fun requestThreads(threads: Int): Boolean = synchronized(lock) {
+        require(threads in setOf(1, 2, 4))
+        if (closed) return@synchronized false
+        if (active || busy || diagnostics?.currentToken() != null || mutableThreads.value.switching) {
+            if (!mutableThreads.value.switching) mutableThreads.value = mutableThreads.value.copy(
+                error = "Остановите детекцию и дождитесь завершения обработки кадра.")
+            return@synchronized false
+        }
+        if (threads == mutableThreads.value.threads) return@synchronized true
+        val previous = mutableThreads.value.threads
+        mutableThreads.value = ThreadConfiguration(previous, switching = true)
+        worker.execute {
+            if (synchronized(lock) { closed }) return@execute
+            try {
+                backend.changeThreads(threads)
+                synchronized(lock) { if (!closed) mutableThreads.value = ThreadConfiguration(threads) }
+            } catch (e: Exception) {
+                synchronized(lock) { if (!closed) mutableThreads.value = ThreadConfiguration(previous, error =
+                    "Не удалось применить $threads поток(а): ${e.message ?: e.javaClass.simpleName}. " +
+                    if (e.suppressed.isEmpty()) "Прежняя настройка сохранена." else "Восстановление сессии тоже не удалось; повторите запуск.") }
+            } catch (e: OutOfMemoryError) {
+                synchronized(lock) { if (!closed) mutableThreads.value = ThreadConfiguration(previous, error =
+                    if (e.suppressed.isEmpty()) "Недостаточно памяти; прежняя настройка сохранена." else "Недостаточно памяти; восстановление сессии не удалось.") }
+            }
+        }
+        true
     }
 
     fun updateThreshold(threshold: Float) = synchronized(lock) { configure(active, threshold) }

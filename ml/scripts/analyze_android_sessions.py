@@ -86,19 +86,40 @@ def analyze(d, filename='', digest=''):
         total_pipeline = sum(r['pipeline_ms'] for r in frames)
         ort_share = sum(r['ort_ms'] for r in frames) / total_pipeline if total_pipeline else None
     else: ort_share = None
-    return {'file': filename, 'sha256': digest, 'started_epoch_ms': d['started_epoch_ms'],
+    result = {'file': filename, 'sha256': digest, 'started_epoch_ms': d['started_epoch_ms'],
             'device': d['device'], 'android_release': d['android_release'], 'android_sdk': d['android_sdk'],
             'app_version': d['app_version'], 'model': d['model'], 'duration_ms': duration,
             'interrupted': d['interrupted'], 'reason': d['reason'], 'accepted': accepted,
             'completed': n, 'unstored': un, 'accepted_not_completed': d['accepted_callbacks_not_completed'],
             'fps': fps, 'stages_ms': stats, 'ort_share_of_pipeline': ort_share, 'resources': res,
             'pss_delta_kb': delta, 'minute_windows': windows, 'errors': errors, 'warnings': warnings}
+    # Preserve the stage 5.2 output for old files, expose the additive 5.3 metadata when present.
+    if 'build_type' in d: result['build_type'] = d['build_type']
+    if 'warmup' in d: result['warmup'] = d['warmup']
+    return result
+
+
+def thread_comparison_key(run):
+    model = dict(run['model'])
+    n = model.pop('intra_op_threads', None)
+    backend = model.pop('backend', None)
+    if type(n) is not int or n not in (1, 2, 4): raise ValueError('explicit intra_op_threads required')
+    if backend != f'ONNX Runtime CPU, intra-op {n}, inter-op 1': raise ValueError('backend inconsistent with explicit threads')
+    if model.get('inter_op_threads') != 1 or model.get('execution_mode') != 'SEQUENTIAL' or model.get('execution_provider') != 'CPU':
+        raise ValueError('unexpected ORT configuration')
+    if not isinstance(run.get('build_type'), str) or not run['build_type'] or run['build_type'] == 'unknown':
+        raise ValueError('explicit build_type required')
+    warmup = run.get('warmup')
+    if not isinstance(warmup, dict) or warmup.get('method') != 'manual' or type(warmup.get('completed_frames_before_session')) is not int or warmup['completed_frames_before_session'] < 0:
+        raise ValueError('explicit manual warmup required')
+    return (run['device'], run['android_release'], run['android_sdk'], run['app_version'], run['build_type'], model)
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('inputs', nargs='+', type=Path)
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--compare-threads', action='store_true', help='allow only explicit 1/2/4 intra-op differences in 5.3 reports')
     args = p.parse_args()
     runs = []
     for path in args.inputs:
@@ -107,11 +128,29 @@ def main():
         runs.append(analyze(d, path.as_posix(), hashlib.sha256(raw).hexdigest()))
     runs.sort(key=lambda x: (x['started_epoch_ms'], x['file']))
     config_fields = ('device','android_release','android_sdk','app_version','model')
-    mismatches = [r['file'] for r in runs[1:] if any(r[k] != runs[0][k] for k in config_fields)]
+    if args.compare_threads:
+        keys = [thread_comparison_key(r) for r in runs]
+        mismatches = [r['file'] for r, key in zip(runs[1:], keys[1:]) if key != keys[0]]
+    else:
+        mismatches = [r['file'] for r in runs[1:] if any(r[k] != runs[0][k] for k in config_fields)]
     output = {'schema_version': 1, 'config_mismatches': mismatches, 'sessions': runs}
+    if args.compare_threads:
+        groups = {}
+        excluded = [r['file'] for r in runs if r['interrupted'] or r['unstored'] or not r['completed'] or r['duration_ms'] <= 0 or r['errors']]
+        output['excluded_sessions'] = excluded
+        for r in runs:
+            if r['file'] in excluded:
+                continue
+            n = str(r['model']['intra_op_threads'])
+            groups.setdefault(n, []).append(r)
+        output['thread_groups'] = {n: {'sessions': len(rs),
+            'median_session_fps': statistics.median([r['fps'] for r in rs if r['fps'] is not None]) if any(r['fps'] is not None for r in rs) else None,
+            'median_session_pipeline_median_ms': statistics.median([r['stages_ms']['analyzer_pipeline']['median'] for r in rs if r['stages_ms']['analyzer_pipeline']]) if any(r['stages_ms']['analyzer_pipeline'] for r in rs) else None,
+            'median_session_pipeline_p95_ms': statistics.median([r['stages_ms']['analyzer_pipeline']['p95_nearest_rank'] for r in rs if r['stages_ms']['analyzer_pipeline'] and r['stages_ms']['analyzer_pipeline']['p95_nearest_rank'] is not None]) if any(r['stages_ms']['analyzer_pipeline'] and r['stages_ms']['analyzer_pipeline']['p95_nearest_rank'] is not None for r in rs) else None}
+            for n, rs in sorted(groups.items())} 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
-    if mismatches or any(r['errors'] for r in runs):
+    if mismatches or any(r['errors'] for r in runs) or (args.compare_threads and output['excluded_sessions']):
         raise SystemExit('Integrity errors or incomparable configuration; see output')
 
 if __name__ == '__main__': main()

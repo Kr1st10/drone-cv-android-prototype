@@ -28,6 +28,7 @@ import ru.university.dronecv.photo.PhotoViewModel
 fun DroneApp() {
     var mode by rememberSaveable { mutableIntStateOf(0) }
     var cameraConfidence by rememberSaveable { mutableFloatStateOf(0.5f) }
+    var cameraThreads by rememberSaveable { mutableIntStateOf(2) }
     val photos: PhotoViewModel = viewModel()
     Scaffold(topBar = {
         Column(Modifier.statusBarsPadding()) {
@@ -40,7 +41,7 @@ fun DroneApp() {
         }
     }) { insets ->
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets)) {
-            if (mode == 0) PhotoScreen(photos) else CameraScreen(cameraConfidence) { cameraConfidence = it }
+            if (mode == 0) PhotoScreen(photos) else CameraScreen(cameraConfidence, cameraThreads, { cameraThreads = it }) { cameraConfidence = it }
         }
     }
 }

@@ -15,6 +15,7 @@ import org.junit.BeforeClass
 import org.junit.Test
 import ru.university.dronecv.detection.onnx.ModelFiles
 import ru.university.dronecv.detection.onnx.YoloOnnxEngine
+import ru.university.dronecv.detection.onnx.YoloEngineOptions
 import ru.university.dronecv.detection.yolo.ArgbImage
 import ru.university.dronecv.detection.yolo.ModelNotFoundException
 import ru.university.dronecv.detection.yolo.PixelBox
@@ -137,6 +138,21 @@ class OnnxParityTest {
         assertThrows(IllegalArgumentException::class.java) { e.runRaw(FloatArray(10)) }
         e.close(); e.close() // повторное закрытие безопасно
         assertThrows(IllegalStateException::class.java) { e.detect(solid(10, 10, 0)) }
+    }
+
+    @Test
+    fun threadCountsProduceComparableRawOutputsOnSameInput() {
+        val input = FloatArray(3 * 640 * 640) { ((it * 31L % 255L).toFloat() / 255f) }
+        val reference = requireEngine().runRaw(input)
+        for (threads in listOf(1, 4)) {
+            YoloOnnxEngine.fromFile(modelFile, YoloEngineOptions(intraOpThreads = threads)).use { other ->
+                val actual = other.runRaw(input)
+                assertEquals(reference.size, actual.size)
+                var maxDiff = 0f
+                for (i in reference.indices) maxDiff = max(maxDiff, abs(reference[i] - actual[i]))
+                assertTrue("Raw ORT output differs for $threads threads: $maxDiff", maxDiff < .05f)
+            }
+        }
     }
 
     @Test

@@ -63,3 +63,38 @@ def test_cli_rejects_incompatible_configs(tmp_path):
     out=tmp_path / 'out.json'
     result=subprocess.run([sys.executable, str(Path(__file__).parents[1] / 'scripts/analyze_android_sessions.py'),str(tmp_path/'0.json'),str(tmp_path/'1.json'),'--output',str(out)],capture_output=True)
     assert result.returncode != 0 and json.loads(out.read_text())['config_mismatches']
+
+
+def test_thread_comparison_accepts_only_expected_difference():
+    d=sample(); d['model']={'intra_op_threads':2,'inter_op_threads':1,'execution_mode':'SEQUENTIAL','execution_provider':'CPU','backend':'ONNX Runtime CPU, intra-op 2, inter-op 1','sha256':'abc'}
+    d['build_type']='debug'; d['warmup']={'method':'manual','completed_frames_before_session':30}
+    r=a.analyze(d); e=copy.deepcopy(d); e['model']['intra_op_threads']=4; e['model']['backend']='ONNX Runtime CPU, intra-op 4, inter-op 1'
+    assert a.thread_comparison_key(r)==a.thread_comparison_key(a.analyze(e))
+    e['model']['inter_op_threads']=2
+    with pytest.raises(ValueError): a.thread_comparison_key(a.analyze(e))
+
+
+def test_legacy_report_is_analyzable_but_not_silently_comparable():
+    r=a.analyze(sample()); assert not r['errors']
+    with pytest.raises(ValueError): a.thread_comparison_key(r)
+
+
+def test_thread_backend_conflict_and_missing_warmup_rejected():
+    d=sample(); d['model']={'intra_op_threads':4,'inter_op_threads':1,'execution_mode':'SEQUENTIAL','execution_provider':'CPU','backend':'ONNX Runtime CPU, intra-op 2, inter-op 1'}; d['build_type']='debug'
+    d['warmup']={'method':'manual','completed_frames_before_session':30}
+    with pytest.raises(ValueError): a.thread_comparison_key(a.analyze(d))
+    d['model']['backend']='ONNX Runtime CPU, intra-op 4, inter-op 1'; del d['warmup']
+    with pytest.raises(ValueError): a.thread_comparison_key(a.analyze(d))
+
+
+def test_thread_cli_excludes_interrupted_and_aggregates_complete(tmp_path):
+    import json, subprocess, sys
+    d=sample(); d['model']={'intra_op_threads':2,'inter_op_threads':1,'execution_mode':'SEQUENTIAL','execution_provider':'CPU','backend':'ONNX Runtime CPU, intra-op 2, inter-op 1','sha256':'abc'}
+    d['build_type']='debug'; d['warmup']={'method':'manual','completed_frames_before_session':30}
+    other=copy.deepcopy(d); other['interrupted']=True; other['reason']='background'
+    for name, item in [('complete', d), ('interrupted', other)]: (tmp_path / (name+'.json')).write_text(json.dumps(item))
+    out=tmp_path / 'out.json'
+    result=subprocess.run([sys.executable, str(Path(__file__).parents[1]/'scripts/analyze_android_sessions.py'),str(tmp_path/'complete.json'),str(tmp_path/'interrupted.json'),'--compare-threads','--output',str(out)],capture_output=True)
+    report=json.loads(out.read_text())
+    assert result.returncode != 0 and report['excluded_sessions']==[str(tmp_path/'interrupted.json')]
+    assert report['thread_groups']['2']['sessions']==1

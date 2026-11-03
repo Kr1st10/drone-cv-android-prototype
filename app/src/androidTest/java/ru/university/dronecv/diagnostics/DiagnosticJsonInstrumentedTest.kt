@@ -13,8 +13,14 @@ class DiagnosticJsonInstrumentedTest {
         store.received(id); store.completed(id, 100, 1.0, 2.0, 3.0, 4.0, 11.0)
         val snapshot = store.stop(id, 1_000_000_000, true, "pause \"background\"")!!
         val report = DiagnosticReport(10, "device", "15", 35, "0.4.0", "model.onnx", "abc", .5f, snapshot,
-            listOf(ResourceSample(0, 100, 1, 80, 2, 29.5), ResourceSample(10, 105, 2, 79, 2, 30.0)))
+            listOf(ResourceSample(0, 100, 1, 80, 2, 29.5), ResourceSample(10, 105, 2, 79, 2, 30.0)), 4, "debug", 30)
         val json = JSONObject(report.toJson())
+        assertEquals(4, json.getJSONObject("model").getInt("intra_op_threads"))
+        assertEquals(1, json.getJSONObject("model").getInt("inter_op_threads"))
+        assertEquals("SEQUENTIAL", json.getJSONObject("model").getString("execution_mode"))
+        assertEquals("CPU", json.getJSONObject("model").getString("execution_provider"))
+        assertEquals(30, json.getJSONObject("warmup").getInt("completed_frames_before_session"))
+        assertEquals("debug", json.getString("build_type"))
         assertEquals(1, json.getInt("completed_frames"))
         assertEquals(5, json.getInt("pss_first_to_last_sample_delta_kb"))
         assertEquals("pause \"background\"", json.getString("reason"))
