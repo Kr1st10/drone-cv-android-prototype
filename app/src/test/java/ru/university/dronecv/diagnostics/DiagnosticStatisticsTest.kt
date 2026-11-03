@@ -33,6 +33,18 @@ class DiagnosticStatisticsTest {
 }
 
 class DiagnosticReportTest {
+    @Test fun exportedThreadConfigurationAndWarmup() {
+        val f = DiagnosticFrameSnapshot(1_000_000_000L, 0, 0, 0, false, null, emptyList())
+        for (n in listOf(1,2,4)) {
+            val json = DiagnosticReport(0, "device", "10", 29, "0.4.0", "model", "hash", .5f, f, emptyList(), n, "debug", 30).toJson()
+            assertTrue(json.contains("\"intra_op_threads\":$n"))
+            assertTrue(json.contains("\"inter_op_threads\":1"))
+            assertTrue(json.contains("\"execution_mode\":\"SEQUENTIAL\""))
+            assertTrue(json.contains("\"execution_provider\":\"CPU\""))
+            assertTrue(json.contains("\"build_type\":\"debug\""))
+            assertTrue(json.contains("\"completed_frames_before_session\":30"))
+        }
+    }
     @Test fun exportIncludesEmptyAndInterruptedStateAndEscapesStrings() {
         val f = DiagnosticFrameSnapshot(1_000_000_000L, 0, 0, 0, true, "pause\n\"quoted\"", emptyList())
         val r = DiagnosticReport(0, "Device", "15", 35, "0.4.0", "models/test.onnx", "abc", .5f, f, emptyList())
