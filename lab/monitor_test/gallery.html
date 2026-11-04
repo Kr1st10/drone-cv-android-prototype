@@ -10,97 +10,118 @@
   #stage img { position: absolute; left: 0; top: 0; max-width: none; image-rendering: auto; user-select: none; -webkit-user-drag: none; }
   #stage.clean { cursor: none; }
   .panel { position: fixed; z-index: 10; background: rgba(20,20,24,.96); border: 1px solid #555; border-radius: 8px; padding: 16px 20px; max-height: 92vh; overflow: auto; }
-  #settings { top: 4vh; left: 50%; transform: translateX(-50%); width: min(1100px, 94vw); }
-  #record { bottom: 2vh; right: 2vw; width: 520px; }
-  #answer { top: 2vh; left: 2vw; font-size: 28px; }
+  #settings { top: 3vh; left: 50%; transform: translateX(-50%); width: min(1100px, 94vw); }
+  #record { bottom: 2vh; right: 2vw; width: 560px; }
+  #answer { top: 2vh; left: 2vw; font-size: 28px; max-width: 46vw; }
+  #toast { position: fixed; z-index: 20; left: 50%; bottom: 3vh; transform: translateX(-50%); background: rgba(30,30,36,.95); border: 1px solid #777; border-radius: 6px; padding: 8px 16px; font-size: 18px; }
   #calib { inset: 0; border: 0; border-radius: 0; background: #fff; color: #000; max-height: none; }
   #hud { position: fixed; z-index: 5; left: 8px; bottom: 6px; font-size: 13px; color: #888; pointer-events: none; }
   .hidden { display: none !important; }
+  body.quick .adv { display: none !important; }
   fieldset { border: 1px solid #444; border-radius: 6px; margin: 0 0 12px; padding: 8px 12px; }
   legend { color: #9cf; }
   label { margin-right: 14px; white-space: nowrap; }
-  input[type=number] { width: 90px; } input[type=text] { width: 220px; }
+  input[type=number] { width: 90px; } input[type=text] { width: 220px; } input.catn { width: 60px; }
   button { font-size: 15px; padding: 6px 12px; margin: 2px; }
+  button.big { display: block; width: 100%; text-align: left; font-size: 18px; padding: 10px 14px; margin: 6px 0; }
+  button.primary { background: #2a5; color: #fff; border: 1px solid #3c6; }
   table { border-collapse: collapse; font-size: 13px; } td, th { border: 1px solid #444; padding: 2px 6px; }
   .kbd { font-family: monospace; background: #333; padding: 0 4px; border-radius: 3px; }
-  .warn { color: #fc6; }
+  .warn { color: #fc6; } .muted { color: #999; font-size: 13px; }
   #calibgrid { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: 60px; align-items: flex-end; }
   .sq { background: #000; position: relative; }
   .sq span { position: absolute; top: 100%; left: 0; font: 14px monospace; color: #000; margin-top: 6px; white-space: nowrap; }
 </style>
 </head>
-<body>
+<body class="quick">
 <div id="stage"><img id="img" alt=""></div>
 <div id="hud"></div>
 <div id="answer" class="panel hidden"></div>
+<div id="toast" class="hidden"></div>
 
 <div id="settings" class="panel">
   <h2 style="margin-top:0">Лабораторная галерея: проверка детекции с экрана</h2>
   <p id="status" class="warn"></p>
-  <fieldset><legend>Категории</legend><div id="cats"></div></fieldset>
-  <fieldset><legend>Порядок и размеры</legend>
-    <label><input type="radio" name="order" value="sequential" checked> последовательно</label>
-    <label><input type="radio" name="order" value="random"> случайно, seed <input type="number" id="seed" value="66"></label>
-    <br>
+  <p><label><input type="radio" name="mode" value="quick" checked> <b>Быстрый тест</b> (телефон, 1×/5×, расстояние, результат)</label>
+     <label><input type="radio" name="mode" value="advanced"> Расширенный режим (масштаб, калибровка, confidence, ложные рамки)</label></p>
+
+  <fieldset><legend>1. Выборка изображений (фиксируется и сохраняется)</legend>
+    <button id="presetPilot" class="primary">Пилот — 20 фото</button>
+    <button id="presetAll">Все 90 фото</button>
+    <div id="catCounts" style="margin:6px 0"></div>
+    <label>seed <input type="number" id="seed" value="66020"></label>
+    <button id="makeSample">Сформировать выборку по количествам</button>
+    <p id="sampleInfo"></p>
+  </fieldset>
+
+  <fieldset><legend>2. Прогон</legend>
+    <label>Телефон <input type="text" id="phone" value="Xiaomi 17T Pro" list="phones"><datalist id="phones"><option>Xiaomi 17T Pro</option><option>Xiaomi 17 Pro</option></datalist></label>
+    <label>Зум камеры <select id="zoom"><option value="1x">1×</option><option value="5x">5×</option></select></label>
+    <label>Расстояние до экрана, см <input type="number" id="distance" value="100"></label>
+    <label class="adv">Оператор <input type="text" id="operator" value=""></label>
+  </fieldset>
+
+  <fieldset class="adv"><legend>Расширенные параметры</legend>
     <label>Масштаб:
       <select id="scaleMode">
         <option value="fit">вписать в экран</option>
         <option value="native">фиксированный коэффициент от исходного</option>
-        <option value="monitor">объект = N px на мониторе</option>
-        <option value="camera">объект = N px в кадре камеры (нужна калибровка)</option>
+        <option value="monitor">объект = N px монитора</option>
+        <option value="camera">объект = N px кадра камеры (нужна калибровка)</option>
       </select></label>
     <label>коэффициент <input type="number" id="scaleFactor" value="0.5" step="0.05" min="0.01"></label>
-    <br>
-    <label>Уровни размера объекта N (через запятую): <input type="text" id="sizes" value="16,32,64"></label>
+    <label>Уровни N (через запятую) <input type="text" id="sizes" value="16,32,64"></label>
     <label><input type="checkbox" id="center" checked> центрировать объект</label>
     <label>Фон <select id="bg"><option value="#000">чёрный</option><option value="#808080">серый</option></select></label>
-  </fieldset>
-  <fieldset><legend>Сессия испытания</legend>
-    <label>Телефон <input type="text" id="phone" value="Xiaomi 17T Pro" list="phones"><datalist id="phones"><option>Xiaomi 17T Pro</option><option>Xiaomi 17 Pro</option></datalist></label>
-    <label>Камера <select id="zoom"><option>1x</option><option>5x</option></select></label>
-    <label>Расстояние до экрана, см <input type="number" id="distance" value="100"></label>
-    <label>Порог confidence в приложении, % <input type="number" id="appConf" value="25"></label>
     <br>
-    <label>Монитор: ширина активной области, мм <input type="number" id="monitorMm" value="597"></label>
+    <label>Порог confidence в приложении, % <input type="number" id="appConf" value="25"></label>
+    <label>Монитор: ширина активной области, мм <input type="number" id="monitorMm" value="" placeholder="не измерено"></label>
     <label>ширина, px <input type="number" id="monitorPx" value="3840"></label>
-    <label>Калибровка: px кадра камеры на 1 px монитора <input type="number" id="k" value="" step="0.001" placeholder="нет"></label>
-    <label>Оператор <input type="text" id="operator" value=""></label>
+    <br>
+    <label>Калибровка k: px кадра камеры на 1 px монитора <input type="number" id="k" value="" step="0.001" placeholder="нет"></label>
+    <label>Кадр анализа, px <input type="number" id="frameW" value="640">×<input type="number" id="frameH" value="480"></label>
+    <label>Вход YOLO, px <input type="number" id="yoloIn" value="640"></label>
+    <div class="muted">Три разных размера: <b>px монитора</b> — считает галерея по рамке манифеста; <b>px кадра камеры</b> — только по калибровке k или измерению по скриншоту; <b>px входа YOLO</b> = px кадра × min(вход/ширина кадра, вход/высота кадра) (letterbox). Без калибровки и измерения размеры в кадре и на входе YOLO записываются как «не измерено» (null).</div>
   </fieldset>
+
   <div>
-    <button id="start">Новое испытание (порядок фиксируется)</button>
-    <button id="resume">Продолжить</button>
-    <button id="calibBtn">Калибровка (C)</button>
+    <button id="start" class="primary">Начать прогон</button>
+    <button id="resume">Продолжить прогон</button>
+    <button id="calibBtn" class="adv">Калибровка (C)</button>
     <button id="exportCsv">Экспорт CSV</button>
     <button id="exportJson">Экспорт JSON</button>
-    <label>Импорт порядка/результатов JSON <input type="file" id="importJson" accept=".json"></label>
-    <button id="clear">Удалить сохранённые результаты</button>
+    <label>Импорт JSON <input type="file" id="importJson" accept=".json"></label>
+    <button id="clear">Удалить результаты</button>
+    <button id="legacy" class="hidden">Экспорт результатов старой версии галереи</button>
   </div>
   <p>Клавиши: <span class="kbd">→</span>/<span class="kbd">Пробел</span> далее, <span class="kbd">←</span> назад,
-  <span class="kbd">R</span> записать результат, <span class="kbd">A</span> показать правильную категорию (только после записи),
-  <span class="kbd">+</span>/<span class="kbd">−</span> масштаб ×1.1, <span class="kbd">0</span> масштаб уровня,
-  <span class="kbd">F</span> полноэкранный режим, <span class="kbd">S</span>/<span class="kbd">Esc</span> настройки, <span class="kbd">C</span> калибровка,
-  <span class="kbd">I</span> служебная строка. Во время показа на экране нет подписей, рамок и ответов.</p>
+  <span class="kbd">R</span> записать результат (ответ не показывается), <span class="kbd">A</span> правильный ответ — только после записи,
+  <span class="kbd">F</span> полный экран, <span class="kbd">S</span>/<span class="kbd">Esc</span> настройки<span class="adv">, <span class="kbd">+</span>/<span class="kbd">−</span>/<span class="kbd">0</span> масштаб, <span class="kbd">C</span> калибровка, <span class="kbd">I</span> служебная строка</span>.</p>
   <div id="summary"></div>
 </div>
 
 <div id="record" class="panel hidden">
-  <b>Результат показа <span id="recIdx"></span></b> <span id="recSize" style="color:#888"></span><br>
-  <label><input type="radio" name="out" value="hit"> обнаружен (рамка на объекте)</label>
-  <label><input type="radio" name="out" value="miss"> не обнаружен</label>
-  <label><input type="radio" name="out" value="none" checked> нет рамок</label><br>
-  <label>max confidence на объекте, % <input type="number" id="recConf" min="0" max="100"></label><br>
-  <label>ложных рамок (вне объекта) <input type="number" id="recFp" min="0" value="0"></label>
-  <label>max confidence ложных, % <input type="number" id="recFpConf" min="0" max="100"></label><br>
-  <label>измеренный размер в кадре, px <input type="number" id="recCamPx" min="0"></label><br>
-  <label>заметки <input type="text" id="recNote" style="width:360px"></label><br>
-  <button id="recSave">Сохранить (Enter)</button> <button id="recCancel">Отмена (Esc)</button>
-  <div style="font-size:13px;color:#888">«нет рамок» — на экране телефона нет ни одной рамки. Для отрицательных сцен «обнаружен» не выбирать: любые рамки — ложные.</div>
+  <b>Запись результата — показ <span id="recIdx"></span></b>
+  <div class="muted">Что видно на экране телефона? Правильный ответ откроется клавишей A после сохранения.</div>
+  <button class="big det" data-det="box_on_object"><span class="kbd">1</span> Рамка на показанном объекте</button>
+  <button class="big det" data-det="box_elsewhere"><span class="kbd">2</span> Рамка только в другом месте (не на объекте)</button>
+  <button class="big det" data-det="no_box"><span class="kbd">3</span> Рамок нет</button>
+  <div class="adv">
+    <div class="muted">Выбрано: <b id="recChosen">—</b>. Пустые поля сохраняются как «не измерено».</div>
+    <label>max confidence на объекте, % <input type="number" id="recConf" min="0" max="100"></label><br>
+    <label>ложных рамок (вне объекта) <input type="number" id="recFp" min="0" placeholder="не считали"></label>
+    <label>max confidence ложных, % <input type="number" id="recFpConf" min="0" max="100"></label><br>
+    <label>размер объекта в кадре камеры, px (если измерен) <input type="number" id="recCamPx" min="0" placeholder="не измерено"></label><br>
+    <label>заметки <input type="text" id="recNote" style="width:360px"></label><br>
+    <button id="recSave">Сохранить (Enter)</button>
+  </div>
+  <button id="recCancel">Отмена (Esc)</button>
 </div>
 
 <div id="calib" class="panel hidden">
   <div style="position:absolute;left:20px;top:16px;font:16px system-ui">
     Калибровка. Квадраты имеют точный размер в пикселях монитора (масштаб страницы браузера должен быть 100 %, <span class="kbd">Ctrl+0</span>).
-    Сфотографируйте экран телефоном с рабочего места, измерьте сторону квадрата 256 px в кадре камеры и введите ниже.
+    Сделайте скриншот экрана приложения с рабочего места и измерьте сторону квадрата 256 px в кадре камеры.
     <br>Размер в кадре = (сторона квадрата на скриншоте ÷ ширина превью на скриншоте) × ширина кадра анализа, показанная приложением (например, 640).
     <br>Сторона квадрата 256 px в кадре камеры, px: <input type="number" id="calibMeasured" step="0.1"> <button id="calibApply">Применить</button>
     <span id="calibOut"></span> · <span class="kbd">C</span>/<span class="kbd">Esc</span> закрыть
@@ -112,156 +133,246 @@
 <script src="manifest.js"></script>
 <script>
 "use strict";
-const LS = 'dronecv66.';
+const LS = 'dronecv66v2.', FORMAT = 'dronecv66-session-2';
+const PILOT = { name: 'Пилот — 20 фото', seed: 66020, counts: { civil_quadcopter: 5, military_uav: 5, uav_payload: 3, bird: 3, aircraft: 2, negative: 2 } };
+const DRONE_CATS = ['civil_quadcopter', 'military_uav', 'uav_payload'];
+const DET_NAMES = { box_on_object: 'рамка на объекте', box_elsewhere: 'рамка не на объекте', no_box: 'рамок нет' };
+const CLASS_NAMES = { TP: 'верное обнаружение (TP)', FN: 'пропуск дрона (FN)', FP: 'ложное срабатывание (FP)', TN: 'верно: рамок нет (TN)' };
 const M = (window.MANIFEST && window.MANIFEST.images) || [];
 const CAT_NAMES = (window.MANIFEST && window.MANIFEST.categories) || {};
+const CATS = Object.keys(CAT_NAMES).filter(c => M.some(m => m.category === c));
 const $ = id => document.getElementById(id);
 const img = $('img'), stage = $('stage');
-let S = load('settings', null), T = load('trial', null), R = load('results', []), ui = {hud: false, manual: 1, recorded: false, available: {}};
+let S = load('settings', null), SAMPLE = load('sample', null), T = load('trial', null), R = load('results', []), RUNS = load('runs', []);
+const ui = { hud: false, manual: 1, available: {}, chosen: null, toastT: 0 };
 
 function load(k, d) { try { const v = localStorage.getItem(LS + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function save(k, v) { localStorage.setItem(LS + k, JSON.stringify(v)); }
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function shuffle(arr, seed) { const r = mulberry32(seed), a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function fnv(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16).padStart(8, '0'); }
+function esc(v) { return String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function num(v) { if (v === '' || v == null) return null; const x = parseFloat(v); return Number.isFinite(x) ? x : null; }
+function byId(id) { return M.find(x => x.id === id); }
+function isQuick() { return document.querySelector('input[name=mode]:checked').value === 'quick'; }
+function toast(t) { const e = $('toast'); e.textContent = t; e.classList.remove('hidden'); clearTimeout(ui.toastT); ui.toastT = setTimeout(() => e.classList.add('hidden'), 3000); }
 
-function buildCats() {
-  const counts = {};
-  M.forEach(m => counts[m.category] = (counts[m.category] || 0) + 1);
-  const sel = (S && S.cats) || Object.keys(counts);
-  $('cats').innerHTML = Object.keys(counts).map(c => `<label><input type="checkbox" class="cat" value="${c}" ${sel.includes(c) ? 'checked' : ''}> ${CAT_NAMES[c] || c} (${counts[c]})</label>`).join('');
+// ---------- sample: fixed random subset, deterministic from (counts, seed) ----------
+function makeSample(counts, seed, name) {
+  const ids = [];
+  for (const c of CATS) {
+    const pool = M.filter(m => m.category === c).map(m => m.id).sort();
+    const n = Math.max(0, Math.min(counts[c] | 0, pool.length));
+    ids.push(...shuffle(pool, (seed ^ parseInt(fnv(c), 16)) >>> 0).slice(0, n));
+  }
+  const order = shuffle(ids, seed);
+  return { sample_id: 'S' + fnv(order.join(',')), name: name || 'Выборка ' + CATS.map(c => counts[c] | 0).join('/'), seed, counts: Object.fromEntries(CATS.map(c => [c, counts[c] | 0])),
+    ids: order, created: new Date().toISOString(), manifest_version: window.MANIFEST && window.MANIFEST.version };
 }
+function readCounts() { const o = {}; document.querySelectorAll('.catn').forEach(e => o[e.dataset.cat] = Math.max(0, Math.min(parseInt(e.value) || 0, +e.max))); return o; }
+function writeCounts(counts) { document.querySelectorAll('.catn').forEach(e => e.value = counts[e.dataset.cat] ?? 0); }
+function setSample(smp) {
+  if (!smp.ids.length) { alert('Выборка пуста: задайте количество хотя бы для одной категории.'); return false; }
+  if (SAMPLE && SAMPLE.sample_id !== smp.sample_id && R.some(r => r.sample_id === SAMPLE.sample_id) && !confirm('Заменить текущую выборку новой? Уже записанные результаты сохранятся.')) return false;
+  SAMPLE = smp; save('sample', SAMPLE); writeCounts(SAMPLE.counts); $('seed').value = SAMPLE.seed; sampleInfo(); return true;
+}
+function sampleInfo() {
+  const e = $('sampleInfo');
+  if (!SAMPLE) { e.innerHTML = '<span class="warn">Выборка не сформирована — нажмите «Пилот — 20 фото» или задайте количества.</span>'; return; }
+  const missing = SAMPLE.ids.filter(id => ui.available[id] === false || !byId(id)).length;
+  const runs = RUNS.filter(r => r.sample_id === SAMPLE.sample_id);
+  e.innerHTML = `Текущая выборка: <b>${esc(SAMPLE.name)}</b> — ${SAMPLE.ids.length} изобр. (${CATS.map(c => SAMPLE.counts[c] | 0).join('/')}), seed ${SAMPLE.seed}, код <b>${SAMPLE.sample_id}</b>. ` +
+    `Все прогоны этой выборки показывают одни и те же изображения в одном порядке.` + (runs.length ? ` Прогонов: ${runs.length}.` : '') +
+    (missing ? ` <span class="warn">Нет файлов: ${missing} — запустите fetch_images.py.</span>` : '');
+}
+function buildCats() {
+  $('catCounts').innerHTML = '<table><tr>' + CATS.map(c => `<th>${esc(CAT_NAMES[c] || c)}</th>`).join('') + '</tr><tr>' +
+    CATS.map(c => { const n = M.filter(m => m.category === c).length; return `<td><input type="number" class="catn" data-cat="${c}" min="0" max="${n}" value="0"> из ${n}</td>`; }).join('') + '</tr></table>';
+  writeCounts(SAMPLE ? SAMPLE.counts : PILOT.counts); if (SAMPLE) $('seed').value = SAMPLE.seed;
+}
+
+// ---------- settings ----------
 function readSettings() {
-  const s = { cats: [...document.querySelectorAll('.cat:checked')].map(x => x.value), order: document.querySelector('input[name=order]:checked').value,
-    seed: parseInt($('seed').value) || 0, scaleMode: $('scaleMode').value, scaleFactor: parseFloat($('scaleFactor').value) || 1,
+  const s = { mode: isQuick() ? 'quick' : 'advanced', seed: parseInt($('seed').value) || 0, scaleMode: $('scaleMode').value, scaleFactor: parseFloat($('scaleFactor').value) || 1,
     sizes: $('sizes').value.split(',').map(x => parseFloat(x)).filter(x => x > 0), center: $('center').checked, bg: $('bg').value,
-    phone: $('phone').value, zoom: $('zoom').value, distance_cm: parseFloat($('distance').value) || null, app_conf_pct: parseFloat($('appConf').value) || null,
-    monitor_mm: parseFloat($('monitorMm').value) || null, monitor_px: parseFloat($('monitorPx').value) || null, k: parseFloat($('k').value) || null, operator: $('operator').value };
+    phone: $('phone').value.trim(), zoom: $('zoom').value, distance_cm: num($('distance').value), app_conf_pct: num($('appConf').value),
+    monitor_mm: num($('monitorMm').value), monitor_px: num($('monitorPx').value), k: num($('k').value), frame_w: num($('frameW').value), frame_h: num($('frameH').value),
+    yolo_input: num($('yoloIn').value), operator: $('operator').value };
   S = s; save('settings', s); return s;
 }
 function writeSettings() {
   if (!S) return;
-  document.querySelector(`input[name=order][value=${S.order}]`).checked = true;
-  $('seed').value = S.seed; $('scaleMode').value = S.scaleMode; $('scaleFactor').value = S.scaleFactor; $('sizes').value = S.sizes.join(',');
+  document.querySelector(`input[name=mode][value=${S.mode || 'quick'}]`).checked = true; document.body.classList.toggle('quick', (S.mode || 'quick') === 'quick');
+  $('scaleMode').value = S.scaleMode; $('scaleFactor').value = S.scaleFactor; $('sizes').value = S.sizes.join(',');
   $('center').checked = S.center; $('bg').value = S.bg; $('phone').value = S.phone; $('zoom').value = S.zoom; $('distance').value = S.distance_cm ?? '';
-  $('appConf').value = S.app_conf_pct ?? ''; $('monitorMm').value = S.monitor_mm ?? ''; $('monitorPx').value = S.monitor_px ?? ''; $('k').value = S.k ?? ''; $('operator').value = S.operator || '';
+  $('appConf').value = S.app_conf_pct ?? ''; $('monitorMm').value = S.monitor_mm ?? ''; $('monitorPx').value = S.monitor_px ?? ''; $('k').value = S.k ?? '';
+  $('frameW').value = S.frame_w ?? ''; $('frameH').value = S.frame_h ?? ''; $('yoloIn').value = S.yolo_input ?? ''; $('operator').value = S.operator || '';
 }
-function esc(v) { return String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function objSide(m) { return m.object_bbox ? Math.max(m.object_bbox[2] - m.object_bbox[0], m.object_bbox[3] - m.object_bbox[1]) : null; } // native px, longer side
-function newTrial() {
+function runSettings(s) { // quick mode: everything except phone/zoom/distance has fixed defaults, unmeasured values are null
+  if (s.mode !== 'quick') return Object.assign({}, s);
+  return { mode: 'quick', scaleMode: 'fit', scaleFactor: 1, sizes: [], center: true, bg: '#000', phone: s.phone, zoom: s.zoom, distance_cm: s.distance_cm,
+    app_conf_pct: null, monitor_mm: null, monitor_px: null, k: null, frame_w: null, frame_h: null, yolo_input: null, operator: '' };
+}
+
+// ---------- runs ----------
+function startRun() {
   const s = readSettings();
-  if (s.scaleMode === 'camera' && !s.k) { alert('Для режима «в кадре камеры» сначала выполните калибровку.'); return; }
-  let items = M.filter(m => s.cats.includes(m.category) && ui.available[m.id] !== false);
-  if (!items.length) { alert('Нет изображений: проверьте категории и загрузку (fetch_images.py).'); return; }
-  const levels = (s.scaleMode === 'monitor' || s.scaleMode === 'camera') ? s.sizes : [null];
-  let order = [];
-  if (s.order === 'sequential') {
-    for (const lv of levels) for (const m of items) order.push({ id: m.id, level: lv });
-  } else {
-    for (const m of items) for (const lv of levels) order.push({ id: m.id, level: lv });
-    order = shuffle(order, s.seed);
-  }
-  T = { trial_id: new Date().toISOString().replace(/[:.]/g, '-'), created: new Date().toISOString(), manifest_version: window.MANIFEST.version,
-        manifest_sha256: window.MANIFEST_SHA256 || null, settings: s, order, index: 0 };
-  save('trial', T); ui.manual = 1; show();
+  if (!SAMPLE) { alert('Сначала сформируйте выборку («Пилот — 20 фото» или свои количества).'); return; }
+  if (!s.phone) { alert('Укажите модель телефона.'); return; }
+  if (s.distance_cm == null) { alert('Укажите расстояние до экрана, см.'); return; }
+  const rs = runSettings(s);
+  if (rs.scaleMode === 'camera' && !rs.k) { alert('Для режима «px кадра камеры» сначала выполните калибровку (C).'); return; }
+  if ((rs.scaleMode === 'monitor' || rs.scaleMode === 'camera') && !rs.sizes.length) { alert('Укажите уровни размера N.'); return; }
+  const missing = SAMPLE.ids.filter(id => !byId(id) || ui.available[id] === false);
+  if (missing.length) { alert(`Нет ${missing.length} файлов выборки. Запустите python3 fetch_images.py.`); return; }
+  const levels = (rs.scaleMode === 'monitor' || rs.scaleMode === 'camera') ? rs.sizes : [null];
+  const order = []; for (const lv of levels) for (const id of SAMPLE.ids) order.push({ id, level: lv });
+  const now = new Date();
+  let run_id = 'R' + now.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14) + '-' + rs.zoom; for (let i = 2; RUNS.some(r => r.run_id === run_id); i++) run_id = run_id.replace(/(-\d+)?$/, '') + '-' + i;
+  T = { run_id, created: now.toISOString(), manifest_version: window.MANIFEST.version,
+        manifest_sha256: window.MANIFEST_SHA256 || null, sample_id: SAMPLE.sample_id, sample_name: SAMPLE.name, sample_seed: SAMPLE.seed, sample_ids: SAMPLE.ids.slice(),
+        settings: rs, order, index: 0 };
+  RUNS.push({ run_id: T.run_id, created: T.created, sample_id: T.sample_id, sample_name: T.sample_name, phone: rs.phone, zoom: rs.zoom, distance_cm: rs.distance_cm, mode: rs.mode, shows: order.length });
+  save('trial', T); save('runs', RUNS); ui.manual = 1; show();
 }
 function current() { return T && T.order[T.index]; }
+function recOf(step) { return R.find(r => r.run_id === T.run_id && r.step === step); }
+function objSide(m) { return m.object_bbox ? Math.max(m.object_bbox[2] - m.object_bbox[0], m.object_bbox[3] - m.object_bbox[1]) : null; } // native px, longer side
 function scaleFor(m, step, s) { // CSS px per native image px; monitor px = CSS px * devicePixelRatio
-  const W = innerWidth, H = innerHeight, side = objSide(m), dpr = window.devicePixelRatio || 1;
+  const side = objSide(m), dpr = window.devicePixelRatio || 1;
   if (s.scaleMode === 'native') return s.scaleFactor / dpr;
-  if ((s.scaleMode === 'monitor' || s.scaleMode === 'camera') && side && step.level) {
-    const targetMonitorPx = s.scaleMode === 'monitor' ? step.level : step.level / s.k;
-    return targetMonitorPx / side / dpr;
-  }
-  return Math.min(W / m.width, H / m.height); // fit; also negatives / no bbox in size modes
+  if ((s.scaleMode === 'monitor' || s.scaleMode === 'camera') && side && step.level) return (s.scaleMode === 'monitor' ? step.level : step.level / s.k) / side / dpr;
+  return Math.min(innerWidth / m.width, innerHeight / m.height); // fit; also negatives in size modes
 }
 function show() {
-  closeOverlays(); ui.recorded = false;
+  closeOverlays();
   const step = current(); if (!step) return;
-  const m = M.find(x => x.id === step.id); const s = T.settings;
+  const m = byId(step.id), s = T.settings;
   stage.style.setProperty('--bg', s.bg); stage.className = 'clean';
   $('settings').classList.add('hidden');
-  const sc = scaleFor(m, step, s) * ui.manual;
-  img.onload = () => place(m, sc, s);
-  img.onerror = () => { ui.available[m.id] = false; $('hud').textContent = 'нет файла ' + m.file + ' — запустите fetch_images.py'; $('hud').classList.remove('hidden'); };
-  img.src = m.file; if (img.complete && img.naturalWidth) place(m, sc, s);
-  ui.scale = sc; hud();
+  const sc = scaleFor(m, step, s) * ui.manual; ui.scale = sc;
+  img.style.visibility = 'hidden'; place(m, sc, s); // geometry comes from the manifest, so it is exact before the file loads
+  img.onload = () => { img.style.visibility = ''; };
+  img.onerror = () => { ui.available[m.id] = false; toast('Нет файла изображения — запустите fetch_images.py'); };
+  img.src = m.file; if (img.complete && img.naturalWidth) img.style.visibility = '';
+  const nx = T.order[T.index + 1]; if (nx) new Image().src = byId(nx.id).file; // preload
+  hud();
 }
 function place(m, sc, s) {
   const w = m.width * sc, h = m.height * sc, W = innerWidth, H = innerHeight;
   let x = (W - w) / 2, y = (H - h) / 2;
-  if (s.center && m.object_bbox && s.scaleMode !== 'fit') {
-    const cx = (m.object_bbox[0] + m.object_bbox[2]) / 2 * sc, cy = (m.object_bbox[1] + m.object_bbox[3]) / 2 * sc;
-    x = W / 2 - cx; y = H / 2 - cy;
-  }
-  img.style.left = x + 'px'; img.style.top = y + 'px'; img.style.width = w + 'px'; img.style.height = h + 'px'; // direct size: browser high-quality resampling
+  if (s.center && m.object_bbox) { /* object at screen centre (also in quick mode: 5x sees only the centre) */ x = W / 2 - (m.object_bbox[0] + m.object_bbox[2]) / 2 * sc; y = H / 2 - (m.object_bbox[1] + m.object_bbox[3]) / 2 * sc; }
+  img.style.left = x + 'px'; img.style.top = y + 'px'; img.style.width = w + 'px'; img.style.height = h + 'px';
 }
-function displayed(m) {
-  const dpr = window.devicePixelRatio || 1, side = objSide(m); if (!side) return {};
-  const px = side * ui.scale * dpr, s = T.settings;
-  return { object_monitor_px: +px.toFixed(1), object_monitor_mm: s.monitor_mm && s.monitor_px ? +(px * s.monitor_mm / s.monitor_px).toFixed(2) : null,
-           object_camera_px_expected: s.k ? +(px * s.k).toFixed(1) : null };
+function sizes(m, s, measuredCam) { // three distinct units; null = not measured / not applicable
+  const dpr = window.devicePixelRatio || 1, side = objSide(m);
+  const mon = side ? +(side * ui.scale * dpr).toFixed(1) : null;
+  const camExp = mon != null && s.k ? +(mon * s.k).toFixed(1) : null;
+  const cam = measuredCam != null ? measuredCam : camExp;
+  const yolo = cam != null && s.frame_w && s.frame_h && s.yolo_input ? +(cam * Math.min(s.yolo_input / s.frame_w, s.yolo_input / s.frame_h)).toFixed(1) : null;
+  return { object_monitor_px: mon, object_monitor_mm: mon != null && s.monitor_mm && s.monitor_px ? +(mon * s.monitor_mm / s.monitor_px).toFixed(2) : null,
+    object_camera_px_expected: camExp, object_camera_px_measured: measuredCam, object_yolo_px: yolo,
+    object_yolo_px_source: yolo == null ? null : measuredCam != null ? 'measured' : 'calibration' };
 }
-function hud() {
+function hud() { // no image id / category / object size before recording
   const h = $('hud'); if (!ui.hud || !T) { h.classList.add('hidden'); return; }
-  const st = current(), m = M.find(x => x.id === st.id), d = displayed(m);
-  h.classList.remove('hidden');
-  h.textContent = `${T.index + 1}/${T.order.length} · ${m.id} · масштаб ${(ui.scale * (window.devicePixelRatio || 1)).toFixed(3)} · объект ${d.object_monitor_px ?? '—'} px монитора` + (d.object_camera_px_expected ? ` · ≈${d.object_camera_px_expected} px кадра` : '');
+  const r = recOf(T.index); h.classList.remove('hidden');
+  h.textContent = `${T.index + 1}/${T.order.length} · ${T.settings.phone} ${T.settings.zoom} · ${T.settings.distance_cm} см · масштаб ${(ui.scale * (window.devicePixelRatio || 1)).toFixed(3)}` +
+    (r ? ` · записано · объект ${r.object_monitor_px ?? '—'} px монитора` : ' · не записано');
 }
 function closeOverlays() { ['record', 'answer', 'calib'].forEach(i => $(i).classList.add('hidden')); }
-function go(d) { if (!T) return; T.index = Math.max(0, Math.min(T.order.length - 1, T.index + d)); save('trial', T); ui.manual = 1; show(); }
+function go(d) {
+  if (!T) return; const n = T.index + d;
+  if (n >= T.order.length) { const done = R.filter(r => r.run_id === T.run_id).length; toast(`Последнее изображение. Записано ${done} из ${T.order.length}. S — настройки (экспорт, повтор с другим зумом).`); return; }
+  if (n < 0) return;
+  T.index = n; save('trial', T); ui.manual = 1; show();
+}
+
+// ---------- R: record (never reveals the answer) ----------
 function openRecord() {
-  if (!T) return; const st = current(), m = M.find(x => x.id === st.id);
-  $('recIdx').textContent = `${T.index + 1}/${T.order.length}`; const d = displayed(m);
-  $('recSize').textContent = d.object_monitor_px ? `объект ${d.object_monitor_px} px монитора` : '';
-  const prev = R.find(r => r.trial_id === T.trial_id && r.step === T.index);
-  document.querySelector(`input[name=out][value=${prev ? prev.outcome : 'none'}]`).checked = true;
-  $('recConf').value = prev?.target_conf_pct ?? ''; $('recFp').value = prev?.fp_count ?? 0; $('recFpConf').value = prev?.fp_max_conf_pct ?? '';
+  if (!T) return; $('answer').classList.add('hidden');
+  $('recIdx').textContent = `${T.index + 1}/${T.order.length}`;
+  const prev = recOf(T.index); ui.chosen = prev ? prev.detection : null;
+  $('recChosen').textContent = ui.chosen ? DET_NAMES[ui.chosen] : '—';
+  document.querySelectorAll('.det').forEach(b => b.style.outline = b.dataset.det === ui.chosen ? '3px solid #3c6' : '');
+  $('recConf').value = prev?.target_conf_pct ?? ''; $('recFp').value = prev?.fp_count ?? ''; $('recFpConf').value = prev?.fp_max_conf_pct ?? '';
   $('recCamPx').value = prev?.object_camera_px_measured ?? ''; $('recNote').value = prev?.note ?? '';
-  $('record').classList.remove('hidden'); $('recConf').focus();
+  $('record').classList.remove('hidden'); document.activeElement?.blur();
+}
+function choose(det) {
+  ui.chosen = det;
+  if (T.settings.mode === 'quick') { saveRecord(); return; }
+  $('recChosen').textContent = DET_NAMES[det]; document.querySelectorAll('.det').forEach(b => b.style.outline = b.dataset.det === det ? '3px solid #3c6' : '');
+}
+function classify(cat, det, fp) {
+  const drone = DRONE_CATS.includes(cat);
+  return { result_class: drone ? (det === 'box_on_object' ? 'TP' : 'FN') : (det === 'no_box' ? 'TN' : 'FP'),
+    false_alarm: drone ? (det === 'box_elsewhere' || (fp || 0) > 0) : (det !== 'no_box' || (fp || 0) > 0) };
 }
 function saveRecord() {
-  const st = current(), m = M.find(x => x.id === st.id), s = T.settings, d = displayed(m);
-  const num = v => v === '' ? null : parseFloat(v);
-  const rec = { trial_id: T.trial_id, step: T.index, image_id: m.id, category: m.category, size_level: st.level, scale_mode: s.scaleMode,
-    display_scale: +(ui.scale * (window.devicePixelRatio || 1)).toFixed(5), ...d, phone: s.phone, camera_zoom: s.zoom, distance_cm: s.distance_cm,
-    app_conf_threshold_pct: s.app_conf_pct, calibration_k: s.k, outcome: document.querySelector('input[name=out]:checked').value,
-    target_conf_pct: num($('recConf').value), fp_count: parseInt($('recFp').value) || 0, fp_max_conf_pct: num($('recFpConf').value),
-    object_camera_px_measured: num($('recCamPx').value), note: $('recNote').value, operator: s.operator, recorded_at: new Date().toISOString() };
-  if (m.category === 'negative' && rec.outcome === 'hit') { alert('Отрицательная сцена: рамки на ней — ложные срабатывания. Выберите «не обнаружен»/«нет рамок» и укажите число ложных.'); return; }
-  R = R.filter(r => !(r.trial_id === rec.trial_id && r.step === rec.step)); R.push(rec); save('results', R);
-  $('record').classList.add('hidden'); document.activeElement?.blur(); ui.recorded = true;
+  if (!ui.chosen) { toast('Выберите результат: 1, 2 или 3'); return; }
+  const st = current(), m = byId(st.id), s = T.settings, adv = s.mode !== 'quick';
+  const fp = adv ? num($('recFp').value) : null;
+  const rec = { run_id: T.run_id, sample_id: T.sample_id, sample_name: T.sample_name, sample_seed: T.sample_seed, step: T.index, image_id: m.id, category: m.category,
+    phone: s.phone, camera_zoom: s.zoom, distance_cm: s.distance_cm, test_mode: s.mode, detection: ui.chosen, ...classify(m.category, ui.chosen, fp),
+    scale_mode: s.scaleMode, size_level: st.level, size_level_unit: st.level == null ? null : s.scaleMode === 'monitor' ? 'monitor_px' : 'camera_px',
+    display_scale: +(ui.scale * (window.devicePixelRatio || 1)).toFixed(5), calibration_k: s.k,
+    ...sizes(m, s, adv ? num($('recCamPx').value) : null), analysis_frame_w: s.frame_w, analysis_frame_h: s.frame_h, yolo_input_px: s.yolo_input,
+    target_conf_pct: adv ? num($('recConf').value) : null, fp_count: fp, fp_max_conf_pct: adv ? num($('recFpConf').value) : null,
+    app_conf_threshold_pct: s.app_conf_pct, operator: s.operator || '', recorded_at: new Date().toISOString(), note: adv ? $('recNote').value : '' };
+  R = R.filter(r => !(r.run_id === rec.run_id && r.step === rec.step)); R.push(rec); save('results', R);
+  $('record').classList.add('hidden'); document.activeElement?.blur(); hud();
+  const done = R.filter(r => r.run_id === T.run_id).length;
+  toast(`Сохранено (${done}/${T.order.length}). A — правильный ответ, → — следующее.`);
 }
+// ---------- A: answer, only after the result is saved ----------
 function showAnswer() {
-  if (!T) return; const st = current();
-  if (!ui.recorded && !R.find(r => r.trial_id === T.trial_id && r.step === T.index)) { openRecord(); return; }
-  const m = M.find(x => x.id === st.id);
-  $('answer').innerHTML = `${CAT_NAMES[m.category] || m.category}<br><span style="font-size:16px">${esc(m.label || '')}</span><br><span style="font-size:13px;color:#aaa">${esc(m.author || '')} · ${esc(m.license || '')}</span>`;
+  if (!T) return; const r = recOf(T.index);
+  if (!r) { $('answer').classList.add('hidden'); toast('Ответ скрыт, пока результат не сохранён. Нажмите R.'); return; }
+  const m = byId(r.image_id);
+  $('answer').innerHTML = `${esc(CAT_NAMES[m.category] || m.category)}<br><span style="font-size:18px">Записано: ${DET_NAMES[r.detection]} → ${CLASS_NAMES[r.result_class]}</span>` +
+    `<br><span style="font-size:16px">${esc(m.label || '')}</span><br><span style="font-size:13px;color:#aaa">${esc(m.author || '')} · ${esc(m.license || '')} · ${esc(m.id)}</span>`;
   $('answer').classList.remove('hidden');
 }
-const COLS = ['trial_id', 'step', 'image_id', 'category', 'size_level', 'scale_mode', 'display_scale', 'object_monitor_px', 'object_monitor_mm', 'object_camera_px_expected',
-  'object_camera_px_measured', 'phone', 'camera_zoom', 'distance_cm', 'app_conf_threshold_pct', 'calibration_k', 'outcome', 'target_conf_pct', 'fp_count', 'fp_max_conf_pct', 'operator', 'recorded_at', 'note'];
+
+// ---------- export / summary ----------
+const COLS = ['run_id', 'sample_id', 'sample_name', 'sample_seed', 'step', 'image_id', 'category', 'phone', 'camera_zoom', 'distance_cm', 'test_mode', 'detection', 'result_class', 'false_alarm',
+  'scale_mode', 'size_level', 'size_level_unit', 'display_scale', 'object_monitor_px', 'object_monitor_mm', 'calibration_k', 'object_camera_px_expected', 'object_camera_px_measured',
+  'analysis_frame_w', 'analysis_frame_h', 'yolo_input_px', 'object_yolo_px', 'object_yolo_px_source', 'target_conf_pct', 'fp_count', 'fp_max_conf_pct', 'app_conf_threshold_pct',
+  'operator', 'recorded_at', 'note'];
 function csv() { const q = v => v == null ? '' : /[",\n;]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
-  return [COLS.join(',')].concat(R.map(r => COLS.map(c => q(r[c])).join(','))).join('\n') + '\n'; }
+  const rows = R.slice().sort((a, b) => a.run_id < b.run_id ? -1 : a.run_id > b.run_id ? 1 : a.step - b.step);
+  return [COLS.join(',')].concat(rows.map(r => COLS.map(c => q(r[c])).join(','))).join('\n') + '\n'; }
+function sessionJson() { return JSON.stringify({ format: FORMAT, exported: new Date().toISOString(), manifest_version: window.MANIFEST && window.MANIFEST.version,
+  manifest_sha256: window.MANIFEST_SHA256 || null, sample: SAMPLE, runs: RUNS, trial: T, settings: S, results: R }, null, 1); }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
 function summary() {
-  const by = {}; R.forEach(r => { const k = r.category + ' / ' + r.camera_zoom; const b = by[k] = by[k] || { n: 0, hit: 0, fp_frames: 0, fp: 0 };
-    b.n++; b.hit += r.outcome === 'hit'; b.fp_frames += r.fp_count > 0; b.fp += r.fp_count; });
-  const rows = Object.entries(by).map(([k, b]) => `<tr><td>${k}</td><td>${b.n}</td><td>${b.hit}</td><td>${b.fp_frames}</td><td>${b.fp}</td></tr>`).join('');
-  $('summary').innerHTML = `<p>Записей: ${R.length}${T ? ` · текущее испытание ${T.trial_id}, показ ${T.index + 1}/${T.order.length}` : ''}</p>` +
-    (rows ? `<table><tr><th>категория / камера</th><th>показов</th><th>обнаружено</th><th>кадров с ложными</th><th>ложных рамок</th></tr>${rows}</table>` : '');
+  const rows = RUNS.map(run => { const rr = R.filter(r => r.run_id === run.run_id), c = k => rr.filter(r => r.result_class === k).length;
+    return `<tr><td>${esc(run.run_id)}</td><td>${esc(run.sample_name)} (${run.sample_id})</td><td>${esc(run.phone)}</td><td>${run.zoom}</td><td>${run.distance_cm ?? '—'}</td><td>${run.mode === 'quick' ? 'быстрый' : 'расширенный'}</td>` +
+      `<td>${rr.length}/${run.shows}</td><td>${c('TP')}</td><td>${c('FN')}</td><td>${c('FP')}</td><td>${c('TN')}</td></tr>`; }).join('');
+  $('summary').innerHTML = (T ? `<p>Текущий прогон: ${esc(T.run_id)}, показ ${T.index + 1}/${T.order.length}</p>` : '') +
+    (rows ? `<table><tr><th>прогон</th><th>выборка</th><th>телефон</th><th>зум</th><th>см</th><th>режим</th><th>записано</th><th>TP</th><th>FN</th><th>FP</th><th>TN</th></tr>${rows}</table>` : '<p class="muted">Прогонов ещё нет.</p>');
+  $('start').textContent = SAMPLE ? `Начать прогон: ${SAMPLE.name}, ${$('zoom').value === '5x' ? '5×' : '1×'}` : 'Начать прогон';
 }
-function openSettings() { closeOverlays(); writeSettings(); summary(); stage.className = ''; $('settings').classList.remove('hidden'); }
+function openSettings() { closeOverlays(); writeSettings(); sampleInfo(); summary(); stage.className = ''; $('settings').classList.remove('hidden'); }
 function calib() {
   closeOverlays(); $('settings').classList.add('hidden'); const dpr = window.devicePixelRatio || 1;
   $('calibgrid').innerHTML = [512, 256, 128, 64, 32, 16].map(p => `<div class="sq" style="width:${p / dpr}px;height:${p / dpr}px"><span>${p} px</span></div>`).join('');
   $('dpr').textContent = `devicePixelRatio = ${dpr}; окно ${Math.round(innerWidth * dpr)}×${Math.round(innerHeight * dpr)} px монитора` + (Math.round(innerWidth * dpr) < 3800 ? ' — окно меньше 4K: проверьте полноэкранный режим (F)' : '');
   $('calib').classList.remove('hidden');
 }
+
+// ---------- keyboard ----------
 document.addEventListener('keydown', e => {
-  if (!$('record').classList.contains('hidden')) { if (e.key === 'Enter') { e.preventDefault(); saveRecord(); } else if (e.key === 'Escape') { $('record').classList.add('hidden'); document.activeElement?.blur(); } return; }
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') { if (e.key === 'Escape') e.target.blur(); return; }
-  const k = e.key.toLowerCase();
-  if (!$('calib').classList.contains('hidden')) { if (k === 'c' || k === 'escape') { closeOverlays(); openSettings(); } return; }
+  const k = e.key.toLowerCase(), inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT';
+  if (!$('record').classList.contains('hidden')) {
+    if (k === 'escape') { $('record').classList.add('hidden'); document.activeElement?.blur(); }
+    else if (k === 'enter') { e.preventDefault(); saveRecord(); }
+    else if (!inInput && ['1', '2', '3'].includes(k)) { e.preventDefault(); choose(['box_on_object', 'box_elsewhere', 'no_box'][+k - 1]); }
+    return;
+  }
+  if (inInput) { if (k === 'escape') e.target.blur(); return; }
+  if (!$('calib').classList.contains('hidden')) { if (k === 'c' || k === 'с' || k === 'escape') { closeOverlays(); openSettings(); } return; }
   if (!$('settings').classList.contains('hidden')) { if (k === 'escape' && T) show(); else if (k === 'c' || k === 'с') calib(); else if (k === 'f' || k === 'а') fs(); return; }
   if (k === 'arrowright' || k === ' ' || k === 'pagedown') { e.preventDefault(); go(1); }
   else if (k === 'arrowleft' || k === 'pageup') go(-1);
@@ -277,24 +388,39 @@ document.addEventListener('keydown', e => {
 });
 function fs() { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); }
 addEventListener('resize', () => { if (T && $('settings').classList.contains('hidden')) show(); });
-$('start').onclick = newTrial;
-$('resume').onclick = () => { if (T) { ui.manual = 1; show(); } else alert('Нет сохранённого испытания'); };
+
+// ---------- buttons ----------
+document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { document.body.classList.toggle('quick', isQuick()); readSettings(); });
+$('zoom').onchange = () => { readSettings(); summary(); };
+$('presetPilot').onclick = () => { if (setSample(makeSample(PILOT.counts, PILOT.seed, PILOT.name))) { readSettings(); summary(); } };
+$('presetAll').onclick = () => { const c = {}; CATS.forEach(x => c[x] = M.filter(m => m.category === x).length); if (setSample(makeSample(c, parseInt($('seed').value) || 0, 'Все 90 фото'))) summary(); };
+$('makeSample').onclick = () => { if (setSample(makeSample(readCounts(), parseInt($('seed').value) || 0))) summary(); };
+document.querySelectorAll('.det').forEach(b => b.onclick = () => choose(b.dataset.det));
+$('recSave').onclick = saveRecord;
+$('recCancel').onclick = () => { $('record').classList.add('hidden'); document.activeElement?.blur(); };
+$('start').onclick = startRun;
+$('resume').onclick = () => { if (T) { ui.manual = 1; show(); } else alert('Нет сохранённого прогона'); };
 $('calibBtn').onclick = calib;
 $('calibApply').onclick = () => { const v = parseFloat($('calibMeasured').value); if (!(v > 0)) return; const k = v / 256; $('k').value = k.toFixed(4); readSettings();
   $('calibOut').textContent = `k = ${k.toFixed(4)} px кадра на 1 px монитора; объект 16 px в кадре = ${(16 / k).toFixed(0)} px монитора`; };
 $('exportCsv').onclick = () => download(`dronecv66_results_${Date.now()}.csv`, csv(), 'text/csv');
-$('exportJson').onclick = () => download(`dronecv66_session_${Date.now()}.json`, JSON.stringify({ format: 'dronecv66-session-1', manifest_version: window.MANIFEST.version, trial: T, settings: S, results: R }, null, 1), 'application/json');
-$('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { const d = JSON.parse(t);
-  if (d.format !== 'dronecv66-session-1') { alert('Неизвестный формат'); return; }
-  if (d.trial) { T = Object.assign(d.trial, { index: 0 }); save('trial', T); S = d.trial.settings; save('settings', S); writeSettings(); }
-  if (Array.isArray(d.results) && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.trial_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r)))); save('results', R); }
-  summary(); }); };
-$('clear').onclick = () => { if (confirm('Удалить все сохранённые результаты? Сначала экспортируйте CSV/JSON.')) { R = []; save('results', R); summary(); } };
-// init
+$('exportJson').onclick = () => download(`dronecv66_session_${Date.now()}.json`, sessionJson(), 'application/json');
+$('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { let d; try { d = JSON.parse(t); } catch (x) { alert('Файл не JSON'); return; }
+  if (d.format !== FORMAT) { alert('Неизвестный формат (нужен ' + FORMAT + ')'); return; }
+  if (d.sample && Array.isArray(d.sample.ids) && d.sample.ids.every(byId)) { SAMPLE = d.sample; save('sample', SAMPLE); writeCounts(SAMPLE.counts); $('seed').value = SAMPLE.seed; }
+  if (d.trial) { T = d.trial; save('trial', T); }
+  if (Array.isArray(d.runs)) { const have = new Set(RUNS.map(r => r.run_id)); RUNS = RUNS.concat(d.runs.filter(r => !have.has(r.run_id))); save('runs', RUNS); }
+  if (Array.isArray(d.results) && d.results.length && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.run_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r)))); save('results', R); }
+  sampleInfo(); summary(); e.target.value = ''; }); };
+$('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); summary(); sampleInfo(); } };
+const LEGACY = localStorage.getItem('dronecv66.results');
+if (LEGACY && LEGACY !== '[]') { $('legacy').classList.remove('hidden'); $('legacy').onclick = () => download(`dronecv66_v1_results_${Date.now()}.json`, LEGACY, 'application/json'); }
+
+// ---------- init ----------
 if (!M.length) $('status').textContent = 'manifest.js не найден: запустите python3 fetch_images.py (скачает изображения и создаст manifest.js).';
-buildCats(); writeSettings(); summary();
+buildCats(); writeSettings(); sampleInfo(); summary();
 (function probe() { let missing = 0, done = 0; M.forEach(m => { const t = new Image(); t.onload = () => { ui.available[m.id] = true; fin(); }; t.onerror = () => { ui.available[m.id] = false; missing++; fin(); }; t.src = m.file; });
-  function fin() { if (++done === M.length) $('status').textContent = missing ? `Не найдено файлов: ${missing} из ${M.length}. Запустите: python3 fetch_images.py` : `Изображений: ${M.length}, все файлы на месте.`; } })();
+  function fin() { if (++done === M.length) { $('status').textContent = missing ? `Не найдено файлов: ${missing} из ${M.length}. Запустите: python3 fetch_images.py` : `Изображений: ${M.length}, все файлы на месте.`; sampleInfo(); } } })();
 </script>
 </body>
 </html>
