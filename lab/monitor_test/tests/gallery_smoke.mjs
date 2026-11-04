@@ -10,74 +10,162 @@ const dir = path.resolve(process.argv[2] || '.');
 const exe = process.env.CHROMIUM || execSync('command -v chromium || command -v chromium-browser').toString().trim();
 const ok = (c, msg) => { if (!c) { console.error('FAIL: ' + msg); process.exit(1); } console.log('ok - ' + msg); };
 const browser = await chromium.launch({ executablePath: exe, args: ['--allow-file-access-from-files'] });
-const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2, acceptDownloads: true }); // = 3840x2160 monitor px
-const page = await ctx.newPage();
-const dialogs = []; page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
-await page.goto('file://' + path.join(dir, 'gallery.html'));
-await page.waitForFunction(() => /все файлы на месте|Изображений: \d+/.test(document.getElementById('status').textContent), null, { timeout: 60000 });
-const status = await page.textContent('#status');
-ok(/Изображений: 90/.test(status), 'manifest loaded, all 90 files present: ' + status.slice(0, 60));
-ok(await page.locator('.cat').count() === 6, '6 category filters');
-// filter: only civil quadcopters + negatives; monitor mode 32 px; sequential
-for (const c of ['military_uav', 'uav_payload', 'bird', 'aircraft']) await page.uncheck(`.cat[value=${c}]`);
-await page.check('input[name=order][value=sequential]');
-await page.selectOption('#scaleMode', 'monitor'); await page.fill('#sizes', '32');
+const URL_ = 'file://' + path.join(dir, 'gallery.html');
+const PILOT = { civil_quadcopter: 5, military_uav: 5, uav_payload: 3, bird: 3, aircraft: 2, negative: 2 };
+
+async function open(ctx) {
+  const page = await ctx.newPage();
+  page.dialogs = []; page.on('dialog', d => { page.dialogs.push(d.message()); d.accept(); });
+  page.net = []; page.on('request', r => { if (!r.url().startsWith('file:') && !r.url().startsWith('blob:') && !r.url().startsWith('data:')) page.net.push(r.url()); });
+  await page.goto(URL_);
+  await page.waitForFunction(() => /Изображений: \d+|Не найдено/.test(document.getElementById('status').textContent), null, { timeout: 60000 });
+  return page;
+}
+const newCtx = () => browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2, acceptDownloads: true }); // = 3840x2160 monitor px
+const LSK = 'dronecv66v2.';
+const ls = (page, k) => page.evaluate(k => JSON.parse(localStorage.getItem(k)), LSK + k);
+const visibleText = page => page.evaluate(() => document.body.innerText);
+async function dl(page, sel) { const [d] = await Promise.all([page.waitForEvent('download'), page.click(sel)]); return fs.readFileSync(await d.path(), 'utf8'); }
+
+const ctx = await newCtx();
+let page = await open(ctx);
+ok(/Изображений: 90/.test(await page.textContent('#status')), 'manifest loaded, all 90 files present');
+ok(await page.locator('.catn').count() === 6, '6 per-category count inputs');
+ok(await page.isHidden('fieldset.adv') && await page.isHidden('#calibBtn'), 'quick mode by default: advanced parameters hidden');
+const catNames = await page.evaluate(() => Object.values(window.MANIFEST.categories));
+
+// ---- pilot preset: fixed sample 5/5/3/3/2/2 ----
+await page.click('#presetPilot');
+const smp = await ls(page, 'sample');
+const cats = await page.evaluate(ids => ids.map(id => window.MANIFEST.images.find(m => m.id === id).category), smp.ids);
+const cnt = {}; cats.forEach(c => cnt[c] = (cnt[c] || 0) + 1);
+ok(smp.ids.length === 20 && JSON.stringify(cnt, Object.keys(PILOT).sort()) === JSON.stringify(PILOT, Object.keys(PILOT).sort()) && new Set(smp.ids).size === 20, 'pilot preset: 20 unique images, 5/5/3/3/2/2 by category');
+ok(/Пилот — 20 фото/.test(await page.textContent('#sampleInfo')) && !(await page.textContent('#sampleInfo')).includes(smp.ids[0]), 'sample info shown without image ids');
+// custom counts
+await page.fill('.catn[data-cat=civil_quadcopter]', '2'); for (const c of ['military_uav', 'uav_payload', 'bird', 'aircraft']) await page.fill(`.catn[data-cat=${c}]`, '0');
+await page.fill('.catn[data-cat=negative]', '1'); await page.fill('#seed', '5'); await page.click('#makeSample');
+const custom = await ls(page, 'sample');
+ok(custom.ids.length === 3 && custom.ids.filter(i => i.startsWith('civ')).length === 2 && custom.ids.filter(i => i.startsWith('neg')).length === 1, 'custom counts 2/0/0/0/0/1 -> 3 images of those categories');
+await page.click('#presetPilot');
+ok(JSON.stringify((await ls(page, 'sample')).ids) === JSON.stringify(smp.ids), 'pilot preset is deterministic (same ids again)');
+ok(smp.sample_id === 'S0d95e824', 'pilot sample code is the documented S0d95e824 (' + smp.sample_id + ')');
+// determinism across computers: fresh browser profile
+{ const c2 = await newCtx(); const p2 = await open(c2); await p2.click('#presetPilot');
+  ok(JSON.stringify((await ls(p2, 'sample')).ids) === JSON.stringify(smp.ids), 'pilot preset gives the same 20 images in a fresh browser profile'); await p2.close(); await c2.close(); }
+await page.reload(); await page.waitForFunction(() => /Изображений/.test(document.getElementById('status').textContent));
+ok(JSON.stringify((await ls(page, 'sample')).ids) === JSON.stringify(smp.ids) && /Пилот/.test(await page.textContent('#sampleInfo')), 'sample persists after reload');
+
+// ---- quick run 1x ----
+await page.fill('#phone', 'Xiaomi 17T Pro'); await page.selectOption('#zoom', '1x'); await page.fill('#distance', '120');
 await page.click('#start');
-ok(await page.isHidden('#settings'), 'clean mode: settings hidden');
-ok(await page.isHidden('#hud') && await page.isHidden('#answer'), 'clean mode: no captions/answers');
-const order = await page.evaluate(() => JSON.parse(localStorage.getItem('dronecv66.trial')).order);
-ok(order.length === 30 && order.every(o => /^(civ|neg)\d\d$/.test(o.id)), 'filter applied: 20 civil + 10 negative');
-const sz = await page.evaluate(() => { const m = window.MANIFEST.images.find(x => x.id === JSON.parse(localStorage.getItem('dronecv66.trial')).order[0].id);
-  const img = document.getElementById('img'); const b = m.object_bbox; const side = Math.max(b[2] - b[0], b[3] - b[1]);
-  const r = img.getBoundingClientRect(); const cx = r.left + (b[0] + b[2]) / 2 * r.width / m.width, cy = r.top + (b[1] + b[3]) / 2 * r.height / m.height;
-  return { px: side * r.width / m.width * devicePixelRatio, cx, cy }; });
-ok(Math.abs(sz.px - 32) < 0.5, `object scaled to 32 monitor px (${sz.px.toFixed(2)})`);
-ok(Math.abs(sz.cx - 960) < 1 && Math.abs(sz.cy - 540) < 1, 'object centred');
-// record + answer
+ok(await page.isHidden('#settings') && await page.isHidden('#hud') && await page.isHidden('#answer'), 'clean display: no settings, captions or answers');
+const run1 = await ls(page, 'trial');
+ok(JSON.stringify(run1.order.map(o => o.id)) === JSON.stringify(smp.ids) && run1.settings.mode === 'quick', 'run uses exactly the saved sample ids/order');
+{ const c = await page.evaluate(() => { const t = JSON.parse(localStorage.getItem('dronecv66v2.trial')); const id = t.order.find(o => !o.id.startsWith('neg')).id;
+    return id; }); const i = run1.order.findIndex(o => o.id === c);
+  for (let n = 0; n < i; n++) await page.keyboard.press('ArrowRight');
+  const q = await page.evaluate(id => { const m = window.MANIFEST.images.find(x => x.id === id), r = document.getElementById('img').getBoundingClientRect(), b = m.object_bbox;
+    return { cx: r.left + (b[0] + b[2]) / 2 * r.width / m.width, cy: r.top + (b[1] + b[3]) / 2 * r.height / m.height, s: r.width / m.width, fit: Math.min(innerWidth / m.width, innerHeight / m.height) }; }, c);
+  ok(Math.abs(q.cx - 960) < 1 && Math.abs(q.cy - 540) < 1 && Math.abs(q.s - q.fit) < 1e-6, 'quick mode: fit scale, object centred on screen (for 5x)');
+  for (let n = 0; n < i; n++) await page.keyboard.press('ArrowLeft'); }
+const noLeak = async what => { const t = await visibleText(page); const id = (await ls(page, 'trial')).order[(await ls(page, 'trial')).index].id;
+  return !catNames.some(n => t.includes(n)) && !t.includes(id) ? true : (console.error(what, t), false); };
+ok(await noLeak('display'), 'no category name / image id on screen during display');
+// A before R: no answer, no record dialog
 await page.keyboard.press('a');
-ok(await page.isVisible('#record') && await page.isHidden('#answer'), 'A before recording opens the record form, not the answer');
-await page.check('input[name=out][value=hit]'); await page.fill('#recConf', '55'); await page.keyboard.press('Enter');
+ok(await page.isHidden('#answer') && await page.isHidden('#record') && /скрыт/.test(await page.textContent('#toast')), 'A before saving shows only a hint, not the answer or the form');
+// R: record form without answer
+await page.keyboard.press('r');
+ok(await page.isVisible('#record') && await page.isVisible('.det[data-det=box_on_object]') && await page.isHidden('#recConf') && await page.isHidden('#recCamPx'), 'R opens quick record form (3 choices, no size/confidence inputs)');
+ok(await noLeak('record'), 'record form does not reveal the answer');
+await page.keyboard.press('1');
+ok(await page.isHidden('#record'), 'quick mode: key 1 saves immediately');
+let r0 = (await ls(page, 'results'))[0];
+ok(r0.detection === 'box_on_object' && r0.object_camera_px_measured === null && r0.object_yolo_px === null && r0.object_camera_px_expected === null && r0.fp_count === null && r0.target_conf_pct === null,
+  'unmeasured values saved as null (camera px, YOLO px, fp, confidence)');
+ok(r0.camera_zoom === '1x' && r0.distance_cm === 120 && r0.phone === 'Xiaomi 17T Pro' && r0.sample_id === smp.sample_id, 'record has phone, zoom, distance, sample id');
+ok(r0.category.startsWith('negative') ? r0.object_monitor_px === null : r0.object_monitor_px > 0, 'object size in monitor px computed by gallery');
 await page.keyboard.press('a');
-ok(await page.isVisible('#answer') && /Гражданский/.test(await page.textContent('#answer')), 'answer shown after recording');
-await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
-await page.keyboard.press('i'); ok(/^3\/30/.test(await page.textContent('#hud')), 'arrow keys + HUD (I)');
-// zoom keys change scale
-await page.waitForTimeout(300); const w0 = await page.evaluate(() => document.getElementById('img').getBoundingClientRect().width);
-await page.waitForTimeout(300); await page.keyboard.press('+'); await page.waitForTimeout(300); const w1 = await page.evaluate(() => document.getElementById('img').getBoundingClientRect().width);
-await page.keyboard.press('0'); await page.waitForTimeout(300); const w2 = await page.evaluate(() => document.getElementById('img').getBoundingClientRect().width);
-ok(w1 > w0 * 1.09 && Math.abs(w2 - w0) < 0.5, '+ / 0 zoom');
-// negative: 'hit' rejected
-const negIdx = order.findIndex(o => o.id.startsWith('neg'));
-await page.evaluate(i => { const t = JSON.parse(localStorage.getItem('dronecv66.trial')); t.index = i; localStorage.setItem('dronecv66.trial', JSON.stringify(t)); }, negIdx);
-await page.reload(); await page.click('#resume');
-ok(await page.evaluate(() => JSON.parse(localStorage.getItem('dronecv66.trial')).index) === negIdx, 'order and position persist after reload');
-await page.keyboard.press('r'); await page.check('input[name=out][value=hit]'); await page.keyboard.press('Enter');
-ok(dialogs.length === 1 && await page.isVisible('#record'), 'hit on a negative is rejected');
-await page.check('input[name=out][value=none]'); await page.fill('#recFp', '2'); await page.fill('#recFpConf', '31'); await page.keyboard.press('Enter');
-// export
+ok(await page.isVisible('#answer') && (await page.textContent('#answer')).includes(await page.evaluate(c => window.MANIFEST.categories[c], r0.category)), 'A after saving shows the correct category');
+await page.keyboard.press('ArrowRight');
+ok(await page.isHidden('#answer'), 'answer hidden on the next image');
+// record the remaining 19 with "3" (no boxes) — operator choices, not real CV results
+for (let i = 1; i < 20; i++) { await page.keyboard.press('r'); await page.keyboard.press('3'); if (i < 19) await page.keyboard.press('ArrowRight'); }
+await page.keyboard.press('ArrowRight');
+ok(/Последнее изображение\. Записано 20 из 20/.test(await page.textContent('#toast')), 'end of run reported');
+const res1 = await ls(page, 'results');
+ok(res1.length === 20 && res1.every(r => ['TP', 'FN', 'FP', 'TN'].includes(r.result_class)) &&
+   res1.filter(r => r.step > 0 && !['civil_quadcopter', 'military_uav', 'uav_payload'].includes(r.category)).every(r => r.result_class === 'TN') &&
+   res1.filter(r => r.step > 0 && ['civil_quadcopter', 'military_uav', 'uav_payload'].includes(r.category)).every(r => r.result_class === 'FN') &&
+   res1[0].result_class === (['civil_quadcopter', 'military_uav', 'uav_payload'].includes(res1[0].category) ? 'TP' : 'FP'), 'result classes derived after recording (TP/FN/FP/TN)');
+// re-record overwrites (no duplicates)
+await page.keyboard.press('r'); await page.keyboard.press('2');
+ok((await ls(page, 'results')).length === 20, 're-recording a show replaces the previous record');
+// persistence
+await page.reload(); await page.waitForFunction(() => /Изображений/.test(document.getElementById('status').textContent)); await page.click('#resume');
+ok((await ls(page, 'trial')).index === 19 && (await ls(page, 'results')).length === 20, 'run position and results persist after reload');
+
+// ---- repeat same sample with 5x ----
+await page.keyboard.press('s'); await page.selectOption('#zoom', '5x');
+ok(/Пилот — 20 фото, 5×/.test(await page.textContent('#start')), 'start button names the sample and zoom');
+await page.click('#start');
+const run2 = await ls(page, 'trial');
+ok(run2.run_id !== run1.run_id && JSON.stringify(run2.order.map(o => o.id)) === JSON.stringify(run1.order.map(o => o.id)) && run2.settings.zoom === '5x', '5x run shows exactly the same images in the same order');
+await page.keyboard.press('r'); await page.keyboard.press('3'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('r'); await page.keyboard.press('1');
+
+// ---- export ----
 await page.keyboard.press('s');
-const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#exportCsv')]);
-const csv = fs.readFileSync(await dl.path(), 'utf8').trim().split('\n');
-ok(csv.length === 3 && csv[0].startsWith('trial_id,step,image_id') && csv[0] === fs.readFileSync(path.join(dir, 'results_template.csv'), 'utf8').trim(), 'CSV export matches results_template.csv');
-const [dj] = await Promise.all([page.waitForEvent('download'), page.click('#exportJson')]);
-const js = JSON.parse(fs.readFileSync(await dj.path(), 'utf8'));
-ok(js.format === 'dronecv66-session-1' && js.results.length === 2 && js.results.some(r => r.fp_count === 2 && r.fp_max_conf_pct === 31), 'JSON export');
-// random order reproducible by seed
-await page.check('input[name=order][value=random]'); await page.fill('#seed', '7'); await page.click('#start');
-const o1 = await page.evaluate(() => JSON.parse(localStorage.getItem('dronecv66.trial')).order.map(o => o.id).join());
-await page.keyboard.press('s'); await page.click('#start');
-const o2 = await page.evaluate(() => JSON.parse(localStorage.getItem('dronecv66.trial')).order.map(o => o.id).join());
-ok(o1 === o2 && o1 !== order.map(o => o.id).join(), 'seeded random order is reproducible');
-// calibration squares in monitor px
+ok((await page.locator('#summary tr').count()) === 3, 'summary lists both runs');
+const csv = (await dl(page, '#exportCsv')).trim().split('\n');
+const head = csv[0].split(',');
+ok(csv[0] === fs.readFileSync(path.join(dir, 'results_template.csv'), 'utf8').trim() && csv.length === 23, 'CSV header = results_template.csv, 22 rows');
+const rows = csv.slice(1).map(l => Object.fromEntries(l.split(',').map((v, i) => [head[i], v])));
+const z1 = rows.filter(r => r.camera_zoom === '1x').map(r => r.image_id), z5 = rows.filter(r => r.camera_zoom === '5x').map(r => r.image_id);
+ok(z1.length === 20 && z5.length === 2 && z5.every((id, i) => id === z1[i]), 'CSV: 1x and 5x rows refer to the same images');
+ok(rows.every(r => r.object_yolo_px === '' && r.object_camera_px_measured === '' && r.fp_count === ''), 'CSV: unmeasured values are empty (null), not invented');
+const js = JSON.parse(await dl(page, '#exportJson'));
+ok(js.format === 'dronecv66-session-2' && JSON.stringify(js.sample.ids) === JSON.stringify(smp.ids) && js.runs.length === 2 && js.results.length === 22, 'JSON export: sample ids, 2 runs, 22 results');
+fs.writeFileSync('/tmp/dronecv66_session.json', JSON.stringify(js));
+{ const c3 = await newCtx(); const p3 = await open(c3); await p3.setInputFiles('#importJson', '/tmp/dronecv66_session.json'); await p3.waitForTimeout(500);
+  ok(JSON.stringify((await ls(p3, 'sample')).ids) === JSON.stringify(smp.ids) && (await ls(p3, 'results')).length === 22, 'JSON import restores sample and results on another computer'); await p3.close(); await c3.close(); }
+
+// ---- advanced mode: sizes in three units ----
+await page.check('input[name=mode][value=advanced]');
+ok(await page.isVisible('fieldset.adv'), 'advanced mode shows extra parameters');
+await page.fill('.catn[data-cat=civil_quadcopter]', '3'); for (const c of ['military_uav', 'uav_payload', 'bird', 'aircraft', 'negative']) await page.fill(`.catn[data-cat=${c}]`, '0');
+await page.fill('#seed', '1'); await page.click('#makeSample');
+await page.selectOption('#scaleMode', 'monitor'); await page.fill('#sizes', '32'); await page.check('#center'); await page.click('#start');
+await page.waitForFunction(() => { const i = document.getElementById('img'); return i.complete && i.naturalWidth && !i.style.visibility; });
+const sz = await page.evaluate(() => { const t = JSON.parse(localStorage.getItem('dronecv66v2.trial')); const m = window.MANIFEST.images.find(x => x.id === t.order[0].id);
+  const r = document.getElementById('img').getBoundingClientRect(), b = m.object_bbox;
+  return { px: Math.max(b[2] - b[0], b[3] - b[1]) * r.width / m.width * devicePixelRatio, cx: r.left + (b[0] + b[2]) / 2 * r.width / m.width, cy: r.top + (b[1] + b[3]) / 2 * r.height / m.height }; });
+ok(Math.abs(sz.px - 32) < 0.5 && Math.abs(sz.cx - 960) < 1 && Math.abs(sz.cy - 540) < 1, `monitor mode: object 32 monitor px, centred (${sz.px.toFixed(2)})`);
+await page.keyboard.press('r');
+ok(await page.isVisible('#recConf') && await page.isVisible('#recCamPx'), 'advanced record form has optional confidence / measured size');
+await page.keyboard.press('1'); ok(await page.isVisible('#record'), 'advanced: choice does not close the form');
+await page.fill('#recConf', '55'); await page.keyboard.press('Enter');
+let ra = (await ls(page, 'results')).find(r => r.test_mode === 'advanced');
+ok(ra.target_conf_pct === 55 && ra.size_level === 32 && ra.size_level_unit === 'monitor_px' && Math.abs(ra.object_monitor_px - 32) < 0.2 && ra.object_camera_px_expected === null && ra.object_yolo_px === null,
+  'advanced, no calibration: monitor px recorded, camera/YOLO px null');
+// calibration and camera-px mode
 await page.keyboard.press('s'); await page.keyboard.press('c');
 const sq = await page.evaluate(() => [...document.querySelectorAll('#calibgrid .sq')].map(e => e.getBoundingClientRect().width * devicePixelRatio));
 ok(sq.length === 6 && Math.abs(sq[0] - 512) < 0.5 && Math.abs(sq[5] - 16) < 0.5, 'calibration squares 512..16 monitor px');
 await page.fill('#calibMeasured', '64'); await page.click('#calibApply');
 ok(Math.abs(parseFloat(await page.inputValue('#k')) - 0.25) < 1e-6, 'calibration k = measured/256');
 await page.keyboard.press('c'); await page.selectOption('#scaleMode', 'camera'); await page.fill('#sizes', '16'); await page.click('#start');
-const cam = await page.evaluate(() => { const st = JSON.parse(localStorage.getItem('dronecv66.trial')); const m = window.MANIFEST.images.find(x => x.id === st.order[0].id);
-  const r = document.getElementById('img').getBoundingClientRect(); const b = m.object_bbox; return Math.max(b[2] - b[0], b[3] - b[1]) * r.width / m.width * devicePixelRatio; });
+await page.waitForFunction(() => { const i = document.getElementById('img'); return i.complete && i.naturalWidth && !i.style.visibility; });
+const cam = await page.evaluate(() => { const t = JSON.parse(localStorage.getItem('dronecv66v2.trial')); const m = window.MANIFEST.images.find(x => x.id === t.order[0].id);
+  const r = document.getElementById('img').getBoundingClientRect(), b = m.object_bbox; return Math.max(b[2] - b[0], b[3] - b[1]) * r.width / m.width * devicePixelRatio; });
 ok(Math.abs(cam - 64) < 0.5, `camera mode: 16 px in frame / k 0.25 = 64 monitor px (${cam.toFixed(2)})`);
-if (process.env.SHOT) { await page.keyboard.press('r'); await page.screenshot({ path: process.env.SHOT + '_record.png' }); await page.keyboard.press('Escape');
-  await page.keyboard.press('s'); await page.screenshot({ path: process.env.SHOT + '_settings.png' }); }
-await page.close(); await browser.close(); process.exit(0);
+await page.keyboard.press('r'); await page.keyboard.press('1'); await page.keyboard.press('Enter');
+await page.keyboard.press('ArrowRight'); await page.keyboard.press('r'); await page.keyboard.press('2'); await page.fill('#recCamPx', '20'); await page.keyboard.press('Enter');
+const adv = (await ls(page, 'results')).filter(r => r.size_level_unit === 'camera_px');
+ok(Math.abs(adv[0].object_camera_px_expected - 16) < 0.2 && Math.abs(adv[0].object_yolo_px - 16) < 0.2 && adv[0].object_yolo_px_source === 'calibration', 'calibrated: camera px 16 -> YOLO px 16 (640x480 frame, 640 input)');
+ok(adv[1].object_camera_px_measured === 20 && adv[1].object_yolo_px === 20 && adv[1].object_yolo_px_source === 'measured', 'measured camera px used for YOLO px');
+ok(new Set((await ls(page, 'runs')).map(r => r.run_id)).size === (await ls(page, 'runs')).length, 'run ids are unique even when started within one second');
+ok(page.net.length === 0, 'no network requests (offline): ' + page.net.slice(0, 3).join(' '));
+ok(page.dialogs.length === 1 && /Заменить текущую выборку/.test(page.dialogs[0]), 'only dialog: confirmation before replacing a sample that has results: ' + page.dialogs.join(' | '));
+if (process.env.SHOT) { await page.keyboard.press('s'); await page.check('input[name=mode][value=quick]'); await page.screenshot({ path: process.env.SHOT + '_settings.png' });
+  await page.click('#presetPilot'); await page.click('#start'); await page.keyboard.press('r'); await page.screenshot({ path: process.env.SHOT + '_record.png' }); }
+await page.close(); await ctx.close(); await browser.close(); process.exit(0);
