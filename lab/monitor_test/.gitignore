@@ -1,0 +1,6 @@
+images/
+manifest.js
+*.part
+*.sha256-mismatch
+__pycache__/
+.pytest_cache/
