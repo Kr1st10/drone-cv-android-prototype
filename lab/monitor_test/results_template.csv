@@ -1,0 +1,1 @@
+trial_id,step,image_id,category,size_level,scale_mode,display_scale,object_monitor_px,object_monitor_mm,object_camera_px_expected,object_camera_px_measured,phone,camera_zoom,distance_cm,app_conf_threshold_pct,calibration_k,outcome,target_conf_pct,fp_count,fp_max_conf_pct,operator,recorded_at,note
