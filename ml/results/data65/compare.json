@@ -1,0 +1,541 @@
+{
+ "note": "values are [baseline, candidate]; CI = paired scene bootstrap of candidate-baseline",
+ "results": {
+  "antiuav300/validation@0.25": {
+   "scenes": 12,
+   "gt": 919,
+   "neg_frames": 66,
+   "small_lt16_gt": 42,
+   "recall_iou0.3": [
+    0.6257,
+    0.9358
+   ],
+   "delta_recall_ci95": [
+    0.1539,
+    0.5
+   ],
+   "response": [
+    0.63,
+    0.9543
+   ],
+   "delta_response_ci95": [
+    0.1563,
+    0.526
+   ],
+   "neg_fp_frame_share": [
+    0.0909,
+    0.303
+   ],
+   "delta_neg_fp_ci95": [
+    0.0,
+    0.3178
+   ],
+   "small_lt16_recall_iou0.3": [
+    0.0,
+    0.6667
+   ],
+   "delta_small_recall_ci95": [
+    0.5,
+    1.0
+   ]
+  },
+  "antiuav300/validation@0.5": {
+   "scenes": 12,
+   "gt": 919,
+   "neg_frames": 66,
+   "small_lt16_gt": 42,
+   "recall_iou0.3": [
+    0.5452,
+    0.8683
+   ],
+   "delta_recall_ci95": [
+    0.1797,
+    0.4965
+   ],
+   "response": [
+    0.5484,
+    0.8792
+   ],
+   "delta_response_ci95": [
+    0.1823,
+    0.5067
+   ],
+   "neg_fp_frame_share": [
+    0.0152,
+    0.197
+   ],
+   "delta_neg_fp_ci95": [
+    0.0,
+    0.3958
+   ],
+   "small_lt16_recall_iou0.3": [
+    0.0,
+    0.3095
+   ],
+   "delta_small_recall_ci95": [
+    0.0,
+    0.3243
+   ]
+  },
+  "dut/eval_only@0.25": {
+   "scenes": 45,
+   "gt": 600,
+   "neg_frames": 0,
+   "small_lt16_gt": 563,
+   "recall_iou0.3": [
+    0.5133,
+    0.4833
+   ],
+   "delta_recall_ci95": [
+    -0.085,
+    0.0159
+   ],
+   "response": [
+    0.54,
+    0.575
+   ],
+   "delta_response_ci95": [
+    0.0044,
+    0.0665
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    0.5133,
+    0.4831
+   ],
+   "delta_small_recall_ci95": [
+    -0.0878,
+    0.0194
+   ]
+  },
+  "dut/eval_only@0.5": {
+   "scenes": 45,
+   "gt": 600,
+   "neg_frames": 0,
+   "small_lt16_gt": 563,
+   "recall_iou0.3": [
+    0.4583,
+    0.3267
+   ],
+   "delta_recall_ci95": [
+    -0.2068,
+    -0.0639
+   ],
+   "response": [
+    0.4767,
+    0.3917
+   ],
+   "delta_response_ci95": [
+    -0.1436,
+    -0.0274
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    0.46,
+    0.3321
+   ],
+   "delta_small_recall_ci95": [
+    -0.2102,
+    -0.0561
+   ]
+  },
+  "halmstad/eval_only@0.25": {
+   "scenes": 48,
+   "gt": 0,
+   "neg_frames": 528,
+   "small_lt16_gt": 0,
+   "recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_recall_ci95": null,
+   "response": [
+    null,
+    null
+   ],
+   "delta_response_ci95": null,
+   "neg_fp_frame_share": [
+    1.0,
+    0.6686
+   ],
+   "delta_neg_fp_ci95": [
+    -0.4129,
+    -0.2576
+   ],
+   "small_lt16_recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_small_recall_ci95": null
+  },
+  "halmstad/eval_only@0.5": {
+   "scenes": 48,
+   "gt": 0,
+   "neg_frames": 528,
+   "small_lt16_gt": 0,
+   "recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_recall_ci95": null,
+   "response": [
+    null,
+    null
+   ],
+   "delta_response_ci95": null,
+   "neg_fp_frame_share": [
+    0.9905,
+    0.339
+   ],
+   "delta_neg_fp_ci95": [
+    -0.733,
+    -0.5739
+   ],
+   "small_lt16_recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_small_recall_ci95": null
+  },
+  "halmstad/validation@0.25": {
+   "scenes": 7,
+   "gt": 0,
+   "neg_frames": 109,
+   "small_lt16_gt": 0,
+   "recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_recall_ci95": null,
+   "response": [
+    null,
+    null
+   ],
+   "delta_response_ci95": null,
+   "neg_fp_frame_share": [
+    0.9817,
+    0.7064
+   ],
+   "delta_neg_fp_ci95": [
+    -0.5152,
+    -0.1329
+   ],
+   "small_lt16_recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_small_recall_ci95": null
+  },
+  "halmstad/validation@0.5": {
+   "scenes": 7,
+   "gt": 0,
+   "neg_frames": 109,
+   "small_lt16_gt": 0,
+   "recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_recall_ci95": null,
+   "response": [
+    null,
+    null
+   ],
+   "delta_response_ci95": null,
+   "neg_fp_frame_share": [
+    0.8257,
+    0.2385
+   ],
+   "delta_neg_fp_ci95": [
+    -0.7629,
+    -0.3608
+   ],
+   "small_lt16_recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_small_recall_ci95": null
+  },
+  "pathikg/eval_only@0.25": {
+   "scenes": 181,
+   "gt": 303,
+   "neg_frames": 0,
+   "small_lt16_gt": 46,
+   "recall_iou0.3": [
+    0.9868,
+    0.9604
+   ],
+   "delta_recall_ci95": [
+    -0.0452,
+    -0.01
+   ],
+   "response": [
+    0.9868,
+    0.9637
+   ],
+   "delta_response_ci95": [
+    -0.0407,
+    -0.0071
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    0.9565,
+    0.8261
+   ],
+   "delta_small_recall_ci95": [
+    -0.2273,
+    -0.0435
+   ]
+  },
+  "pathikg/eval_only@0.5": {
+   "scenes": 181,
+   "gt": 303,
+   "neg_frames": 0,
+   "small_lt16_gt": 46,
+   "recall_iou0.3": [
+    0.9736,
+    0.8581
+   ],
+   "delta_recall_ci95": [
+    -0.1531,
+    -0.0825
+   ],
+   "response": [
+    0.9736,
+    0.8614
+   ],
+   "delta_response_ci95": [
+    -0.1498,
+    -0.0797
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    0.913,
+    0.4783
+   ],
+   "delta_small_recall_ci95": [
+    -0.5745,
+    -0.2979
+   ]
+  },
+  "uavcb/validation@0.25": {
+   "scenes": 10,
+   "gt": 3393,
+   "neg_frames": 0,
+   "small_lt16_gt": 1082,
+   "recall_iou0.3": [
+    0.3098,
+    0.3551
+   ],
+   "delta_recall_ci95": [
+    0.0267,
+    0.082
+   ],
+   "response": [
+    0.3286,
+    0.4076
+   ],
+   "delta_response_ci95": [
+    0.0499,
+    0.1072
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    0.3161,
+    0.3799
+   ],
+   "delta_small_recall_ci95": [
+    0.029,
+    0.1151
+   ]
+  },
+  "uavcb/validation@0.5": {
+   "scenes": 10,
+   "gt": 3393,
+   "neg_frames": 0,
+   "small_lt16_gt": 1082,
+   "recall_iou0.3": [
+    0.2322,
+    0.221
+   ],
+   "delta_recall_ci95": [
+    -0.0336,
+    0.014
+   ],
+   "response": [
+    0.2373,
+    0.2302
+   ],
+   "delta_response_ci95": [
+    -0.0323,
+    0.0174
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    0.2588,
+    0.2782
+   ],
+   "delta_small_recall_ci95": [
+    -0.013,
+    0.0617
+   ]
+  },
+  "uavdb/validation@0.25": {
+   "scenes": 4,
+   "gt": 400,
+   "neg_frames": 0,
+   "small_lt16_gt": 263,
+   "recall_iou0.3": [
+    0.995,
+    0.9975
+   ],
+   "delta_recall_ci95": [
+    0.0,
+    0.0075
+   ],
+   "response": [
+    0.9975,
+    1.0
+   ],
+   "delta_response_ci95": [
+    0.0,
+    0.0075
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    0.9924,
+    0.9962
+   ],
+   "delta_small_recall_ci95": [
+    0.0,
+    0.0159
+   ]
+  },
+  "uavdb/validation@0.5": {
+   "scenes": 4,
+   "gt": 400,
+   "neg_frames": 0,
+   "small_lt16_gt": 263,
+   "recall_iou0.3": [
+    0.9725,
+    0.93
+   ],
+   "delta_recall_ci95": [
+    -0.1,
+    0.0275
+   ],
+   "response": [
+    0.975,
+    0.9325
+   ],
+   "delta_response_ci95": [
+    -0.1,
+    0.0275
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    0.9582,
+    0.9392
+   ],
+   "delta_small_recall_ci95": [
+    -0.127,
+    0.0275
+   ]
+  },
+  "vdd/eval_only@0.25": {
+   "scenes": 1,
+   "gt": 719,
+   "neg_frames": 0,
+   "small_lt16_gt": 0,
+   "recall_iou0.3": [
+    0.6801,
+    0.4757
+   ],
+   "delta_recall_ci95": [
+    -0.2045,
+    -0.2045
+   ],
+   "response": [
+    0.7065,
+    0.4896
+   ],
+   "delta_response_ci95": [
+    -0.217,
+    -0.217
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_small_recall_ci95": null
+  },
+  "vdd/eval_only@0.5": {
+   "scenes": 1,
+   "gt": 719,
+   "neg_frames": 0,
+   "small_lt16_gt": 0,
+   "recall_iou0.3": [
+    0.5953,
+    0.2531
+   ],
+   "delta_recall_ci95": [
+    -0.3421,
+    -0.3421
+   ],
+   "response": [
+    0.605,
+    0.2559
+   ],
+   "delta_response_ci95": [
+    -0.3491,
+    -0.3491
+   ],
+   "neg_fp_frame_share": [
+    null,
+    null
+   ],
+   "delta_neg_fp_ci95": null,
+   "small_lt16_recall_iou0.3": [
+    null,
+    null
+   ],
+   "delta_small_recall_ci95": null
+  }
+ }
+}

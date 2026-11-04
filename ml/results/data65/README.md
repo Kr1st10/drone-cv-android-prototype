@@ -55,3 +55,38 @@ Not used for training or evaluation: Cranfield synthetic `multi_drone_no_birds_4
 UAVDB CC BY-NC-SA 4.0 (via CenekAlbl source); UAV-CB CC BY-NC 4.0; Anti-UAV300 no image licence (research only);
 VDD Roboflow "Private" (eval only); Halmstad CC0 (YouTube clips eval only); DUT Apache-2.0 per repo, no image licence;
 pathikg MIT; Cranfield CC-BY-4.0. Any model trained on UAVDB/Anti-UAV is research-only and non-commercial.
+
+## Baseline vs small controlled fine-tune (`baseline_eval.json`, `candidate_eval.json`, `compare.json`)
+
+Fine-tune (`finetune_config.json`): 1600 train images (UAVDB d2–d4 600, Anti-UAV 25 Sep 400, Halmstad 6.4-train negatives 300,
+pathikg replay 300; 1296 drone boxes, 627 of them <16 px at 640), frozen backbone (`freeze=10`), AdamW lr0 1e-4, no warmup,
+no mosaic, 2 epochs, final `last.pt` (SHA `e2877070…`, not committed), 0.66 h CPU. Validation/eval sets were never used for
+training or checkpoint selection. Values: recall at IoU 0.3, conf 0.25, baseline → candidate, paired scene-bootstrap 95 % CI of Δ.
+
+| Set (role) | GT | Recall@0.3 | Δ CI95 | Response | <16 px recall@0.3 | FP-frame share on drone-free frames |
+|---|---|---|---|---|---|---|
+| Anti-UAV 26 Sep (same site, next day) | 919 | 0.626 → 0.936 | +0.15…+0.50 | 0.630 → 0.954 | 0/42 → 28/42 | 0.09 → 0.30 (66 frames) |
+| UAVDB d1 (same site, other flight) | 400 | 0.995 → 0.998 | 0…+0.01 | 0.998 → 1.000 | 0.992 → 0.996 | — |
+| UAV-CB (new site, camouflage) | 3393 | 0.310 → 0.355 | +0.03…+0.08 | 0.329 → 0.408 | 0.316 → 0.380 | — (precision on drone frames 0.57 → 0.36) |
+| DUT val (other scenes) | 600 | 0.513 → 0.483 | −0.09…+0.02 | 0.540 → 0.575 | 0.513 → 0.483 | — |
+| VDD (other site, 1 scene) | 719 | 0.680 → 0.476 | one site, no CI | 0.707 → 0.490 | — | — |
+| pathikg check (forgetting) | 303 | 0.987 → 0.960 | −0.045…−0.010 | 0.987 → 0.964 | 0.957 → 0.826 | — |
+| Halmstad validation negatives | — | — | — | — | — | 0.98 → 0.71 (Δ −0.52…−0.13) |
+| Halmstad eval_only (YouTube) negatives | — | — | — | — | — | 1.00 → 0.67 (Δ −0.41…−0.26) |
+
+At conf 0.5 the losses grow: DUT 0.458 → 0.327 (Δ −0.21…−0.06), VDD 0.595 → 0.253, pathikg 0.974 → 0.858; UAV-CB gain vanishes.
+At conf 0.1 VDD still drops 0.737 → 0.558 (median top score 0.645 → 0.266), so the loss is not only calibration.
+
+**Decision: candidate rejected.** The large gain is on the same site/camera as the training data (Anti-UAV next day); on other
+scenes sensitivity drops (VDD, DUT at 0.5, forgetting check), FP on drone-free Anti-UAV frames triples, and the Halmstad FP
+reduction comes with lower confidences overall. UAVDB validation is not informative: the baseline already finds 99 % there
+(clear sky, high contrast, same cameras' site), including <8 px.
+
+Reproduce (local raw files per `sources.json`):
+```
+PYTHONPATH=. python ml/scripts/data65.py build --output /data/d65/manifest65.json
+PYTHONPATH=. python ml/scripts/data65.py stats --manifest /data/d65/manifest65.json --output ml/results/data65/stats.json
+PYTHONPATH=. python ml/scripts/data65.py predict --manifest /data/d65/manifest65.json --weights best.pt --model-id baseline --output baseline.json
+PYTHONPATH=. python ml/scripts/data65.py train --manifest /data/d65/manifest65.json --weights best.pt --workdir ft65
+PYTHONPATH=. python ml/scripts/data65.py evaluate|compare ...
+```
