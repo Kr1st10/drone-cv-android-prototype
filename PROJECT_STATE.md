@@ -1,6 +1,14 @@
 # PROJECT_STATE.md
 
-_Обновлено: 2026-11-03. Этап 6.4, ветка `research/small-drones-6.4` от `main` @ `28e516a`, PR #19 (не объединять без проверки)._
+_Обновлено: 2026-11-04. Этап 6.5, ветка `research/useful-data-6.5` от `main` @ `4b07e08`, PR #20 (не объединять без проверки)._
+
+## Этап 6.5 — полезные данные для малых дронов (статистика, групповые split, контролируемый эксперимент)
+
+- `ml/scripts/data65.py` (build/stats/predict/evaluate/train/compare), тесты `ml/tests/test_data65.py`; источники, лицензии и SHA-256 — `ml/results/data65/sources.json`; результаты — `ml/results/data65/README.md`. Изображения, предсказания и веса не коммитятся; sealed test 6.4, test-камеры UAVDB и test-сессии Anti-UAV300 не открывались.
+- Данные (рамки <16 px при letterbox 640): UAVDB train 1300 изобр. / 1193, validation (полёт d1) 400 / 263; Anti-UAV300 train (25 сент.) 1167 / 115, validation (26 сент.) 985 / 42; UAV-CB (только validation) 3393 / 1082; DUT val 600 / 563; VDD 717 уникальных (eval) / 0; Halmstad-негативы train 924, validation 109, YouTube eval 528; pathikg replay 500 + проверка забывания 300. Независимых мест: UAVDB 1, Anti-UAV 1, UAV-CB 1, VDD 1. Cranfield synthetic — только статистика.
+- Лицензии: UAVDB CC BY-NC-SA 4.0, UAV-CB CC BY-NC 4.0, Anti-UAV300 без лицензии на изображения, VDD «Private» — всё только для некоммерческих исследований, без распространения.
+- Baseline (conf 0.25, R@IoU0.3): UAVDB d1 0.995, Anti-UAV 0.63, UAV-CB 0.31, DUT 0.51, VDD 0.68, pathikg 0.99; FP на 98–100 % кадров Halmstad без дрона. Дообучение 2 эпохи (freeze=10, lr0 1e-4, 1600 изображений, 0.66 ч CPU, `last.pt` `e2877070…`): та же площадка Anti-UAV 0.94, но VDD 0.48, DUT@0.5 0.46 → 0.33, pathikg 0.96, FP на пустых кадрах Anti-UAV 0.09 → 0.30 — **кандидат не принят**.
+- Проверки: Python `ml/tests` **104 passed** (96 + 8 новых). Android, NPU, камеры, DJI и модель в APK не менялись. GitHub CI для `a88aebd`: `assemble-debug` success, `connected-tests` failure на шаге эмуляторных UI-тестов (Android-код в PR не менялся; логи без токена недоступны) — повторный запуск этим коммитом.
 
 ## Этап 6.4 — маленькие дроны и FP на птицах/самолётах (реальные открытые данные)
 

@@ -1,0 +1,101 @@
+{
+ "stage": "6.5",
+ "checked": "2026-11-03",
+ "policy": "images, annotations and weights are not committed; raw files stay local; most restrictive applicable licence is applied",
+ "sources": [
+  {
+   "name": "UAVDB",
+   "url": "https://zenodo.org/records/14534940",
+   "file": "uavdb.zip",
+   "sha256": "b6b5f52c8d38599036ccbb5ca50e6160912dd3aa7c5cccf30934e978fbca744d",
+   "license_declared": "CC-BY-4.0 (Zenodo)",
+   "derived_from": "https://github.com/CenekAlbl/drone-tracking-datasets (CC BY-NC-SA 4.0)",
+   "license_applied": "CC BY-NC-SA 4.0 (non-commercial, share-alike)",
+   "content": "18061 boxes, 1 per frame, 4 flights x 22 static ground cameras, one hexacopter, mostly sky; official split = cameras inside the same flights",
+   "use": "up to 100 frames per camera from 17 cameras; official test cameras d2c0,d3c4,d4c0,d4c6 not extracted; flight d1 -> validation, d2-d4 -> train"
+  },
+  {
+   "name": "Anti-UAV300 (visible)",
+   "url": "https://github.com/ZhaoJ9014/Anti-UAV",
+   "file": "antiuav300.zip",
+   "sha256": "ed7d80bbd8ca8e01ea784c64eb0782eae8b3a1572177535c0fada9beb53fdca8",
+   "license_declared": "MIT for project/code; no separate image licence",
+   "license_applied": "research use only, no redistribution",
+   "content": "318 visible videos 1920x1080, 37 sessions on 2 days, PTZ tracker camera at one urban site (target centred, OSD overlay), ~13 night sessions",
+   "use": "every 100th frame of official train/val clips (official train/val share sessions); official test (10 sessions) sealed, not decoded; 2019-09-25 -> train, 2019-09-26 -> validation"
+  },
+  {
+   "name": "UAV-CB",
+   "url": "https://github.com/hye999/UAV-CB",
+   "file": "uavcb.zip (Google Drive)",
+   "sha256": "adc589589368c0cfeff41e1512b2e1f243ab6b43e82287ad048bc6d4ac97bf43",
+   "split_file_sha256": "ebb5be8114bb2ee8521e021acbfab46ba4a80e6fe22cf9d85b2af9695d5e34d8",
+   "license_declared": "CC BY-NC 4.0 (images and annotations)",
+   "license_applied": "CC BY-NC 4.0, non-commercial",
+   "content": "3393 visible frames 1920x1080, one DJI Matrice 350/4E per frame, camouflage backgrounds (building, cloud, ground, powerline, vegetation), one PTZ camera at one site, 2025-06-23/27",
+   "use": "validation only, whole set (one new site, not split)"
+  },
+  {
+   "name": "Visual drone detection (Roboflow export)",
+   "url": "https://zenodo.org/records/15632958",
+   "file": "vdd.zip",
+   "sha256": "8bc3cb71017fe5546b6c7c22cf5e079b59a0529e7c8bd7a17987cc1e743af048",
+   "license_declared": "CC-BY-4.0 on Zenodo; data.yaml says 'license: Private'",
+   "license_applied": "eval only, no redistribution",
+   "content": "2145 images stretched to 640x640 but only 717 unique originals (copies across official train/valid/test), one school site, DJI footage, almost all drones >=30 px, at least one shifted box",
+   "use": "eval_only, one copy per original"
+  },
+  {
+   "name": "Cranfield synthetic (multi_drone_no_birds_40m_small)",
+   "url": "https://huggingface.co/datasets/mazqtpopx/cranfield-synthetic-drone-detection",
+   "rev": "7657fcbb1ada0f5210e2c198c78742108e2430ee",
+   "file": "multi_drone_no_birds_40m_small.zip",
+   "sha256": "297671d67e6b06c089b2e598f70ac2f156100997207b944d7c91e8d00140e82c",
+   "license_declared": "CC-BY-4.0",
+   "license_applied": "CC-BY-4.0",
+   "content": "749 synthetic 1920x1080 images, ~6 drones per image; masks fragmented",
+   "stats_from_masks_after_dilate": {
+    "objects": 7050,
+    "boxes_by_size_640": {
+     "<8": 3638,
+     "8-<16": 1439,
+     "16-<24": 687,
+     "24-<30": 318,
+     ">=30": 968
+    }
+   },
+   "use": "statistics only, not used for training (synthetic, fragmented masks); other zips 4-7.6 GB not downloaded"
+  },
+  {
+   "name": "Halmstad Drone-detection-dataset (visible bird/airplane/helicopter)",
+   "url": "https://doi.org/10.5281/zenodo.5500576",
+   "file": "halmstad.zip",
+   "sha256": "53deda08127dc7896e96454cf35e866e8d6bee336f25d290b26e1f5324e23c81",
+   "desc_xlsx_sha256": "0544022ae732a6b088af4b6555a18c53a9364c2c02721d38e30d73af1c684cab",
+   "license_declared": "CC0-1.0 (own recordings); YouTube-sourced clips belong to uploaders",
+   "license_applied": "CC0 for own recordings; YouTube clips eval only",
+   "use": "negatives only; split from Stage 6.4 split_summary.json groups; 6.4 sealed-test groups dropped (98 frames); YouTube -> eval_only"
+  },
+  {
+   "name": "DUT Anti-UAV detection val shard",
+   "url": "https://huggingface.co/datasets/aegean-ai/dut-anti-uav",
+   "file": "detection-parquet/val/val-00002.parquet",
+   "sha256": "a74176c0834bdb7c01709ba773fb3e4a1a114a5781e1e152a7c4a0fb970da27d",
+   "license_applied": "Apache-2.0 per primary repo, no separate image licence (Stage 6.3)",
+   "use": "eval_only sensitivity check (600 images)"
+  },
+  {
+   "name": "pathikg/drone-detection-dataset (baseline training data)",
+   "url": "https://huggingface.co/datasets/pathikg/drone-detection-dataset",
+   "rev": "004b46cc",
+   "file": "data/train-00000-of-00009.parquet",
+   "sha256": "7822d9836bcfc59a8b38c311002435b42fd3eccfa011d55ba1387d58481e6ea6",
+   "license_applied": "MIT",
+   "use": "500 images replay in train, 300 other images forgetting check (eval_only; not a generalisation set)"
+  }
+ ],
+ "not_examined": [
+  "MMAUD",
+  "additional bird/airplane sources"
+ ]
+}

@@ -1,0 +1,582 @@
+{
+ "by_dataset": {
+  "antiuav300": {
+   "train": {
+    "images": 1167,
+    "images_with_drone": 1119,
+    "drone_free_images": 48,
+    "label_absent": 0,
+    "drone_boxes": 1119,
+    "boxes_by_size_640": {
+     "<8": 6,
+     "8-<16": 109,
+     "16-<24": 433,
+     "24-<30": 253,
+     ">=30": 318
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 6,
+     "24-<30": 9,
+     ">=30": 1104
+    },
+    "groups": 1,
+    "scenes": 15,
+    "scenes_with_small_lt16_at640": 9,
+    "resolutions": {
+     "1920x1080": 1167
+    },
+    "negative_classes": {}
+   },
+   "validation": {
+    "images": 985,
+    "images_with_drone": 919,
+    "drone_free_images": 66,
+    "label_absent": 0,
+    "drone_boxes": 919,
+    "boxes_by_size_640": {
+     "<8": 1,
+     "8-<16": 41,
+     "16-<24": 147,
+     "24-<30": 229,
+     ">=30": 501
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 1,
+     "24-<30": 2,
+     ">=30": 916
+    },
+    "groups": 1,
+    "scenes": 12,
+    "scenes_with_small_lt16_at640": 3,
+    "resolutions": {
+     "1920x1080": 985
+    },
+    "negative_classes": {}
+   }
+  },
+  "dut": {
+   "eval_only": {
+    "images": 600,
+    "images_with_drone": 600,
+    "drone_free_images": 0,
+    "label_absent": 0,
+    "drone_boxes": 600,
+    "boxes_by_size_640": {
+     "<8": 321,
+     "8-<16": 242,
+     "16-<24": 23,
+     "24-<30": 6,
+     ">=30": 8
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 105,
+     "16-<24": 216,
+     "24-<30": 111,
+     ">=30": 168
+    },
+    "groups": 1,
+    "scenes": 45,
+    "scenes_with_small_lt16_at640": 45,
+    "resolutions": {
+     "1920x1080": 600
+    },
+    "negative_classes": {}
+   }
+  },
+  "halmstad": {
+   "train": {
+    "images": 1007,
+    "images_with_drone": 0,
+    "drone_free_images": 924,
+    "label_absent": 83,
+    "drone_boxes": 0,
+    "boxes_by_size_640": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 0,
+     "24-<30": 0,
+     ">=30": 0
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 0,
+     "24-<30": 0,
+     ">=30": 0
+    },
+    "groups": 37,
+    "scenes": 37,
+    "scenes_with_small_lt16_at640": 0,
+    "resolutions": {
+     "640x512": 1007
+    },
+    "negative_classes": {
+     "airplane": 439,
+     "bird": 301,
+     "helicopter": 184
+    }
+   },
+   "validation": {
+    "images": 110,
+    "images_with_drone": 0,
+    "drone_free_images": 109,
+    "label_absent": 1,
+    "drone_boxes": 0,
+    "boxes_by_size_640": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 0,
+     "24-<30": 0,
+     ">=30": 0
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 0,
+     "24-<30": 0,
+     ">=30": 0
+    },
+    "groups": 7,
+    "scenes": 7,
+    "scenes_with_small_lt16_at640": 0,
+    "resolutions": {
+     "640x512": 110
+    },
+    "negative_classes": {
+     "airplane": 33,
+     "bird": 10,
+     "helicopter": 66
+    }
+   },
+   "eval_only": {
+    "images": 528,
+    "images_with_drone": 0,
+    "drone_free_images": 528,
+    "label_absent": 0,
+    "drone_boxes": 0,
+    "boxes_by_size_640": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 0,
+     "24-<30": 0,
+     ">=30": 0
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 0,
+     "24-<30": 0,
+     ">=30": 0
+    },
+    "groups": 48,
+    "scenes": 48,
+    "scenes_with_small_lt16_at640": 0,
+    "resolutions": {
+     "640x512": 528
+    },
+    "negative_classes": {
+     "airplane": 121,
+     "helicopter": 407
+    }
+   }
+  },
+  "pathikg": {
+   "train": {
+    "images": 500,
+    "images_with_drone": 500,
+    "drone_free_images": 0,
+    "label_absent": 0,
+    "drone_boxes": 510,
+    "boxes_by_size_640": {
+     "<8": 8,
+     "8-<16": 80,
+     "16-<24": 59,
+     "24-<30": 47,
+     ">=30": 316
+    },
+    "boxes_by_size_native": {
+     "<8": 8,
+     "8-<16": 80,
+     "16-<24": 59,
+     "24-<30": 47,
+     ">=30": 316
+    },
+    "groups": 1,
+    "scenes": 228,
+    "scenes_with_small_lt16_at640": 74,
+    "resolutions": {
+     "640x480": 500
+    },
+    "negative_classes": {}
+   },
+   "eval_only": {
+    "images": 300,
+    "images_with_drone": 300,
+    "drone_free_images": 0,
+    "label_absent": 0,
+    "drone_boxes": 303,
+    "boxes_by_size_640": {
+     "<8": 7,
+     "8-<16": 39,
+     "16-<24": 45,
+     "24-<30": 29,
+     ">=30": 183
+    },
+    "boxes_by_size_native": {
+     "<8": 7,
+     "8-<16": 39,
+     "16-<24": 45,
+     "24-<30": 29,
+     ">=30": 183
+    },
+    "groups": 1,
+    "scenes": 181,
+    "scenes_with_small_lt16_at640": 44,
+    "resolutions": {
+     "640x480": 300
+    },
+    "negative_classes": {}
+   }
+  },
+  "uavcb": {
+   "validation": {
+    "images": 3393,
+    "images_with_drone": 3393,
+    "drone_free_images": 0,
+    "label_absent": 0,
+    "drone_boxes": 3393,
+    "boxes_by_size_640": {
+     "<8": 70,
+     "8-<16": 1012,
+     "16-<24": 1145,
+     "24-<30": 377,
+     ">=30": 789
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 4,
+     "16-<24": 66,
+     "24-<30": 184,
+     ">=30": 3139
+    },
+    "groups": 1,
+    "scenes": 10,
+    "scenes_with_small_lt16_at640": 9,
+    "resolutions": {
+     "1920x1080": 3393
+    },
+    "negative_classes": {}
+   }
+  },
+  "uavdb": {
+   "train": {
+    "images": 1300,
+    "images_with_drone": 1300,
+    "drone_free_images": 0,
+    "label_absent": 0,
+    "drone_boxes": 1300,
+    "boxes_by_size_640": {
+     "<8": 562,
+     "8-<16": 631,
+     "16-<24": 99,
+     "24-<30": 4,
+     ">=30": 4
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 533,
+     "24-<30": 95,
+     ">=30": 672
+    },
+    "groups": 3,
+    "scenes": 13,
+    "scenes_with_small_lt16_at640": 13,
+    "resolutions": {
+     "1920x1080": 1000,
+     "3840x2160": 200,
+     "1440x1080": 100
+    },
+    "negative_classes": {}
+   },
+   "validation": {
+    "images": 400,
+    "images_with_drone": 400,
+    "drone_free_images": 0,
+    "label_absent": 0,
+    "drone_boxes": 400,
+    "boxes_by_size_640": {
+     "<8": 29,
+     "8-<16": 234,
+     "16-<24": 132,
+     "24-<30": 2,
+     ">=30": 3
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 29,
+     "24-<30": 47,
+     ">=30": 324
+    },
+    "groups": 1,
+    "scenes": 4,
+    "scenes_with_small_lt16_at640": 4,
+    "resolutions": {
+     "1920x1080": 400
+    },
+    "negative_classes": {}
+   }
+  },
+  "vdd": {
+   "eval_only": {
+    "images": 717,
+    "images_with_drone": 717,
+    "drone_free_images": 0,
+    "label_absent": 0,
+    "drone_boxes": 719,
+    "boxes_by_size_640": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 33,
+     "24-<30": 75,
+     ">=30": 611
+    },
+    "boxes_by_size_native": {
+     "<8": 0,
+     "8-<16": 0,
+     "16-<24": 33,
+     "24-<30": 75,
+     ">=30": 611
+    },
+    "groups": 1,
+    "scenes": 1,
+    "scenes_with_small_lt16_at640": 0,
+    "resolutions": {
+     "640x640": 717
+    },
+    "negative_classes": {}
+   }
+  }
+ },
+ "cross_split_dhash": {
+  "train_vs_validation@<=0": {
+   "pairs": 510,
+   "train_images_with_match": 157
+  },
+  "train_vs_validation@<=2": {
+   "pairs": 4782,
+   "train_images_with_match": 558
+  },
+  "train_vs_validation@<=4": {
+   "pairs": 26449,
+   "train_images_with_match": 984
+  },
+  "train_vs_eval_only@<=0": {
+   "pairs": 1071,
+   "train_images_with_match": 101
+  },
+  "train_vs_eval_only@<=2": {
+   "pairs": 3601,
+   "train_images_with_match": 276
+  },
+  "train_vs_eval_only@<=4": {
+   "pairs": 10417,
+   "train_images_with_match": 524
+  },
+  "eval_dataset_vs_train_dataset_pairs@<=2": {
+   "antiuav300": {
+    "antiuav300": 3734,
+    "halmstad": 0,
+    "pathikg": 25,
+    "uavdb": 0
+   },
+   "dut": {
+    "antiuav300": 118,
+    "halmstad": 0,
+    "pathikg": 0,
+    "uavdb": 0
+   },
+   "halmstad": {
+    "antiuav300": 0,
+    "halmstad": 3829,
+    "pathikg": 164,
+    "uavdb": 0
+   },
+   "pathikg": {
+    "antiuav300": 1,
+    "halmstad": 368,
+    "pathikg": 13,
+    "uavdb": 0
+   },
+   "uavcb": {
+    "antiuav300": 1,
+    "halmstad": 98,
+    "pathikg": 1,
+    "uavdb": 0
+   },
+   "uavdb": {
+    "antiuav300": 0,
+    "halmstad": 0,
+    "pathikg": 0,
+    "uavdb": 0
+   },
+   "vdd": {
+    "antiuav300": 18,
+    "halmstad": 11,
+    "pathikg": 2,
+    "uavdb": 0
+   }
+  }
+ },
+ "exact_byte_duplicates_across_splits": 0,
+ "images_total": 11007,
+ "unique_file_sha256": 11006,
+ "near_duplicates_train_vs_heldout": {
+  "rule": "dHash Hamming <= 6, then normalised 32x32 thumbnail MAD <= 0.12",
+  "candidates": 96946,
+  "similar_pairs": 17320,
+  "interpretation": "similarity candidates, not proven copies: low-texture sky frames and same static camera/site backgrounds pass both filters; see visual_review_agent.json",
+  "by_train_dataset_to_heldout": {
+   "antiuav300->antiuav300/validation": 16236,
+   "halmstad->halmstad/eval_only": 414,
+   "halmstad->halmstad/validation": 264,
+   "halmstad->pathikg/eval_only": 15,
+   "pathikg->halmstad/eval_only": 8,
+   "pathikg->pathikg/eval_only": 13,
+   "uavdb->uavdb/validation": 370
+  },
+  "heldout_images_affected_by_set": {
+   "antiuav300/validation": 319,
+   "halmstad/validation": 4,
+   "uavdb/validation": 24,
+   "halmstad/eval_only": 25,
+   "pathikg/eval_only": 7
+  },
+  "heldout_images_affected": 379,
+  "train_images_affected": 818,
+  "cross_dataset_pairs": [
+   [
+    "halmstad:d73d3319540f46ea",
+    "pathikg:46",
+    0.104
+   ],
+   [
+    "halmstad:88c3537aa3cd6173",
+    "pathikg:46",
+    0.1043
+   ],
+   [
+    "halmstad:2e6c298752888068",
+    "pathikg:46",
+    0.1043
+   ],
+   [
+    "halmstad:d3d3c7abdda23a93",
+    "pathikg:46",
+    0.1038
+   ],
+   [
+    "halmstad:c614283328f65945",
+    "pathikg:46",
+    0.1034
+   ],
+   [
+    "halmstad:dc58d9ea6c8a7236",
+    "pathikg:46",
+    0.1052
+   ],
+   [
+    "halmstad:916f8f28eca20ea4",
+    "pathikg:46",
+    0.1071
+   ],
+   [
+    "halmstad:e34b0be0990b4f09",
+    "pathikg:46",
+    0.1079
+   ],
+   [
+    "halmstad:7bc60a04e0cb4e22",
+    "pathikg:46",
+    0.1087
+   ],
+   [
+    "halmstad:49eb4e5c14eddc2e",
+    "pathikg:46",
+    0.1078
+   ],
+   [
+    "halmstad:3afcb11d077990f5",
+    "pathikg:46",
+    0.1082
+   ],
+   [
+    "halmstad:218e3bd99f772c24",
+    "pathikg:46",
+    0.1102
+   ],
+   [
+    "halmstad:38dc9e4df6b7c946",
+    "pathikg:46",
+    0.1133
+   ],
+   [
+    "halmstad:ed172d8b4148dc4e",
+    "pathikg:46",
+    0.1101
+   ],
+   [
+    "halmstad:d764be40d37d55f4",
+    "pathikg:46",
+    0.1098
+   ],
+   [
+    "pathikg:4115",
+    "halmstad:471625d6dac31082",
+    0.1028
+   ],
+   [
+    "pathikg:4115",
+    "halmstad:2c198a5b50a32df9",
+    0.1156
+   ],
+   [
+    "pathikg:4115",
+    "halmstad:90520b4ba66cee02",
+    0.1038
+   ],
+   [
+    "pathikg:4381",
+    "halmstad:962066119412a35a",
+    0.1178
+   ],
+   [
+    "pathikg:4381",
+    "halmstad:fecaceeca7de909c",
+    0.1149
+   ],
+   [
+    "pathikg:5380",
+    "halmstad:471625d6dac31082",
+    0.1097
+   ],
+   [
+    "pathikg:5380",
+    "halmstad:2c198a5b50a32df9",
+    0.1154
+   ],
+   [
+    "pathikg:5380",
+    "halmstad:90520b4ba66cee02",
+    0.0973
+   ]
+  ]
+ },
+ "manifest_sha256": "ff9e3a71823671cc28073efa90ddad2591a0f1f75b0425a96897b4195d2732d4"
+}

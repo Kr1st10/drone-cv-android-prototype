@@ -1,0 +1,13 @@
+{
+ "reviewer": "agent (not a human annotator)",
+ "method": "crop sheets of random boxes per source, plus whole frames; dHash/thumbnail pair sheets",
+ "findings": {
+  "uavcb": "boxes mostly correct, some loose; in camouflage cases the drone is nearly invisible in RGB (labels probably from thermal) -> hard/noisy positives; LabelMe polygons converted to min/max boxes",
+  "antiuav300": "boxes visually correct; tracker keeps the target centred; OSD overlay in every frame; night sessions show only lights",
+  "uavdb": "boxes centred on the hexacopter; static ground cameras, mostly sky with horizon",
+  "vdd": "Roboflow augmentation copies spread over official splits (2145 files / 717 originals); at least one shifted box found",
+  "cranfield": "synthetic; masks fragmented into several components per drone",
+  "similar_pair_sheet": "13 random similarity pairs inspected: Halmstad<->pathikg and Halmstad<->Halmstad pairs are different plain-sky frames (no copies); Anti-UAV pairs are same site/OSD on different days; UAVDB pairs are the same static camera on different flights (same background, different drone position). No true cross-dataset copy found; exact byte duplicates across splits = 0."
+ },
+ "limitations": "no human review; frame-level label errors not quantified"
+}

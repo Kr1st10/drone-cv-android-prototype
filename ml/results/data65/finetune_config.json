@@ -1,0 +1,60 @@
+{
+ "name": "stage65-small-controlled-finetune-cpu",
+ "checkpoint_url": "https://huggingface.co/sapoepsilon/yolov11s-drone-detector/resolve/58897d6d6fadda9dfec979fd5dd7ad9040e73365/best.pt",
+ "checkpoint_sha256": "337390e1018eaf815474c02e172a224425095466d4a5cd2dbd11301b0aa01b78",
+ "ultralytics_version": "8.4.197",
+ "data": "train split only: UAVDB flights d2-d4, Anti-UAV300 2019-09-25, Halmstad 6.4-train negatives (bird/airplane/helicopter as empty-label background), pathikg replay",
+ "selection": "deterministic per-dataset quota spread round-robin over scenes (data65.train_selection); fixed epochs, final last.pt; validation/eval_only never used for training or checkpoint selection",
+ "quota": {
+  "uavdb": 600,
+  "antiuav300": 400,
+  "halmstad": 300,
+  "pathikg": 300
+ },
+ "train": {
+  "imgsz": 640,
+  "epochs": 2,
+  "batch": 4,
+  "seed": 65,
+  "deterministic": true,
+  "workers": 2,
+  "optimizer": "AdamW",
+  "lr0": 0.0001,
+  "lrf": 0.1,
+  "warmup_epochs": 0,
+  "freeze": 10,
+  "mosaic": 0.0,
+  "close_mosaic": 0,
+  "scale": 0.3,
+  "translate": 0.1,
+  "fliplr": 0.5,
+  "pretrained": true,
+  "amp": false,
+  "cache": false
+ },
+ "rationale": "Stage 6.4 lost small-drone sensitivity after 3 epochs at lr0 5e-4 with full fine-tune and mosaic; here backbone frozen, 5x lower lr, no warmup bias spike, no mosaic (it shrinks already small targets), 2 epochs, replay of baseline data",
+ "run": {
+  "train_images": 1600,
+  "train_images_with_drones": 1287,
+  "train_drone_boxes": 1296,
+  "train_boxes_by_size_640": {
+   "<8": 269,
+   "8-<16": 358,
+   "16-<24": 256,
+   "24-<30": 105,
+   ">=30": 308
+  },
+  "epochs_run": 2,
+  "checkpoint": "last.pt",
+  "last_pt_sha256": "e2877070392e618040ceb813d903470e26d6c366425ddbd0f1d5aa3899575f03",
+  "wall_clock": "0.662 h CPU (2 vCPU), ~2.4 s/it batch 4 with frozen backbone",
+  "final_ultralytics_val_on_train_images": {
+   "P": 0.863,
+   "R": 0.853,
+   "mAP50": 0.866,
+   "mAP50-95": 0.536,
+   "note": "train images, not a quality estimate"
+  },
+  "decision": "rejected: gains only on the same sites as train (Anti-UAV next day); losses on other scenes (VDD, DUT@0.5, pathikg forgetting check), FP on drone-free Anti-UAV frames up"
+ }
+}
