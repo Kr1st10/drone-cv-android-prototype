@@ -1,7 +1,10 @@
-# ml/ — модельная основа (этап 2.1)
+# ML-инструменты и модель
 
 Воспроизводимый конвейер: оригинальные веса → проверка SHA-256 → ONNX → инференс ONNX Runtime → проверка.
 Документация модели и тензоров — [`MODEL.md`](MODEL.md). Результаты проверок — [`results/SUMMARY.md`](results/SUMMARY.md).
+Это описание исходного конвейера; поздние исследовательские этапы перечислены в
+[карте кода](../docs/development/codebase.md#ml-и-лабораторные-инструменты), Android-сборка с готовым ONNX — в
+[быстром старте](../docs/getting-started.md). Команды воспроизведения ниже относятся к отдельному ML-окружению.
 
 Веса и датасеты **не хранятся в репозитории** (лицензия весов не выяснена, размер); всё скачивается скриптами
 в `ml/weights/` и `ml/data/` (git-ignored).
@@ -19,7 +22,7 @@
 | `tests/test_postprocess.py` | unit-тесты пред/постобработки (без модели) |
 | `results/` | JSON/логи реально выполненных запусков |
 
-## Воспроизведение (Linux/macOS, Python 3.13, CPU)
+## Воспроизведение экспорта (проверенная среда: Linux x86_64, Python 3.13, CPU)
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu

@@ -6,7 +6,7 @@
 
 - Монитор 4K (3840×2160), яркость постоянная (например, 80 %), без бликов от ламп/окон. Масштаб браузера 100 %, галерея на весь экран (F), фон чёрный.
 - Телефон на штативе, камера по центру экрана, ось камеры перпендикулярна экрану. **Расстояние фиксировано** и записывается в прогон («Расстояние до экрана, см»), например 100 см. Для 5× весь экран в кадр не помещается — это нормально: галерея ставит центр рамки объекта в центр экрана (в быстром тесте снимок при этом в масштабе «вписать», края могут уходить за экран).
-- Приложение: режим камеры, порог confidence в приложении не менять между прогонами (по умолчанию ползунок 25 %; в расширенном режиме его можно записать). Кадр анализа — 640×480 (UI показывает `W×H`). Запомнить зум (1× или 5×) и физический ID камеры, показанные в UI.
+- Приложение: режим камеры, порог confidence не менять между прогонами и записать фактическое значение. Камера приложения начинает с 50 %; поле условий галереи первоначально содержит 25 % и не управляет приложением. В быстром режиме поле скрыто, `app_conf_threshold_pct` сохраняется как null: записывайте порог отдельно либо используйте расширенный режим с заполненным полем. Анализ предпочитает 640×480, но итоговый размер выбирает CameraX; запишите `W×H` из UI. Канонические значения — [конфигурация](../../docs/reference/configuration.md). Запомните зум (1× или 5×) и физический ID камеры, показанные в UI.
 - Не трогать телефон во время прогона.
 
 ## 2. Выборка и прогоны
@@ -35,7 +35,7 @@
 
 1. Нажать **C** — квадраты со стороной 512, 256, 128, 64, 32, 16 px монитора (галерея учитывает `devicePixelRatio`).
 2. На телефоне сделать скриншот экрана приложения.
-3. На скриншоте измерить сторону квадрата 256 px (`a`, px скриншота) и ширину области превью (`P`, px скриншота). Размер в кадре анализа: `s = a / P × W`, где `W` — ширина кадра анализа из UI (640).
+3. На скриншоте измерить сторону квадрата 256 px (`a`, px скриншота) и ширину области превью (`P`, px скриншота). Размер в кадре анализа: `s = a / P × W`, где `W` — фактическая ширина upright crop из UI (например, 640 в альбомной ориентации), а не заранее заданный размер сенсора.
 4. Ввести `s` → галерея посчитает `k = s / 256` (px кадра камеры на 1 px монитора).
 5. Проверка: квадрат 64 px должен дать ≈ `64·k` px кадра.
 
@@ -62,8 +62,34 @@
 Рамки манифеста приблизительные (агентская разметка), поэтому `object_monitor_px` — оценка размера, а не точное измерение.
 
 - «Экспорт CSV»: одна строка — один показ, столбцы как в `results_template.csv` (`run_id`, `sample_id`, `image_id`, `category`, `phone`, `camera_zoom`, `distance_cm`, `detection`, `result_class`, …); пустая ячейка = `null`.
-- «Экспорт JSON» (`dronecv66-session-2`): выборка (`sample.ids`), список прогонов, текущий прогон с порядком, все записи. «Импорт JSON» восстанавливает их.
+- «Экспорт JSON» (`dronecv66-session-2`): выборка (`sample.ids`), настройки, список прогонов, текущий прогон с порядком, все записи. Импорт проверяет формат, восстанавливает подходящую выборку и текущий прогон, добавляет отсутствующие runs/results; для результатов требуется подтверждение. Уже существующие ключи не перезаписываются, корневые settings не применяются — проверьте настройки вручную перед новым прогоном.
 - Файлы приложить к issue/PR вместе с моделью телефона, версией APK и фото установки.
+
+### Технический формат JSON
+
+Источник формата — `sessionJson()`/`saveRecord()`/обработчик `importJson` в [gallery.html](gallery.html).
+JSON не содержит изображения. Даты `created`, `exported`, `recorded_at` имеют формат ISO 8601 UTC (`Z`).
+
+| Объект | Поля и типы |
+|---|---|
+| Корень | `format: string` (`dronecv66-session-2`), `exported: string`, `manifest_version: string`, `manifest_sha256: string/null`, `sample: object/null`, `runs: array`, `trial: object/null`, `settings: object/null`, `results: array` |
+| `sample` | `sample_id,name: string`, `seed: number`, `counts: object` (category → integer), `ids: array<string>` в порядке показа, `created,manifest_version: string` |
+| `runs[]` | `run_id,created,sample_id,sample_name,phone,zoom,mode: string`, `distance_cm: number`, `shows: integer` |
+| `trial` | `run_id,created,manifest_version,sample_id,sample_name: string`, `manifest_sha256: string/null`, `sample_seed: number`, `sample_ids: array<string>`, `settings: object`, `order: array<{id: string, level: number/null}>`, `index: integer` (с 0) |
+| `settings` / `trial.settings` | `mode: quick/advanced`, `scaleMode: fit/native/monitor/camera`, `scaleFactor: number`, `sizes: array<number>`, `center: boolean`, `bg: string`, `phone,zoom,operator: string`; `distance_cm,app_conf_pct,monitor_mm,monitor_px,k,frame_w,frame_h,yolo_input: number/null`. Корневые и advanced trial.settings также содержат `seed: number`; quick trial.settings не содержит seed |
+| `results[]` | Поля совпадают с 35 столбцами [CSV](results_template.csv). Идентификаторы/имена/phone/zoom/mode/enum/дата/заметка — строки, `step` — integer с 0, `sample_seed` — number, `false_alarm` — boolean, размеры/confidence/счётчики — number/null |
+
+`detection` в JSON/CSV: `box_on_object` (ответ 1), `box_elsewhere` (2), `no_box` (3).
+`result_class`: `TP`, `FN`, `FP`, `TN`. `camera_zoom`/`runs[].zoom`: строки `1x`/`5x`;
+`test_mode`/mode: `quick`/`advanced`; `scale_mode`/scaleMode: `fit`/`native`/`monitor`/`camera`.
+`size_level_unit` — `monitor_px`/`camera_px`/null; `object_yolo_px_source` — `measured`/`calibration`/null.
+В quick trial.settings принудительно использует fit, пустые sizes, center=true и null для неизмеряемых полей,
+в том числе порога; корневые settings могут содержать другие значения скрытых полей.
+
+Импорт не является полной схемной валидацией: проверяет format и известные sample.ids, принимает trial,
+объединяет runs по `run_id`, результаты по `(run_id, step)` без замены уже существующих ключей.
+Корневые settings, exported и manifest metadata сами настройки браузера не меняют. Используйте собственные
+экспорты совместимого формата и проверьте параметры перед продолжением/новым прогоном.
 
 ### Что считать
 
