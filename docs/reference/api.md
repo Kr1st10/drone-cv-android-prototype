@@ -88,7 +88,7 @@ fun inspectUniformInput(modelFile: File): Int =
 | `expire(revision: Long)` | Ревизия → `Unit` | Удаляет result/FPS/pipeline только при совпадении текущей ревизии |
 | `close()` | Нет → `Unit` | Идемпотентно инвалидирует generation/source, сбрасывает state и ставит release в очередь |
 | `state` / `threadConfiguration` | Нет → StateFlow | `LiveState` / `ThreadConfiguration`; не публикуют старый infer/error |
-| `signals` | Нет → `StateFlow<TargetSignal?>` | Последний внутренний сигнал; conflated, null при invalidation/expiry. Содержит пиксель выбранной цели, источник времени, ограниченный прогноз. Не подтверждает получение внешним устройством |
+| `signals` | Нет → `StateFlow<TargetSignal?>` | Последний внутренний сигнал текущего кадра; conflated, null при invalidation/expiry. Содержит статус, пиксель/центр выбранного обнаружения, confidence и времена. Не подтверждает получение внешним устройством |
 | `LiveBackend.infer(frame, confidence)` | Frame/Float → `LiveInference` | Блокирующий, не должен удерживать frame после возврата; его закрывает контроллер |
 | `LiveBackend.changeThreads(threads)` / `close()` | Int / нет → Unit | На том же worker; default changeThreads бросает `UnsupportedOperationException` |
 

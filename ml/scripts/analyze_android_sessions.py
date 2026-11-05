@@ -30,16 +30,29 @@ def equal(a, b):
     return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-6)
 
 
+def check_summary(calculated, exported, label, errors):
+    if calculated is None or exported is None:
+        if calculated != exported: errors.append(label + ': empty summary mismatch')
+    else:
+        for key, value in calculated.items():
+            if not equal(value, exported.get(key)): errors.append(label + ': summary mismatch ' + key)
+    if exported is not None and 'p50' in exported:
+        if calculated is None or not equal(calculated['median'], exported['p50']):
+            errors.append(label + ': p50 mismatch')
+
+
 def analyze_target_signals(d, errors):
-    if d.get('target_signal_schema_version') != 1:
+    version = d.get('target_signal_schema_version')
+    if version not in (1, 2):
         raise ValueError('unsupported target_signal_schema_version')
     signals = [f['target_signal'] for f in d['frames'] if f.get('target_signal') is not None]
     seen = set()
     for s in signals:
+        if s.get('schema_version', 1) != version: errors.append('target_signal: schema version mismatch')
         if s['frame_id'] in seen: errors.append('target_signal: duplicate frame_id')
         seen.add(s['frame_id'])
         capture, entry, dispatch = s['capture_ns'], s['analyzer_entry_ns'], s['signal_dispatch_ns']
-        if not all(type(x) is int and x >= 0 for x in (entry, dispatch)):
+        if not all(type(x) is int and x >= 0 for x in (entry, dispatch)) or (capture is not None and type(capture) is not int):
             raise ValueError('invalid target signal timestamps')
         issue = ('unsynchronized_camera_clock' if s['timestamp_source'] != 'elapsed_realtime' else
                  'missing_capture_timestamp' if capture is None or capture <= 0 else
@@ -53,34 +66,52 @@ def analyze_target_signals(d, errors):
         for key, value in expected.items():
             if not equal(s[key], value): errors.append('target_signal: mismatch ' + key)
         if s['coordinate_space'] != 'upright_crop_pixels': errors.append('target_signal: unknown coordinate space')
-        if s['width'] <= 0 or s['height'] <= 0: errors.append('target_signal: invalid dimensions')
-        points = ([s['observed']] if s['observed'] is not None else []) + [f['point'] for f in s['forecast']]
-        for point in points:
+        if not all(type(s[k]) is int and s[k] > 0 for k in ('width', 'height')):
+            raise ValueError('target_signal: invalid dimensions')
+        # Version 1 reports retain their historical fields on disk; only timings/observations are read.
+        point = s['center'] if version == 2 else s['observed']
+        detected = s['status'] == ('detected' if version == 2 else 'observed')
+        if s['status'] not in (('detected', 'no_target') if version == 2 else ('observed', 'lost', 'no_target')):
+            errors.append('target_signal: unknown status')
+        if detected != (point is not None): errors.append('target_signal: status/center mismatch')
+        if point is not None:
             if not (0 <= point['x'] <= s['width']-1 and 0 <= point['y'] <= s['height']-1):
                 errors.append('target_signal: point outside image')
-        if s['status'] not in ('observed', 'lost', 'no_target'): errors.append('target_signal: unknown status')
-        if (s['status'] == 'observed') != (s['observed'] is not None): errors.append('target_signal: status/observation mismatch')
-        for f in s['forecast']:
-            if (issue is not None or s['status'] != 'observed' or f['after_signal_ms'] not in (0, 100, 200) or
-                    expected['capture_to_signal_ms'] + f['after_signal_ms'] > 1000):
-                errors.append('target_signal: invalid forecast horizon or clock')
+        if version == 2:
+            confidence = s['confidence']
+            if (confidence is None) != (point is None) or (confidence is not None and
+                    (type(confidence) not in (int, float) or not math.isfinite(confidence) or not 0 <= confidence <= 1)):
+                errors.append('target_signal: invalid confidence')
+            pixel = s['pixel']
+            if point is None:
+                if pixel is not None: errors.append('target_signal: no_target has pixel')
+            elif pixel is None or any(type(pixel.get(k)) is not int or pixel[k] != math.floor(point[k]) for k in ('x', 'y')):
+                errors.append('target_signal: pixel mismatch')
     timings = {}
     for stage in ('capture_to_signal', 'capture_to_analyzer', 'analyzer_to_signal'):
         calculated = summary([s[stage+'_ms'] for s in signals if s[stage+'_ms'] is not None])
         timings[stage] = calculated
-        exported = d['timing_summary_ms'].get(stage)
-        if calculated is None or exported is None:
-            if calculated != exported: errors.append(stage + ': empty summary mismatch')
-        elif any(not equal(v, exported.get(k)) for k, v in calculated.items()): errors.append(stage + ': summary mismatch')
-    prediction_error = summary([s['one_step_prediction_error_px'] for s in signals if s['one_step_prediction_error_px'] is not None])
-    exported = d.get('one_step_prediction_error_px')
-    if prediction_error is None or exported is None:
-        if prediction_error != exported: errors.append('prediction error: empty summary mismatch')
-    elif any(not equal(v, exported.get(k)) for k, v in prediction_error.items()): errors.append('prediction error: summary mismatch')
+        check_summary(calculated, d['timing_summary_ms'].get(stage), stage, errors)
+    available = sum(s['capture_to_signal_ms'] is not None for s in signals)
+    count = len(d['frames'])
+    availability = dict(scope='stored_frames', stored_frames=count, signals_recorded=len(signals),
+                        available_frames=available, unavailable_frames=count-available,
+                        available_fraction=available/count if count else None)
+    exported = d.get('capture_timing_availability')
+    if version == 2 and exported is None: errors.append('missing capture_timing_availability')
+    if exported is not None:
+        for key, value in availability.items():
+            if key == 'scope':
+                matches = exported.get(key) == value
+            else:
+                matches = equal(exported.get(key), value)
+            if not matches: errors.append('capture_timing_availability: mismatch ' + key)
     stale = d.get('application_stale_frames_discarded', 0)
     if type(stale) is not int or stale < 0: errors.append('invalid application stale counter')
-    return {'count': len(signals), 'without_exposure_latency': sum(s['capture_to_signal_ms'] is None for s in signals),
-            'timings_ms': timings, 'one_step_prediction_error_px': prediction_error, 'application_stale_frames_discarded': stale}
+    return {'count': len(signals), 'without_exposure_latency': len(signals)-available,
+            'detected': sum(s['status'] in ('detected', 'observed') for s in signals),
+            'timings_ms': timings, 'capture_timing_availability': availability,
+            'application_stale_frames_discarded': stale}
 
 
 def analyze(d, filename='', digest=''):
@@ -111,11 +142,7 @@ def analyze(d, filename='', digest=''):
     for name, field in STAGES.items():
         s = summary([r[field] for r in frames]); stats[name] = s
         old = d['timing_summary_ms'].get(name)
-        if s is None or old is None:
-            if s != old: errors.append(name + ': empty summary mismatch')
-        else:
-            for k in s:
-                if not equal(s[k], old.get(k)): errors.append(name + ': mismatch ' + k)
+        check_summary(s, old, name, errors)
     def series(key):
         return [r[key] for r in resources if r.get(key) is not None]
     res = {}

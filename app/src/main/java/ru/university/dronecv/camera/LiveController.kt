@@ -59,7 +59,6 @@ class LiveController<Frame : AutoCloseable>(
     private val mutableSignals = MutableStateFlow<TargetSignal?>(null)
     /** Conflated internal signal stream; null invalidates the target on Stop/pause/error/expiry. */
     val signals = mutableSignals.asStateFlow()
-    private val tracker = TargetTracker()
     private var frameId = 0L
     private val mutableThreads = MutableStateFlow(ThreadConfiguration(initialThreads))
     val threadConfiguration = mutableThreads.asStateFlow()
@@ -80,7 +79,6 @@ class LiveController<Frame : AutoCloseable>(
         confidence = threshold
         val configuredGeneration = ++generation
         completions.clear()
-        tracker.reset()
         mutableSignals.value = null
         if (generation == configuredGeneration && !closed) {
             mutableState.value = LiveState(
@@ -148,7 +146,7 @@ class LiveController<Frame : AutoCloseable>(
                 val end = nanoTime()
                 synchronized(lock) {
                     if (!closed && active && generation == request.first) {
-                        val observation = stamp?.let { tracker.observe(result.detections, result.width, result.height, it.captureNs) }
+                        val selected = selectTarget(result.detections, result.width, result.height)
                         completions.addLast(end)
                         while (completions.size > 30 ||
                             (completions.size > 2 && end - completions.first() > 3_000_000_000L)) {
@@ -158,8 +156,8 @@ class LiveController<Frame : AutoCloseable>(
                         val fps = if (completions.size > 1 && elapsed > 0)
                             (completions.size - 1) * 1_000_000_000.0 / elapsed else null
                         val previous = mutableState.value
-                        val signal = if (stamp != null && observation != null && eventTime != null) targetSignal(++frameId, source, stamp,
-                            eventTime(), result.width, result.height, observation) else null
+                        val signal = if (stamp != null && eventTime != null) targetSignal(++frameId, source, stamp,
+                            eventTime(), result.width, result.height, selected) else null
                         val next = LiveState(
                             LivePhase.RUNNING, result, (end - start) / 1_000_000.0, fps,
                             previous.completedFrames + 1, revision = ++revision, target = signal,
@@ -188,7 +186,6 @@ class LiveController<Frame : AutoCloseable>(
     private fun fail(id: Long, message: String) = synchronized(lock) {
         if (closed || !active || generation != id) return@synchronized
         val failureGeneration = ++generation
-        tracker.reset()
         mutableSignals.value = null
         if (generation == failureGeneration && !closed && active) {
             mutableState.value = LiveState(LivePhase.ERROR, error = message, revision = ++revision)
@@ -214,7 +211,6 @@ class LiveController<Frame : AutoCloseable>(
         active = false
         generation++
         source++
-        tracker.reset()
         mutableSignals.value = null
         mutableState.value = LiveState(revision = ++revision)
         worker.execute { backend.close() } // ordered after any in-flight native call; never wait on UI.

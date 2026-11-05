@@ -130,22 +130,18 @@ private fun LiveControls(
             Text("YOLO11s · CPU / ${threadState.threads} потока · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
         }
         state.target?.let { signal ->
-            val latency = signal.captureToSignalMs?.let { "${format(it)} мс" } ?: "неизвестно: часы камеры не сопоставлены"
+            val latency = signal.captureToSignalMs?.let { "${format(it)} мс" } ?: when (signal.timingIssue) {
+                "missing_capture_timestamp" -> "неизвестно: нет метки экспозиции"
+                "capture_after_analyzer" -> "неизвестно: метка экспозиции позже входа"
+                "non_monotonic_dispatch_clock" -> "неизвестно: нарушен порядок часов приложения"
+                else -> "неизвестно: часы камеры не сопоставлены"
+            }
             Text("Экспозиция → сигнал: $latency", style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.testTag("capture-to-signal"))
-            signal.observed?.let { point ->
-                Text("Цель #${signal.targetId}: пиксель (${point.x.toInt()}, ${point.y.toInt()}) · ${signal.width}×${signal.height}",
+            signal.center?.let { point ->
+                Text("Цель: пиксель (${point.x.toInt()}, ${point.y.toInt()}) · ${signal.width}×${signal.height} · confidence ${format(checkNotNull(signal.confidence) * 100.0)}%",
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("target-coordinates"))
             }
-            val future = signal.forecast.lastOrNull()
-            Text(if (future != null) "Прогноз +${future.afterSignalMs} мс от сигнала: x=${format(future.point.x)}, y=${format(future.point.y)} px · голубой"
-                else when (signal.predictionIssue) {
-                    "insufficient_history" -> "Для прогноза нужны три наблюдения одной цели"
-                    "prediction_horizon_exceeded" -> "Прогноз отключён: кадр слишком старый"
-                    "prediction_outside_frame" -> "Прогноз выходит за границы кадра"
-                    "no_observed_target" -> "Цель потеряна или не обнаружена"
-                    else -> "Прогноз недоступен: временная база не подтверждена"
-                }, style = MaterialTheme.typography.bodySmall)
         }
         Text("Потоки ORT: ${threadState.threads}" + if (threadState.switching) " · загрузка…" else "", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -211,10 +207,7 @@ private fun LiveOverlay(state: LiveState, modifier: Modifier) {
         }
         state.target?.let { signal ->
             fun screen(p: PixelPoint) = Offset((p.x / signal.width * size.width).toFloat(), (p.y / signal.height * size.height).toFloat())
-            signal.history.zipWithNext().forEach { (a, b) -> drawLine(Color.Yellow, screen(a), screen(b), stroke) }
-            signal.observed?.let { drawCircle(Color.Yellow, 4.dp.toPx(), screen(it)) }
-            signal.forecast.zipWithNext().forEach { (a, b) -> drawLine(Color.Cyan, screen(a.point), screen(b.point), stroke) }
-            signal.forecast.lastOrNull()?.let { drawCircle(Color.Cyan, 6.dp.toPx(), screen(it.point), style = Stroke(stroke)) }
+            signal.center?.let { drawCircle(Color.Yellow, 4.dp.toPx(), screen(it)) }
         }
     }
 }

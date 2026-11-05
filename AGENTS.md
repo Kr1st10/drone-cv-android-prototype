@@ -12,7 +12,7 @@
 - `camera/CameraScreen.kt` — разрешение CAMERA, состояния экрана, ошибки.
 - `camera/CameraPreview.kt` — общий ViewPort Preview/ImageAnalysis, привязка к lifecycle и display rotation.
 - `camera/LiveController.kt` — последовательный analyzer, generation/source tokens и владение кадром; `AndroidLiveBackend` — RGBA crop → общий YOLO engine.
-- `camera/TargetSignal.kt` — FrameStamp, сопоставление одной цели по рамкам YOLO, пиксельные координаты и ограниченный 2D-прогноз; сигнал через StateFlow и диагностический JSON.
+- `camera/TargetSignal.kt` — FrameStamp, выбор максимального confidence в текущем кадре и пиксельный центр; внутренний сигнал через StateFlow и диагностический JSON, без сопоставления объектов между кадрами.
 - `detection/DetectorWorker.kt` — единственный process-wide ML-worker для фото и видео; ORT CPU sequential/2 потока без spinning.
 - `detection/ObjectDetector.kt` — контракт детектора (`ObjectDetector`, `Detection`, `NormalizedBox`).
 - `detection/onnx/` — Android-адаптер, проверка файла и общий JVM/Android ORT-движок; `detection/yolo/` — чистые Kotlin pre/postprocessing.
@@ -79,4 +79,4 @@ JVM-тесты включают реальный ORT-инференс; моде�
 
 - Размер области превью не должен зависеть от появления/текста результата или статистики: иначе layout → ViewPort rebind → invalidate может сбрасывать каждый результат. Панель имеет фиксированный размер относительно доступного окна и прокручивается внутри.
 - UI-коллекция StateFlow детектора явно использует Dispatchers.Main.immediate; unit controller остаётся Android-independent. Это также исключает перенос Compose test frame/layout на ML-worker через unconfined test continuation.
-- Метки экспозиции вычитать только из `elapsedRealtimeNanos` и только при Camera2 timestamp source REALTIME; UNKNOWN даёт null, без подгонки смещения к `nanoTime`. FrameStamp и eventTime должны иметь согласованную базу; без eventTime сигналы отключены. При invalidation сбрасывать сигнал и историю цели, не подменять потерю прогнозом-детекцией.
+- Метки экспозиции вычитать только из `elapsedRealtimeNanos` и только при Camera2 timestamp source REALTIME; UNKNOWN даёт null с причиной, без подгонки смещения к `nanoTime`. FrameStamp и eventTime должны иметь согласованную базу; без eventTime сигналы отключены. При invalidation сбрасывать сигнал. Каждый кадр выбирает максимальный confidence независимо; отсутствие обнаружений публикует NO_TARGET с null-координатами и confidence.

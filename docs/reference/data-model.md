@@ -1,6 +1,6 @@
 # Данные в памяти и экспорт
 
-Справочник для разработчика и потребителя диагностических файлов. Применяется к Android `0.5.0` на основе `acb3e9e` и отдельно к галерее 6.6. Реляционной БД, таблиц, ключей, индексов, транзакций и миграций нет; ER-диаграмма — `N/A`.
+Справочник для разработчика и потребителя диагностических файлов. Применяется к Android `0.5.1` на основе `acb3e9e` и отдельно к галерее 6.6. Реляционной БД, таблиц, ключей, индексов, транзакций и миграций нет; ER-диаграмма — `N/A`.
 
 ## Обнаружения и изображения
 
@@ -61,25 +61,28 @@
 
 В памяти `FrameMeasurement`/`ResourceSample` содержат `offsetNanos`, а `DiagnosticFrameSnapshot` — `durationNanos`, все типа `Long` в наносекундах; JSON преобразует эти поля в мс. Длительности стадий (`conversionMs` и другие) уже хранятся как `Double` в миллисекундах. Лимит установлен для кадрового ряда; отдельного capacity для списка resource samples нет. Подробные границы длительностей и разные определения FPS — [потоки данных](../architecture/data-flow.md#границы-измерений).
 
-## Сигнал цели: дополнение 0.5.0
+## Сигнал текущего кадра: payload v2 в 0.5.1
 
-Старые поля schema 1 сохраняются. В `frames[]` добавлен `target_signal: object/null`, в корень — `target_signal_schema_version=1` и `application_stale_frames_discarded: integer`. Последний считает пропуски приложения до ORT из-за подтверждённого возраста больше 250 мс, отдельно от accepted callbacks и неизвестных drops CameraX. При truncation сигналы усекаются вместе с кадровым рядом.
+Внешний формат диагностики остаётся `schema_version=1`; версия вложенного сигнала — `target_signal_schema_version=2`. Поля прежней диагностики сохранены. `frames[].target_signal` — object/null, в памяти это `FrameMeasurement.targetSignal` и `LiveState.target`. Сигналы усекаются вместе с кадровым рядом.
 
-В `timing_summary_ms` добавлены сводки `capture_to_signal`, `capture_to_analyzer`, `analyzer_to_signal` в мс; каждая строится только по ненулевым метрикам сохранённых сигналов. Корневая `one_step_prediction_error_px` использует ту же структуру count/mean/median/p95/min/max, но единица — px. В `FrameMeasurement` payload хранится как `TargetSignal?`, в `LiveState` — как `target`; StateFlow сигналов очищается вместе с результатом при invalidation/expiry.
+`application_stale_frames_discarded: integer` считает пропуски приложения до ORT из-за подтверждённого возраста больше 250 мс, отдельно от accepted callbacks и неизвестных drops CameraX. `timing_summary_ms` дополнен сводками `capture_to_signal`, `capture_to_analyzer`, `analyzer_to_signal`; каждая включает только ненулевые метрики сохранённых сигналов. Во всех сводках `p50` — явный псевдоним `median`; прежние `median` и `p95_nearest_rank` сохранены.
 
 | Поля `target_signal` | Типы и смысл |
 |---|---|
-| `schema_version`, `frame_id`, `source_id`, `target_id` | integer; target_id может быть null; версия payload 1 |
+| `schema_version`, `frame_id`, `source_id` | integer; версия payload 2, положительный номер сигнала в контроллере и номер активации analyzer; не ID объекта |
 | `capture_ns`, `analyzer_entry_ns`, `signal_dispatch_ns` | integer в нс; capture_ns может быть null; базы нельзя смешивать |
 | `timestamp_source`, `timing_issue` | `elapsed_realtime`/`unknown`; причина неизвестной задержки — string/null |
 | `capture_to_signal_ms`, `capture_to_analyzer_ms`, `analyzer_to_signal_ms` | number/null, в мс |
-| `status`, `width`, `height`, `coordinate_space` | `observed`/`lost`/`no_target`, положительные integer, `upright_crop_pixels` |
-| `observed`, `observed_pixel`, `confidence` | object с числовыми x/y центра, object с целочисленными индексами x/y, number `[0,1]`; при отсутствии цели null |
-| `velocity_px_per_second` | object с числовыми x/y скорости либо null |
-| `forecast` | array объектов `after_signal_ms: integer`, `point: {x,y}`; пустой при недоступном прогнозе |
-| `prediction_issue`, `one_step_prediction_error_px` | string/null и number/null в px |
+| `status`, `width`, `height`, `coordinate_space` | `detected`/`no_target`, положительные integer размеров upright crop, `upright_crop_pixels` |
+| `center`, `pixel`, `confidence` | object с числовыми x/y центра самого уверенного обнаружения текущего кадра, object с целочисленными индексами x/y, number `[0,1]`; при no_target все три null |
 
-Метрики Camera2 корректны только с сопоставимой временной базой; порядок отсечек, коэффициенты модели, граница отправки, состояния и ручная проверка описаны в [инструкции задержки и прогноза](../guides/latency-and-prediction.md). Экспорт не содержит историю наблюдений, изображения или все рамки. Анализатор пересчитывает арифметику задержки по исходным ns и проверяет сводки. В потребителях сохраняйте точность Long-меток; JavaScript Number может терять младшие разряды больших ns.
+`capture_timing_availability` относится только к сохранённым кадрам: `scope="stored_frames"`, `stored_frames` — размер frames, `signals_recorded` — число ненулевых сигналов, `available_frames` — число сигналов с корректной capture-to-signal, `unavailable_frames=stored_frames-available_frames`. Доля `available_fraction=available_frames/stored_frames` либо null для пустой записи. Устаревшие входы и усечённые кадры не входят в знаменатель; наличие raw timestamp при UNKNOWN не считается доступным измерением.
+
+Метрики Camera2 корректны только с сопоставимой временной базой; причины null, граница внутренней публикации и ручная проверка описаны в [инструкции задержки](../guides/latency-and-prediction.md). Экспорт не содержит изображения или все рамки. Анализатор пересчитывает задержки по исходным ns и проверяет сводки. В потребителях сохраняйте точность Long-меток; JavaScript Number может терять младшие разряды больших ns.
+
+### Совместимость прежних отчётов
+
+Отчёты без target_signal_schema_version читаются как прежде. Анализатор также читает payload v1 из 0.5.0: `observed` и `observed_pixel` соответствуют новым `center` и `pixel`, статус `observed` означает обнаружение, `lost`/`no_target` — отсутствие. Старые дополнительные поля допускаются на входе, но их расчёты не выполняются и в новом экспорте их нет. Потребитель v1 должен проверить marker 2 и перейти на новые названия/статусы; молча интерпретировать v2 как v1 нельзя. Старые файлы не переписываются. Сводки без поля p50 допустимы.
 
 ## JSON инвентаря камер: schema_version 1
 

@@ -1,6 +1,6 @@
 # Проверки приложения и инструментов
 
-Инструкция для разработчика и тестировщика Android `0.5.0`. Команды выполняются из корня репозитория с JDK 17, SDK 35 и установленной моделью по [быстрому старту](../getting-started.md). Результаты текущего изменения находятся в PROJECT_STATE; [аудит](../documentation-audit.md) содержит исторические проверки подготовки документации. Этот раздел описывает воспроизводимые проверки.
+Инструкция для разработчика и тестировщика Android `0.5.1`. Команды выполняются из корня репозитория с JDK 17, SDK 35 и установленной моделью по [быстрому старту](../getting-started.md). Результаты текущего изменения находятся в PROJECT_STATE; [аудит](../documentation-audit.md) содержит исторические проверки подготовки документации. Этот раздел описывает воспроизводимые проверки.
 
 ## Локальная Android-сборка и JVM
 
@@ -44,7 +44,7 @@ adb devices
 python3 -m unittest discover -s ml/tests -p test_target_signals.py -v
 ```
 
-В Android добавлены `TargetSignalTest`, `TargetReportTest` и device JSON test `TargetSignalJsonInstrumentedTest`. Детерминированная траектория/поддельные часы проверяют математику, invalidation и serializer; они не являются аппаратными измерениями задержки или качества прогноза. Ручные проверки — [задержка и прогноз](../guides/latency-and-prediction.md).
+В Android `TargetSignalTest` проверяет независимый выбор максимального confidence, пустой кадр, временные базы, invalidation и закрытие кадров. `TargetReportTest` и device JSON test `TargetSignalJsonInstrumentedTest` проверяют serializer, null и долю доступных меток. Синтетические рамки и часы проверяют контракт, но не являются аппаратными измерениями задержки. Python-тесты читают payload v1/v2 и отчёты без сигнала; ручные проверки — [задержка и координаты](../guides/latency-and-prediction.md).
 
 В подготовленном Python-окружении с зависимостями [ML README](../../ml/README.md):
 

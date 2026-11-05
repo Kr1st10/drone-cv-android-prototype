@@ -26,71 +26,57 @@ class TargetSignalTest {
         assertNull(s.ageAt(1_005_000_000))
     }
 
-    @Test fun regressionPredictsFromExposureThroughMeasuredLatencyToFutureSignalTime() {
-        val tracker = TargetTracker()
-        var observed = tracker.observe(listOf(drone(100.0)), 640, 480, 1_000_000_000)
-        val id = observed.id
-        assertNull(observed.velocity)
-        observed = tracker.observe(listOf(drone(110.0)), 640, 480, 1_100_000_000)
-        assertEquals(id, observed.id)
-        observed = tracker.observe(listOf(drone(120.0)), 640, 480, 1_200_000_000)
-        assertEquals(id, observed.id)
-        assertEquals(100.0, observed.velocity!!.xPerSecond, .001)
-        val signal = targetSignal(3, 7, stamp(1_200_000_000), 1_350_000_000, 640, 480, observed)
-        assertEquals(150.0, signal.captureToSignalMs!!, 0.0)
-        assertEquals(135.0, signal.forecast.first().point.x, .001)
-        assertEquals(155.0, signal.forecast.last().point.x, .001)
-        assertEquals(listOf(0, 100, 200), signal.forecast.map { it.afterSignalMs })
-        assertNull(signal.predictionIssue)
-        val next = tracker.observe(listOf(drone(130.0)), 640, 480, 1_300_000_000)
-        assertEquals(0.0, next.predictionErrorPx!!, .001)
+    @Test fun eachFrameSelectsHighestConfidenceWithoutUsingPreviousLocation() {
+        val first = selectTarget(listOf(drone(100.0, confidence = .9f), drone(500.0, confidence = .8f)), 640, 480)!!
+        val next = selectTarget(listOf(drone(101.0, confidence = .6f), drone(500.0, confidence = .95f)), 640, 480)!!
+        assertEquals(100.0, first.center.x, .001)
+        assertEquals(500.0, next.center.x, .001)
+        assertEquals(.95f, next.confidence)
+        assertNull(selectTarget(emptyList(), 640, 480))
+        val tie = selectTarget(listOf(drone(500.0), drone(100.0)), 640, 480)!!
+        assertEquals(500.0, tie.center.x, .001)
     }
 
-    @Test fun unrelatedAndAmbiguousDetectionsDoNotKeepTheOldIdentity() {
-        val tracker = TargetTracker()
-        val first = tracker.observe(listOf(drone(100.0)), 640, 480, 1_000_000_000)
-        val lost = tracker.observe(listOf(drone(400.0)), 640, 480, 1_100_000_000)
-        assertEquals(TargetStatus.LOST, lost.status); assertEquals(first.id, lost.id); assertNull(lost.point)
-        val acquired = tracker.observe(listOf(drone(400.0)), 640, 480, 1_200_000_000)
-        assertNotEquals(first.id, acquired.id)
-        val ambiguous = tracker.observe(listOf(drone(398.0), drone(402.0)), 640, 480, 1_300_000_000)
-        assertEquals(TargetStatus.LOST, ambiguous.status)
+    @Test fun uprightDimensionsBoundsAndUnknownClockPreserveCurrentCoordinates() {
+        val selected = selectTarget(listOf(Detection("drone", .9f, NormalizedBox(1f, 1f, 1f, 1f))), 480, 640)!!
+        assertEquals(PixelPoint(479.0, 639.0), selected.center)
+        val signal = targetSignal(1, 2, stamp(1_000_000_000, source = CaptureTimebase.UNKNOWN),
+            1_150_000_000, 480, 640, selected)
+        assertEquals(TargetStatus.DETECTED, signal.status)
+        assertEquals(selected.center, signal.center)
+        assertNull(signal.captureToSignalMs); assertNull(signal.captureToAnalyzerMs)
+        assertEquals(140.0, signal.analyzerToSignalMs!!, 0.0)
+        assertEquals("unsynchronized_camera_clock", signal.timingIssue)
     }
 
-    @Test fun missingRepeatedOrDiscontinuousCaptureAndResizeResetVelocity() {
-        for (ns in listOf<Long?>(null, 1_200_000_000, 900_000_000, 5_000_000_000)) {
-            val t = TargetTracker()
-            t.observe(listOf(drone(100.0)), 640, 480, 1_000_000_000)
-            t.observe(listOf(drone(110.0)), 640, 480, 1_100_000_000)
-            val old = t.observe(listOf(drone(120.0)), 640, 480, 1_200_000_000)
-            val fresh = t.observe(listOf(drone(120.0)), 640, 480, ns)
-            assertNotEquals(old.id, fresh.id); assertNull(fresh.velocity)
-        }
-        val t = TargetTracker()
-        val old = t.observe(listOf(drone(100.0)), 640, 480, 1_000_000_000)
-        assertNotEquals(old.id, t.observe(listOf(drone(100.0)), 480, 640, 1_100_000_000).id)
+    @Test fun emptyFramePublishesNoTargetInsteadOfPreviousCoordinates() {
+        val backend = Backend()
+        val c = LiveController(backend, Executor { it.run() }, eventTime = { 1_150_000_000 })
+        c.configure(true, .5f)
+        c.analyze(Frame(), stamp = stamp(1_000_000_000))
+        val previous = c.signals.value!!
+        backend.detections = emptyList()
+        val frame = Frame(); c.analyze(frame, stamp = stamp(1_000_000_000))
+        val empty = c.signals.value!!
+        assertTrue(frame.closed); assertEquals(previous.frameId + 1, empty.frameId)
+        assertEquals(TargetStatus.NO_TARGET, empty.status)
+        assertNull(empty.center); assertNull(empty.confidence)
+        assertEquals(empty, c.state.value.target)
+        assertEquals(150.0, empty.captureToSignalMs!!, 0.0)
+        c.close()
     }
 
-    @Test fun noUnboundedForecastForOldFramesUnknownClockOrOutsideImage() {
-        val t = TargetTracker()
-        t.observe(listOf(drone(580.0)), 640, 480, 1_000_000_000)
-        t.observe(listOf(drone(600.0)), 640, 480, 1_100_000_000)
-        val o = t.observe(listOf(drone(620.0)), 640, 480, 1_200_000_000)
-        fun signal(stamp: FrameStamp, now: Long) = targetSignal(3, 1, stamp, now, 640, 480, o)
-        assertEquals("prediction_outside_frame", signal(stamp(1_200_000_000), 1_250_000_000).predictionIssue)
-        assertEquals("prediction_horizon_exceeded", signal(stamp(1_200_000_000), 2_100_000_000).predictionIssue)
-        val unknown = signal(stamp(1_200_000_000, source = CaptureTimebase.UNKNOWN), 1_250_000_000)
-        assertNull(unknown.captureToSignalMs); assertTrue(unknown.forecast.isEmpty())
-        val lost = t.observe(emptyList(), 640, 480, 1_300_000_000)
-        assertNull(lost.point); assertNull(lost.velocity)
+    private class Frame : AutoCloseable {
+        var closes = 0
+        val closed get() = closes == 1
+        override fun close() { closes++ }
     }
-
-    private class Frame : AutoCloseable { var closed = false; override fun close() { closed = true } }
     private class Backend : LiveBackend<Frame> {
         var calls = 0; var action: () -> Unit = {}
+        var detections = listOf(droneStatic())
         override fun infer(frame: Frame, confidence: Float): LiveInference {
             calls++; action()
-            return LiveInference(listOf(droneStatic()), 640, 480, 3.0, 1.0, 2.0, 4.0)
+            return LiveInference(detections, 640, 480, 3.0, 1.0, 2.0, 4.0)
         }
         override fun close() = Unit
         private fun droneStatic() = Detection("drone", .9f, NormalizedBox(.4f, .4f, .5f, .5f))
@@ -134,11 +120,11 @@ class TargetSignalTest {
     @Test fun oldSourceFailureAndExpiryCannotLeaveAnActionableTarget() {
         val b = Backend(); val c = LiveController(b, Executor { it.run() }, eventTime = { 1_150_000_000 })
         val oldSource = c.newSource(); c.configure(true, .5f)
-        c.analyze(Frame(), oldSource, stamp(1_000_000_000)); val oldId = c.signals.value!!.targetId
+        c.analyze(Frame(), oldSource, stamp(1_000_000_000)); val oldSignal = c.signals.value!!
         val source = c.newSource(); c.configure(true, .5f)
         val oldFrame = Frame(); c.analyze(oldFrame, oldSource, stamp(1_000_000_000))
         assertTrue(oldFrame.closed); assertNull(c.signals.value); assertEquals(1, b.calls)
-        c.analyze(Frame(), source, stamp(1_000_000_000)); assertNotEquals(oldId, c.signals.value!!.targetId)
+        c.analyze(Frame(), source, stamp(1_000_000_000)); assertNotEquals(oldSignal.sourceId, c.signals.value!!.sourceId); assertTrue(c.signals.value!!.frameId > oldSignal.frameId)
         c.expire(c.state.value.revision); assertNull(c.signals.value); assertNull(c.state.value.target)
         b.action = { throw IllegalStateException("test failure") }
         val failure = Frame(); c.analyze(failure, source, stamp(1_000_000_000))
