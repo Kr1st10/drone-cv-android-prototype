@@ -97,7 +97,7 @@
 
 ## Лабораторная галерея
 
-Галерея хранит выборку, settings, runs, trial и results в браузерном `localStorage` с префиксом `dronecv66v2.`. Это отдельное хранилище, не связанное с Android ViewModel. Экспорт JSON имеет `format="dronecv66-session-2"`; [results_template.csv](../../lab/monitor_test/results_template.csv) задаёт 35 столбцов CSV. Назначение полей, единицы, null и правила TP/FN/FP/TN канонически описаны в [протоколе](../../lab/monitor_test/PROTOCOL.md#5-размеры-и-экспорт).
+Галерея хранит выборку, settings, runs, trial и results в браузерном `localStorage` с префиксом `dronecv66v2.`. Это отдельное хранилище, не связанное с Android ViewModel. Экспорт JSON имеет `format="dronecv66-session-2"`; [results_template.csv](../../lab/monitor_test/results_template.csv) задаёт 36 столбцов CSV. Назначение полей, единицы, null и правила TP/FN/FP/TN канонически описаны в [протоколе](../../lab/monitor_test/PROTOCOL.md#5-размеры-и-экспорт).
 
 Выборка содержит фиксированные image IDs; повторный прогон сохраняет порядок. Результат показа заменяется по паре `(run_id, step)` в массиве JavaScript; это программное правило, не SQL-ключ. Перед очисткой браузера экспортируйте JSON. Импорт восстанавливает подходящую sample и trial, сливает отсутствующие runs/results (результаты после подтверждения), не перезаписывает существующие ключи и не применяет корневые settings. Изображения/manifest не переносятся; перед новым прогоном настройки проверяются вручную. В quick-режиме `app_conf_threshold_pct` в записи равен null даже при наличии значения в скрытом поле настроек.
 

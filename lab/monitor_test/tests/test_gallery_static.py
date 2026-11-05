@@ -19,7 +19,7 @@ def test_export_columns_match_template():
     cols = re.findall(r"'([a-z0-9_]+)'", cols)
     assert ','.join(cols) == (ROOT / 'results_template.csv').read_text(encoding='utf-8').strip()
     for c in ('sample_id', 'camera_zoom', 'distance_cm', 'detection', 'result_class',
-              'object_monitor_px', 'object_camera_px_measured', 'object_yolo_px'):
+              'object_monitor_px', 'object_camera_px_measured', 'object_yolo_px', 'max_confidence_pct'):
         assert c in cols
 
 
