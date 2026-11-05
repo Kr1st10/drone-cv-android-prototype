@@ -76,19 +76,30 @@ await page.keyboard.press('a');
 ok(await page.isHidden('#answer') && await page.isHidden('#record') && /скрыт/.test(await page.textContent('#toast')), 'A before saving shows only a hint, not the answer or the form');
 // R: record form without answer
 await page.keyboard.press('r');
-ok(await page.isVisible('#record') && await page.isVisible('.det[data-det=box_on_object]') && await page.isHidden('#recConf') && await page.isHidden('#recCamPx'), 'R opens quick record form (3 choices, no size/confidence inputs)');
+ok(await page.isVisible('#record') && await page.isVisible('.det[data-det=box_on_object]') && await page.isHidden('#recConf') && await page.isHidden('#recCamPx'), 'R opens quick record form (3 choices, no advanced size/confidence inputs)');
 ok(await noLeak('record'), 'record form does not reveal the answer');
+ok(await page.isVisible('#recMaxConf'), 'maximum confidence available in quick mode');
+for (const value of ['-0.1', '100.1']) {
+  await page.fill('#recMaxConf', value); await page.click('.det[data-det=box_on_object]');
+  ok(await page.isVisible('#record') && !(await ls(page, 'results'))?.length && await page.isHidden('#answer'), 'out-of-range confidence blocked: ' + value);
+}
+await page.fill('#recMaxConf', '87.25'); await page.locator('#recMaxConf').blur();
 await page.keyboard.press('1');
 ok(await page.isHidden('#record'), 'quick mode: key 1 saves immediately');
 let r0 = (await ls(page, 'results'))[0];
 ok(r0.detection === 'box_on_object' && r0.object_camera_px_measured === null && r0.object_yolo_px === null && r0.object_camera_px_expected === null && r0.fp_count === null && r0.target_conf_pct === null,
   'unmeasured values saved as null (camera px, YOLO px, fp, confidence)');
+ok(r0.max_confidence_pct === 87.25, 'choice 1 stores fractional maximum confidence');
 ok(r0.camera_zoom === '1x' && r0.distance_cm === 120 && r0.phone === 'Xiaomi 17T Pro' && r0.sample_id === smp.sample_id, 'record has phone, zoom, distance, sample id');
 ok(r0.category.startsWith('negative') ? r0.object_monitor_px === null : r0.object_monitor_px > 0, 'object size in monitor px computed by gallery');
 await page.keyboard.press('a');
 ok(await page.isVisible('#answer') && (await page.textContent('#answer')).includes(await page.evaluate(c => window.MANIFEST.categories[c], r0.category)), 'A after saving shows the correct category');
 await page.keyboard.press('ArrowRight');
 ok(await page.isHidden('#answer'), 'answer hidden on the next image');
+// No boxes must ignore a typed value.
+await page.keyboard.press('r'); await page.fill('#recMaxConf', '99'); await page.locator('#recMaxConf').blur(); await page.keyboard.press('3');
+ok((await ls(page, 'results')).find(r => r.step === 1).max_confidence_pct === null, 'choice 3 ignores confidence and stores null');
+await page.keyboard.press('r'); ok(await page.isHidden('#recMaxConf'), 'choice 3 hides confidence on reopening'); await page.keyboard.press('Escape');
 // record the remaining 19 with "3" (no boxes) — operator choices, not real CV results
 for (let i = 1; i < 20; i++) { await page.keyboard.press('r'); await page.keyboard.press('3'); if (i < 19) await page.keyboard.press('ArrowRight'); }
 await page.keyboard.press('ArrowRight');
@@ -100,6 +111,8 @@ ok(res1.length === 20 && res1.every(r => ['TP', 'FN', 'FP', 'TN'].includes(r.res
    res1[0].result_class === (['civil_quadcopter', 'military_uav', 'uav_payload'].includes(res1[0].category) ? 'TP' : 'FP'), 'result classes derived after recording (TP/FN/FP/TN)');
 // re-record overwrites (no duplicates)
 await page.keyboard.press('r'); await page.keyboard.press('2');
+await page.keyboard.press('r'); await page.fill('#recMaxConf', '42.5'); await page.locator('#recMaxConf').blur(); await page.keyboard.press('2');
+ok((await ls(page, 'results')).find(r => r.step === 19).max_confidence_pct === 42.5, 'choice 2 stores false-box maximum confidence');
 ok((await ls(page, 'results')).length === 20, 're-recording a show replaces the previous record');
 // persistence
 await page.reload(); await page.waitForFunction(() => /Изображений/.test(document.getElementById('status').textContent)); await page.click('#resume');
@@ -112,6 +125,7 @@ await page.click('#start');
 const run2 = await ls(page, 'trial');
 ok(run2.run_id !== run1.run_id && JSON.stringify(run2.order.map(o => o.id)) === JSON.stringify(run1.order.map(o => o.id)) && run2.settings.zoom === '5x', '5x run shows exactly the same images in the same order');
 await page.keyboard.press('r'); await page.keyboard.press('3'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('r'); await page.keyboard.press('1');
+ok((await ls(page, 'results')).find(r => r.run_id === run2.run_id && r.step === 1).max_confidence_pct === null, 'blank confidence stores null for choice 1');
 
 // ---- export ----
 await page.keyboard.press('s');
@@ -123,11 +137,26 @@ const rows = csv.slice(1).map(l => Object.fromEntries(l.split(',').map((v, i) =>
 const z1 = rows.filter(r => r.camera_zoom === '1x').map(r => r.image_id), z5 = rows.filter(r => r.camera_zoom === '5x').map(r => r.image_id);
 ok(z1.length === 20 && z5.length === 2 && z5.every((id, i) => id === z1[i]), 'CSV: 1x and 5x rows refer to the same images');
 ok(rows.every(r => r.object_yolo_px === '' && r.object_camera_px_measured === '' && r.fp_count === ''), 'CSV: unmeasured values are empty (null), not invented');
+ok(rows.some(r => r.max_confidence_pct === '87.25') && rows.some(r => r.max_confidence_pct === '42.5') && rows.filter(r => r.detection === 'no_box').every(r => r.max_confidence_pct === ''), 'CSV exports maximum confidence and empty nulls');
 const js = JSON.parse(await dl(page, '#exportJson'));
 ok(js.format === 'dronecv66-session-2' && JSON.stringify(js.sample.ids) === JSON.stringify(smp.ids) && js.runs.length === 2 && js.results.length === 22, 'JSON export: sample ids, 2 runs, 22 results');
+ok(js.results.some(r => r.max_confidence_pct === 87.25) && js.results.some(r => r.max_confidence_pct === 42.5) && js.results.filter(r => r.detection === 'no_box').every(r => r.max_confidence_pct === null), 'JSON exports maximum confidence and nulls');
 fs.writeFileSync('/tmp/dronecv66_session.json', JSON.stringify(js));
 { const c3 = await newCtx(); const p3 = await open(c3); await p3.setInputFiles('#importJson', '/tmp/dronecv66_session.json'); await p3.waitForTimeout(500);
-  ok(JSON.stringify((await ls(p3, 'sample')).ids) === JSON.stringify(smp.ids) && (await ls(p3, 'results')).length === 22, 'JSON import restores sample and results on another computer'); await p3.close(); await c3.close(); }
+  ok(JSON.stringify((await ls(p3, 'sample')).ids) === JSON.stringify(smp.ids) && (await ls(p3, 'results')).length === 22, 'JSON import restores sample and results on another computer');
+  ok((await ls(p3, 'results')).some(r => r.max_confidence_pct === 87.25), 'JSON import preserves fractional confidence'); await p3.close(); await c3.close(); }
+
+// Older session results have no maximum-confidence field.
+const old = JSON.parse(JSON.stringify(js)); old.results.forEach(r => delete r.max_confidence_pct);
+fs.writeFileSync('/tmp/dronecv66_session_old.json', JSON.stringify(old));
+{ const c = await newCtx(); const p = await open(c); await p.setInputFiles('#importJson', '/tmp/dronecv66_session_old.json');
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('dronecv66v2.results') || '[]').length === 22);
+  const exported = await p.evaluate(() => JSON.parse(sessionJson()));
+  ok(exported.results.every(r => r.max_confidence_pct === null), 'old JSON imports and re-exports with explicit null');
+  await p.evaluate(results => localStorage.setItem('dronecv66v2.results', JSON.stringify(results)), old.results);
+  await p.reload();
+  ok((await p.evaluate(() => JSON.parse(sessionJson()))).results.every(r => r.max_confidence_pct === null), 'old localStorage results export with null');
+  await p.close(); await c.close(); }
 
 // ---- advanced mode: sizes in three units ----
 await page.check('input[name=mode][value=advanced]');
@@ -143,8 +172,14 @@ ok(Math.abs(sz.px - 32) < 0.5 && Math.abs(sz.cx - 960) < 1 && Math.abs(sz.cy - 5
 await page.keyboard.press('r');
 ok(await page.isVisible('#recConf') && await page.isVisible('#recCamPx'), 'advanced record form has optional confidence / measured size');
 await page.keyboard.press('1'); ok(await page.isVisible('#record'), 'advanced: choice does not close the form');
-await page.fill('#recConf', '55'); await page.keyboard.press('Enter');
+await page.fill('#recMaxConf', '0'); await page.click('#recSave');
+ok((await ls(page, 'results')).find(r => r.test_mode === 'advanced').max_confidence_pct === 0, 'zero confidence accepted');
+await page.keyboard.press('r'); await page.fill('#recMaxConf', '100'); await page.fill('#recConf', '55'); await page.keyboard.press('Enter');
 let ra = (await ls(page, 'results')).find(r => r.test_mode === 'advanced');
+ok(ra.max_confidence_pct === 100, '100 percent confidence accepted');
+await page.keyboard.press('r'); await page.click('.det[data-det=no_box]');
+ok(await page.isHidden('#recMaxConf'), 'advanced choice 3 hides confidence'); await page.click('#recSave');
+ok((await ls(page, 'results')).find(r => r.test_mode === 'advanced').max_confidence_pct === null, 'advanced choice 3 stores null');
 ok(ra.target_conf_pct === 55 && ra.size_level === 32 && ra.size_level_unit === 'monitor_px' && Math.abs(ra.object_monitor_px - 32) < 0.2 && ra.object_camera_px_expected === null && ra.object_yolo_px === null,
   'advanced, no calibration: monitor px recorded, camera/YOLO px null');
 // calibration and camera-px mode
