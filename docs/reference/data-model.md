@@ -1,6 +1,6 @@
 # Данные в памяти и экспорт
 
-Справочник для разработчика и потребителя диагностических файлов. Применяется к Android `0.4.0` базы `acb3e9e` и отдельно к галерее 6.6. Реляционной БД, таблиц, ключей, индексов, транзакций и миграций нет; ER-диаграмма — `N/A`.
+Справочник для разработчика и потребителя диагностических файлов. Применяется к Android `0.5.0` на основе `acb3e9e` и отдельно к галерее 6.6. Реляционной БД, таблиц, ключей, индексов, транзакций и миграций нет; ER-диаграмма — `N/A`.
 
 ## Обнаружения и изображения
 
@@ -60,6 +60,26 @@
 | `resources[]` | `offset_ms: number`, `pss_kb,thermal_status,battery_percent,battery_status: integer/null`, `battery_temperature_c: number/null` | Опрос примерно каждые 5 с, не на каждый кадр; thermal API с 29; температура батареи не температура CPU |
 
 В памяти `FrameMeasurement`/`ResourceSample` содержат `offsetNanos`, а `DiagnosticFrameSnapshot` — `durationNanos`, все типа `Long` в наносекундах; JSON преобразует эти поля в мс. Длительности стадий (`conversionMs` и другие) уже хранятся как `Double` в миллисекундах. Лимит установлен для кадрового ряда; отдельного capacity для списка resource samples нет. Подробные границы длительностей и разные определения FPS — [потоки данных](../architecture/data-flow.md#границы-измерений).
+
+## Сигнал цели: дополнение 0.5.0
+
+Старые поля schema 1 сохраняются. В `frames[]` добавлен `target_signal: object/null`, в корень — `target_signal_schema_version=1` и `application_stale_frames_discarded: integer`. Последний считает пропуски приложения до ORT из-за подтверждённого возраста больше 250 мс, отдельно от accepted callbacks и неизвестных drops CameraX. При truncation сигналы усекаются вместе с кадровым рядом.
+
+В `timing_summary_ms` добавлены сводки `capture_to_signal`, `capture_to_analyzer`, `analyzer_to_signal` в мс; каждая строится только по ненулевым метрикам сохранённых сигналов. Корневая `one_step_prediction_error_px` использует ту же структуру count/mean/median/p95/min/max, но единица — px. В `FrameMeasurement` payload хранится как `TargetSignal?`, в `LiveState` — как `target`; StateFlow сигналов очищается вместе с результатом при invalidation/expiry.
+
+| Поля `target_signal` | Типы и смысл |
+|---|---|
+| `schema_version`, `frame_id`, `source_id`, `target_id` | integer; target_id может быть null; версия payload 1 |
+| `capture_ns`, `analyzer_entry_ns`, `signal_dispatch_ns` | integer в нс; capture_ns может быть null; базы нельзя смешивать |
+| `timestamp_source`, `timing_issue` | `elapsed_realtime`/`unknown`; причина неизвестной задержки — string/null |
+| `capture_to_signal_ms`, `capture_to_analyzer_ms`, `analyzer_to_signal_ms` | number/null, в мс |
+| `status`, `width`, `height`, `coordinate_space` | `observed`/`lost`/`no_target`, положительные integer, `upright_crop_pixels` |
+| `observed`, `observed_pixel`, `confidence` | object с числовыми x/y центра, object с целочисленными индексами x/y, number `[0,1]`; при отсутствии цели null |
+| `velocity_px_per_second` | object с числовыми x/y скорости либо null |
+| `forecast` | array объектов `after_signal_ms: integer`, `point: {x,y}`; пустой при недоступном прогнозе |
+| `prediction_issue`, `one_step_prediction_error_px` | string/null и number/null в px |
+
+Метрики Camera2 корректны только с сопоставимой временной базой; порядок отсечек, коэффициенты модели, граница отправки, состояния и ручная проверка описаны в [инструкции задержки и прогноза](../guides/latency-and-prediction.md). Экспорт не содержит историю наблюдений, изображения или все рамки. Анализатор пересчитывает арифметику задержки по исходным ns и проверяет сводки. В потребителях сохраняйте точность Long-меток; JavaScript Number может терять младшие разряды больших ns.
 
 ## JSON инвентаря камер: schema_version 1
 

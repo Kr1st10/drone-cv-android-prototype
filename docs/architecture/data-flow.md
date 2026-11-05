@@ -1,6 +1,6 @@
 # Изображения, координаты и измерения
 
-Справка для разработчика CV/Android: путь от фото или RGBA-кадра к рамкам. Применяется к Android-пайплайну без трекинга и внешнего получателя координат.
+Справка для разработчика CV/Android: путь от фото или RGBA-кадра к рамкам. В 0.5.0 после YOLO добавлены сопоставление одной цели и внутренний сигнал; внешнего получателя координат нет.
 
 ## Общий поток
 
@@ -18,6 +18,8 @@ flowchart TD
     Post --> Norm[Нормализованные рамки upright изображения]
     Norm --> Photo[PhotoViewport Fit]
     Norm --> Camera[CameraGeometry: общий FILL_CENTER ViewPort]
+    Norm --> Target[TargetTracker: центр / скорость / прогноз]
+    Target --> Signal[StateFlow и JSON диагностики]
     Photo --> Draw[Рисование рамок]
     Camera --> Draw
 ```
@@ -45,7 +47,7 @@ flowchart TD
 
 В [AndroidLiveBackend](../../app/src/main/java/ru/university/dronecv/camera/AndroidLiveBackend.kt) `conversionMs` измеряет RGBA crop → ARGB. [LiveController](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt) измеряет `pipelineMs` вокруг `backend.infer()`: возможны ленивая загрузка модели и служебные расходы. Сумма стадий не обязана равняться pipeline.
 
-Интервалы вычисляются по `System.nanoTime()`. `started_epoch_ms` задаёт внешнюю дату начала, а не базу длительностей. Ожидание до analyzer, экспозиция и дисплей не входят в pipeline. End-to-end задержка и число пропущенных CameraX кадров не измеряются.
+Интервалы стадий/pipeline вычисляются по `System.nanoTime()`. `started_epoch_ms` задаёт внешнюю дату начала, а не базу длительностей. Ожидание до analyzer, экспозиция и дисплей не входят в pipeline. Отдельная задержка от экспозиции до внутреннего сигнала измеряется по совместимым Camera2/elapsedRealtimeNanos; неизвестная база даёт null. [Определения и границы](../guides/latency-and-prediction.md). Задержка до дисплея/действия внешнего устройства и число пропущенных CameraX кадров не измеряются.
 
 Текущий FPS экрана вычисляется по завершениям в окне до 30 результатов, ограниченном примерно 3 с с сохранением минимум двух результатов; после первого кадра он неизвестен. `processed_fps_session` делит успешные кадры на всю длительность диагностической сессии, включая простои. Ни одно значение не является FPS камеры/дисплея. Поля экспорта — [модель данных](../reference/data-model.md).
 

@@ -1,6 +1,6 @@
 # Проверки приложения и инструментов
 
-Инструкция для разработчика и тестировщика базы `acb3e9e`. Команды выполняются из корня репозитория с JDK 17, SDK 35 и установленной моделью по [быстрому старту](../getting-started.md). Конкретные результаты текущего задания находятся в [аудите](../documentation-audit.md); этот раздел описывает воспроизводимые проверки.
+Инструкция для разработчика и тестировщика Android `0.5.0`. Команды выполняются из корня репозитория с JDK 17, SDK 35 и установленной моделью по [быстрому старту](../getting-started.md). Результаты текущего изменения находятся в PROJECT_STATE; [аудит](../documentation-audit.md) содержит исторические проверки подготовки документации. Этот раздел описывает воспроизводимые проверки.
 
 ## Локальная Android-сборка и JVM
 
@@ -37,6 +37,14 @@ adb devices
 Повороты эмулятора не доказывают оптику, полевую точность, нагрев и длительную работу Xiaomi. Ручные протоколы: [PHOTO_QA](../PHOTO_QA.md), [LIVE_QA](../LIVE_QA.md), [CAMERA_QA](../CAMERA_QA.md), [PERFORMANCE_QA](../PERFORMANCE_QA.md), [потоки ORT](../ORT_THREAD_BENCHMARK.md).
 
 ## Python и галерея
+
+Изолированные проверки новых target-сигналов не требуют ML-библиотек или pytest:
+
+```bash
+python3 -m unittest discover -s ml/tests -p test_target_signals.py -v
+```
+
+В Android добавлены `TargetSignalTest`, `TargetReportTest` и device JSON test `TargetSignalJsonInstrumentedTest`. Детерминированная траектория/поддельные часы проверяют математику, invalidation и serializer; они не являются аппаратными измерениями задержки или качества прогноза. Ручные проверки — [задержка и прогноз](../guides/latency-and-prediction.md).
 
 В подготовленном Python-окружении с зависимостями [ML README](../../ml/README.md):
 

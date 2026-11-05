@@ -1,6 +1,6 @@
 # Карта кода и точки изменений
 
-Путеводитель для разработчика базы `acb3e9e`. Показывает место реализации функциональности и связанный тест. Подробные сигнатуры находятся в [справочнике контрактов](../reference/api.md).
+Путеводитель для разработчика Android `0.5.0` на основе `acb3e9e`. Показывает место реализации функциональности и связанный тест. Подробные сигнатуры находятся в [справочнике контрактов](../reference/api.md).
 
 ## Android
 
@@ -14,6 +14,7 @@
 | Камера: разрешение/ошибки | [CameraScreen](../../app/src/main/java/ru/university/dronecv/camera/CameraScreen.kt) | Отказ/настройки/отзыв при resume, LIVE_QA |
 | Камера: binding/поворот/FOV | [CameraPreview](../../app/src/main/java/ru/university/dronecv/camera/CameraPreview.kt) | LiveCameraInstrumentedTest, CAMERA_QA на физическом сенсоре |
 | Камера: analyzer и состояние | [LiveController](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt), [AndroidLiveBackend](../../app/src/main/java/ru/university/dronecv/camera/AndroidLiveBackend.kt) | LiveControllerTest, ThreadSwitchControllerTest, diagnostic token tests |
+| Время экспозиции/пиксель/прогноз | [TargetSignal](../../app/src/main/java/ru/university/dronecv/camera/TargetSignal.kt), CameraPreview, LiveController | TargetSignalTest, TargetReportTest, TargetSignalJsonInstrumentedTest; [ручная проверка](../guides/latency-and-prediction.md) |
 | Конвертация/overlay | [RgbaFrameConverter](../../app/src/main/java/ru/university/dronecv/camera/RgbaFrameConverter.kt), [CameraGeometry](../../app/src/main/java/ru/university/dronecv/camera/CameraGeometry.kt), [LiveCameraContent](../../app/src/main/java/ru/university/dronecv/camera/LiveCameraContent.kt) | Crop/stride/rotation/channel/mapping tests и физическое совмещение |
 | Камеры/зум/метаданные | [CameraCapabilities](../../app/src/main/java/ru/university/dronecv/camera/CameraCapabilities.kt), [CameraInventory](../../app/src/main/java/ru/university/dronecv/camera/CameraInventory.kt), [CameraInventoryPanel](../../app/src/main/java/ru/university/dronecv/camera/CameraInventoryPanel.kt) | CameraCapabilitiesTest, CameraInventoryInstrumentedTest, CAMERA_QA |
 | Общая модель/сессия | [detection/onnx](../../app/src/main/java/ru/university/dronecv/detection/onnx), [DetectorWorker](../../app/src/main/java/ru/university/dronecv/detection/DetectorWorker.kt) | ModelSpecTest, OnnxParityTest, ThreadSessionManagerTest |
