@@ -276,9 +276,17 @@ internal fun CameraPreview(
             val timebase = boundTimebase
             controller.configure(true, currentConfidence)
             analysis.setAnalyzer(DetectorWorker.executor) { frame ->
-                val entryNs = SystemClock.elapsedRealtimeNanos()
-                val captureNs = try { frame.imageInfo.timestamp } catch (_: Exception) { null }
-                controller.analyze(frame, source, FrameStamp(captureNs, timebase, entryNs))
+                var handedOff = false
+                try {
+                    val entryNs = SystemClock.elapsedRealtimeNanos()
+                    val captureNs = try { frame.imageInfo.timestamp } catch (_: Exception) { null }
+                    val stamp = FrameStamp(captureNs, timebase, entryNs)
+                    handedOff = true
+                    controller.analyze(frame, source, stamp)
+                } finally {
+                    // Metadata/allocation failures before transfer must not retain an ImageProxy.
+                    if (!handedOff) frame.close()
+                }
             }
             onDispose {
                 controller.configure(false, currentConfidence)

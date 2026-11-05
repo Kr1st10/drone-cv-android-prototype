@@ -73,6 +73,7 @@ JVM-тесты включают реальный ORT-инференс; моде�
 ## Владение ресурсами живой камеры
 - Preview и ImageAnalysis одной задней камеры привязываются одним UseCaseGroup с `PreviewView.viewPort`, FILL_CENTER. Рамки нормализованы относительно raw cropRect после `rotationDegrees`; повторно их не вращать. Изменение layout/display rotation требует нового ViewPort и invalidation.
 - ImageAnalysis RGBA/KEEP_ONLY_LATEST вызывает backend синхронно на `DetectorWorker.executor`, без дополнительной очереди. Каждый ImageProxy закрывается в `finally` контроллера. RGBA converter возвращает заимствованный буфер: использовать только до следующего кадра на том же worker.
+- До передачи контроллеру за кадр отвечает CameraPreview: сбой метаданных/создания FrameStamp тоже должен закрыть ImageProxy; после передачи повторно закрывать его нельзя.
 - Stop/pause/error/rebind сначала инвалидируют результат; source token защищает и от callback старой активации. Старые ошибки тоже отбрасываются. Монотонная revision для UI expiry не совпадает с generation запросов.
 - Снимать analyzer при остановке; закрывать модель только в очереди того же ML-worker после native call. Не ждать ORT и не применять shutdownNow на UI. Общий idle worker живёт до завершения процесса; backend владеет ORT-сессией.
 
