@@ -48,6 +48,8 @@
 
 ### Дополнительные поля записи
 
+`max_confidence_pct` доступно в обоих режимах: необязательное число 0–100 (включая дробные), максимум за время наблюдения. Для 1 — рамка на проверяемом объекте, для 2 — ошибочная рамка в другом месте; для 3 и пустого ввода — null. В быстром режиме вводите до выбора 1/2 (выбор сохраняет сразу). При выбранном варианте 3 поле скрыто; для добавления confidence при повторной записи в быстром режиме сначала сохраните 1/2, затем снова нажмите R. Старые JSON без поля импортируются с null; CSV использует пустую ячейку для null.
+
 `target_conf_pct` (max confidence рамки на объекте), `fp_count`, `fp_max_conf_pct` (рамки не на объекте; на птицах/самолётах любая рамка «drone» — ложная), `object_camera_px_measured` (размер объекта в кадре по скриншоту), заметка. После выбора 1/2/3 сохранить — Enter.
 
 ## 5. Размеры и экспорт
@@ -77,7 +79,7 @@ JSON не содержит изображения. Даты `created`, `exported
 | `runs[]` | `run_id,created,sample_id,sample_name,phone,zoom,mode: string`, `distance_cm: number`, `shows: integer` |
 | `trial` | `run_id,created,manifest_version,sample_id,sample_name: string`, `manifest_sha256: string/null`, `sample_seed: number`, `sample_ids: array<string>`, `settings: object`, `order: array<{id: string, level: number/null}>`, `index: integer` (с 0) |
 | `settings` / `trial.settings` | `mode: quick/advanced`, `scaleMode: fit/native/monitor/camera`, `scaleFactor: number`, `sizes: array<number>`, `center: boolean`, `bg: string`, `phone,zoom,operator: string`; `distance_cm,app_conf_pct,monitor_mm,monitor_px,k,frame_w,frame_h,yolo_input: number/null`. Корневые и advanced trial.settings также содержат `seed: number`; quick trial.settings не содержит seed |
-| `results[]` | Поля совпадают с 35 столбцами [CSV](results_template.csv). Идентификаторы/имена/phone/zoom/mode/enum/дата/заметка — строки, `step` — integer с 0, `sample_seed` — number, `false_alarm` — boolean, размеры/confidence/счётчики — number/null |
+| `results[]` | Поля совпадают с 36 столбцами [CSV](results_template.csv). Идентификаторы/имена/phone/zoom/mode/enum/дата/заметка — строки, `step` — integer с 0, `sample_seed` — number, `false_alarm` — boolean, размеры/confidence/счётчики — number/null |
 
 `detection` в JSON/CSV: `box_on_object` (ответ 1), `box_elsewhere` (2), `no_box` (3).
 `result_class`: `TP`, `FN`, `FP`, `TN`. `camera_zoom`/`runs[].zoom`: строки `1x`/`5x`;

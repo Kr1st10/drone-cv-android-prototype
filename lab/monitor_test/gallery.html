@@ -103,6 +103,10 @@
 <div id="record" class="panel hidden">
   <b>Запись результата — показ <span id="recIdx"></span></b>
   <div class="muted">Что видно на экране телефона? Правильный ответ откроется клавишей A после сохранения.</div>
+  <div id="recMaxConfField">
+    <label>Максимальный confidence YOLO (%) <input type="number" id="recMaxConf" min="0" max="100" step="any"></label>
+    <div class="muted">Укажите наибольшую уверенность рамки за время наблюдения. Можно оставить пустым</div>
+  </div>
   <button class="big det" data-det="box_on_object"><span class="kbd">1</span> Рамка на показанном объекте</button>
   <button class="big det" data-det="box_elsewhere"><span class="kbd">2</span> Рамка только в другом месте (не на объекте)</button>
   <button class="big det" data-det="no_box"><span class="kbd">3</span> Рамок нет</button>
@@ -143,7 +147,7 @@ const CAT_NAMES = (window.MANIFEST && window.MANIFEST.categories) || {};
 const CATS = Object.keys(CAT_NAMES).filter(c => M.some(m => m.category === c));
 const $ = id => document.getElementById(id);
 const img = $('img'), stage = $('stage');
-let S = load('settings', null), SAMPLE = load('sample', null), T = load('trial', null), R = load('results', []), RUNS = load('runs', []);
+let S = load('settings', null), SAMPLE = load('sample', null), T = load('trial', null), R = load('results', []).map(r => ({ ...r, max_confidence_pct: r.detection === 'no_box' ? null : r.max_confidence_pct ?? null })), RUNS = load('runs', []);
 const ui = { hud: false, manual: 1, available: {}, chosen: null, toastT: 0 };
 
 function load(k, d) { try { const v = localStorage.getItem(LS + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
@@ -295,12 +299,15 @@ function openRecord() {
   const prev = recOf(T.index); ui.chosen = prev ? prev.detection : null;
   $('recChosen').textContent = ui.chosen ? DET_NAMES[ui.chosen] : '—';
   document.querySelectorAll('.det').forEach(b => b.style.outline = b.dataset.det === ui.chosen ? '3px solid #3c6' : '');
+  $('recMaxConf').value = prev?.max_confidence_pct ?? '';
+  $('recMaxConfField').classList.toggle('hidden', ui.chosen === 'no_box');
   $('recConf').value = prev?.target_conf_pct ?? ''; $('recFp').value = prev?.fp_count ?? ''; $('recFpConf').value = prev?.fp_max_conf_pct ?? '';
   $('recCamPx').value = prev?.object_camera_px_measured ?? ''; $('recNote').value = prev?.note ?? '';
   $('record').classList.remove('hidden'); document.activeElement?.blur();
 }
 function choose(det) {
   ui.chosen = det;
+  $('recMaxConfField').classList.toggle('hidden', det === 'no_box');
   if (T.settings.mode === 'quick') { saveRecord(); return; }
   $('recChosen').textContent = DET_NAMES[det]; document.querySelectorAll('.det').forEach(b => b.style.outline = b.dataset.det === det ? '3px solid #3c6' : '');
 }
@@ -311,6 +318,10 @@ function classify(cat, det, fp) {
 }
 function saveRecord() {
   if (!ui.chosen) { toast('Выберите результат: 1, 2 или 3'); return; }
+  const maxConf = ui.chosen === 'no_box' ? null : num($('recMaxConf').value);
+  if (ui.chosen !== 'no_box' && (!$('recMaxConf').validity.valid || (maxConf != null && (maxConf < 0 || maxConf > 100)))) {
+    toast('Максимальный confidence YOLO: введите число от 0 до 100 или оставьте поле пустым'); return;
+  }
   const st = current(), m = byId(st.id), s = T.settings, adv = s.mode !== 'quick';
   const fp = adv ? num($('recFp').value) : null;
   const rec = { run_id: T.run_id, sample_id: T.sample_id, sample_name: T.sample_name, sample_seed: T.sample_seed, step: T.index, image_id: m.id, category: m.category,
@@ -318,7 +329,7 @@ function saveRecord() {
     scale_mode: s.scaleMode, size_level: st.level, size_level_unit: st.level == null ? null : s.scaleMode === 'monitor' ? 'monitor_px' : 'camera_px',
     display_scale: +(ui.scale * (window.devicePixelRatio || 1)).toFixed(5), calibration_k: s.k,
     ...sizes(m, s, adv ? num($('recCamPx').value) : null), analysis_frame_w: s.frame_w, analysis_frame_h: s.frame_h, yolo_input_px: s.yolo_input,
-    target_conf_pct: adv ? num($('recConf').value) : null, fp_count: fp, fp_max_conf_pct: adv ? num($('recFpConf').value) : null,
+    max_confidence_pct: maxConf, target_conf_pct: adv ? num($('recConf').value) : null, fp_count: fp, fp_max_conf_pct: adv ? num($('recFpConf').value) : null,
     app_conf_threshold_pct: s.app_conf_pct, operator: s.operator || '', recorded_at: new Date().toISOString(), note: adv ? $('recNote').value : '' };
   R = R.filter(r => !(r.run_id === rec.run_id && r.step === rec.step)); R.push(rec); save('results', R);
   $('record').classList.add('hidden'); document.activeElement?.blur(); hud();
@@ -338,7 +349,7 @@ function showAnswer() {
 // ---------- export / summary ----------
 const COLS = ['run_id', 'sample_id', 'sample_name', 'sample_seed', 'step', 'image_id', 'category', 'phone', 'camera_zoom', 'distance_cm', 'test_mode', 'detection', 'result_class', 'false_alarm',
   'scale_mode', 'size_level', 'size_level_unit', 'display_scale', 'object_monitor_px', 'object_monitor_mm', 'calibration_k', 'object_camera_px_expected', 'object_camera_px_measured',
-  'analysis_frame_w', 'analysis_frame_h', 'yolo_input_px', 'object_yolo_px', 'object_yolo_px_source', 'target_conf_pct', 'fp_count', 'fp_max_conf_pct', 'app_conf_threshold_pct',
+  'analysis_frame_w', 'analysis_frame_h', 'yolo_input_px', 'object_yolo_px', 'object_yolo_px_source', 'max_confidence_pct', 'target_conf_pct', 'fp_count', 'fp_max_conf_pct', 'app_conf_threshold_pct',
   'operator', 'recorded_at', 'note'];
 function csv() { const q = v => v == null ? '' : /[",\n;]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
   const rows = R.slice().sort((a, b) => a.run_id < b.run_id ? -1 : a.run_id > b.run_id ? 1 : a.step - b.step);
@@ -410,7 +421,7 @@ $('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f
   if (d.sample && Array.isArray(d.sample.ids) && d.sample.ids.every(byId)) { SAMPLE = d.sample; save('sample', SAMPLE); writeCounts(SAMPLE.counts); $('seed').value = SAMPLE.seed; }
   if (d.trial) { T = d.trial; save('trial', T); }
   if (Array.isArray(d.runs)) { const have = new Set(RUNS.map(r => r.run_id)); RUNS = RUNS.concat(d.runs.filter(r => !have.has(r.run_id))); save('runs', RUNS); }
-  if (Array.isArray(d.results) && d.results.length && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.run_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r)))); save('results', R); }
+  if (Array.isArray(d.results) && d.results.length && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.run_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r))).map(r => ({ ...r, max_confidence_pct: r.detection === 'no_box' ? null : r.max_confidence_pct ?? null }))); save('results', R); }
   sampleInfo(); summary(); e.target.value = ''; }); };
 $('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); summary(); sampleInfo(); } };
 const LEGACY = localStorage.getItem('dronecv66.results');
