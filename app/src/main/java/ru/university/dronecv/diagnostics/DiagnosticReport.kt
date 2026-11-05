@@ -1,5 +1,7 @@
 package ru.university.dronecv.diagnostics
 
+import ru.university.dronecv.camera.toJson
+
 /** Resource samples use the same monotonic origin as frame offsets. Battery temperature is not CPU temperature. */
 data class ResourceSample(val offsetNanos: Long, val pssKb: Long?, val thermalStatus: Int?,
                           val batteryPercent: Int?, val batteryStatus: Int?, val batteryTemperatureC: Double?)
@@ -35,9 +37,13 @@ fun DiagnosticReport.toJson(): String = buildString {
     append("\"duration_ms\":${f.durationNanos / 1_000_000.0},\"interrupted\":${f.interrupted},\"reason\":${f.reason?.let(::q) ?: "null"},")
     append("\"analyzer_callbacks_accepted\":${f.analyzerCallbacks},\"completed_frames\":${f.completedFrames},\"unstored_frames\":${f.unstoredFrames},\"processed_fps_session\":${num(f.processedFps)},")
     append("\"accepted_callbacks_not_completed\":${f.analyzerCallbacks - f.completedFrames},\"camera_frames_dropped\":null,\"frame_to_display_latency_ms\":null,")
+    append("\"application_stale_frames_discarded\":${f.staleFramesDiscarded},\"target_signal_schema_version\":1,")
     append("\"timing_summary_ms\":{")
     append("\"conversion\":${summary(f.frames.map { it.conversionMs })},\"preprocessing\":${summary(f.frames.map { it.preprocessMs })},")
-    append("\"ort_including_tensor_copy\":${summary(f.frames.map { it.inferenceMs })},\"postprocessing_nms\":${summary(f.frames.map { it.postprocessMs })},\"analyzer_pipeline\":${summary(f.frames.map { it.pipelineMs })}},")
+    append("\"ort_including_tensor_copy\":${summary(f.frames.map { it.inferenceMs })},\"postprocessing_nms\":${summary(f.frames.map { it.postprocessMs })},\"analyzer_pipeline\":${summary(f.frames.map { it.pipelineMs })},")
+    append("\"capture_to_signal\":${summary(f.frames.mapNotNull { it.targetSignal?.captureToSignalMs })},\"capture_to_analyzer\":${summary(f.frames.mapNotNull { it.targetSignal?.captureToAnalyzerMs })},")
+    append("\"analyzer_to_signal\":${summary(f.frames.mapNotNull { it.targetSignal?.analyzerToSignalMs })}},")
+    append("\"one_step_prediction_error_px\":${summary(f.frames.mapNotNull { it.targetSignal?.predictionErrorPx })},")
     append("\"notes\":[\"CameraX KEEP_ONLY_LATEST upstream drops are not observable and are not inferred from callback counts.\",\"Pipeline excludes camera acquisition and UI display; ORT timing includes input/output copies.\",\"Summaries cover stored samples only; unstored_frames reports truncation.\",\"PSS is process proportional set size in kB; battery temperature is not CPU temperature.\"],")
     val pss = resources.mapNotNull { it.pssKb }
     val delta = if (pss.size >= 2) pss.last() - pss.first() else null
@@ -45,7 +51,7 @@ fun DiagnosticReport.toJson(): String = buildString {
     append("\"frames\":[")
     f.frames.forEachIndexed { i, x ->
         if (i > 0) append(',')
-        append("{\"offset_ms\":${x.offsetNanos / 1_000_000.0},\"conversion_ms\":${x.conversionMs},\"preprocess_ms\":${x.preprocessMs},\"ort_ms\":${x.inferenceMs},\"postprocess_ms\":${x.postprocessMs},\"pipeline_ms\":${x.pipelineMs}}")
+        append("{\"offset_ms\":${x.offsetNanos / 1_000_000.0},\"conversion_ms\":${x.conversionMs},\"preprocess_ms\":${x.preprocessMs},\"ort_ms\":${x.inferenceMs},\"postprocess_ms\":${x.postprocessMs},\"pipeline_ms\":${x.pipelineMs},\"target_signal\":${x.targetSignal?.toJson() ?: "null"}}")
     }
     append("],\"resources\":[")
     resources.forEachIndexed { i, x ->

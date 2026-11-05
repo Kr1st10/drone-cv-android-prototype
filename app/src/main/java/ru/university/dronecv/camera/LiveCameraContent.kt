@@ -123,11 +123,29 @@ private fun LiveControls(
         val fps = state.fps?.let { format(it) } ?: "—"
         val inference = state.result?.inferenceMs?.let { format(it) } ?: "—"
         val pipeline = state.pipelineMs?.let { format(it) } ?: "—"
-        Text("Обработка: $fps FPS · ORT: $inference мс\nПолный цикл: $pipeline мс · кадров: ${state.completedFrames}",
+        Text("Обработка: $fps FPS · ORT: $inference мс\nОбработка кадра: $pipeline мс · кадров: ${state.completedFrames}",
             modifier = Modifier.testTag(if (state.result != null) "live-frame-ready" else "live-frame-waiting"),
             style = MaterialTheme.typography.bodySmall)
         state.result?.let {
             Text("YOLO11s · CPU / ${threadState.threads} потока · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
+        }
+        state.target?.let { signal ->
+            val latency = signal.captureToSignalMs?.let { "${format(it)} мс" } ?: "неизвестно: часы камеры не сопоставлены"
+            Text("Экспозиция → сигнал: $latency", style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("capture-to-signal"))
+            signal.observed?.let { point ->
+                Text("Цель #${signal.targetId}: пиксель (${point.x.toInt()}, ${point.y.toInt()}) · ${signal.width}×${signal.height}",
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("target-coordinates"))
+            }
+            val future = signal.forecast.lastOrNull()
+            Text(if (future != null) "Прогноз +${future.afterSignalMs} мс от сигнала: x=${format(future.point.x)}, y=${format(future.point.y)} px · голубой"
+                else when (signal.predictionIssue) {
+                    "insufficient_history" -> "Для прогноза нужны три наблюдения одной цели"
+                    "prediction_horizon_exceeded" -> "Прогноз отключён: кадр слишком старый"
+                    "prediction_outside_frame" -> "Прогноз выходит за границы кадра"
+                    "no_observed_target" -> "Цель потеряна или не обнаружена"
+                    else -> "Прогноз недоступен: временная база не подтверждена"
+                }, style = MaterialTheme.typography.bodySmall)
         }
         Text("Потоки ORT: ${threadState.threads}" + if (threadState.switching) " · загрузка…" else "", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -190,6 +208,13 @@ private fun LiveOverlay(state: LiveState, modifier: Modifier) {
             drawRect(Color.Black.copy(alpha = 0.8f), Offset(x, y), Size(textWidth, labelHeight))
             paint.color = android.graphics.Color.GREEN
             drawContext.canvas.nativeCanvas.drawText(text, x + 4.dp.toPx(), y + 15.dp.toPx(), paint)
+        }
+        state.target?.let { signal ->
+            fun screen(p: PixelPoint) = Offset((p.x / signal.width * size.width).toFloat(), (p.y / signal.height * size.height).toFloat())
+            signal.history.zipWithNext().forEach { (a, b) -> drawLine(Color.Yellow, screen(a), screen(b), stroke) }
+            signal.observed?.let { drawCircle(Color.Yellow, 4.dp.toPx(), screen(it)) }
+            signal.forecast.zipWithNext().forEach { (a, b) -> drawLine(Color.Cyan, screen(a.point), screen(b.point), stroke) }
+            signal.forecast.lastOrNull()?.let { drawCircle(Color.Cyan, 6.dp.toPx(), screen(it.point), style = Stroke(stroke)) }
         }
     }
 }

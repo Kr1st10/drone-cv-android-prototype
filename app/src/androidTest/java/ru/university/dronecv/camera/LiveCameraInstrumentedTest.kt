@@ -73,6 +73,7 @@ class LiveCameraInstrumentedTest {
     @Test fun cameraRunsRealModelAndStopClearsLateResults() {
         openAndStart()
         compose.onNodeWithTag("live-frame-ready").assertExists()
+        compose.onNodeWithTag("capture-to-signal").assertExists()
         compose.onNodeWithContentDescription("Порог уверенности детектора")
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0.8f) }
         compose.onNodeWithText("Confidence: 80%").assertExists()
@@ -81,6 +82,7 @@ class LiveCameraInstrumentedTest {
         drainNativeWork()
         compose.onNodeWithText("Детекция остановлена").assertExists()
         compose.onNodeWithTag("live-frame-ready").assertDoesNotExist()
+        compose.onNodeWithTag("capture-to-signal").assertDoesNotExist()
         compose.onNodeWithText("Начать детекцию").performClick()
         awaitResult()
         // Switching to Photo disposes camera/model and retains the original photo entry point.

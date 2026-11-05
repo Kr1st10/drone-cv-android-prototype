@@ -8,6 +8,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
 import android.os.Build
+import android.os.SystemClock
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
@@ -86,6 +87,7 @@ internal fun CameraPreview(
     var streaming by remember { mutableStateOf(false) }
     var bound by remember { mutableStateOf(false) }
     var boundAnalysis by remember { mutableStateOf<ImageAnalysis?>(null) }
+    var boundTimebase by remember { mutableStateOf(CaptureTimebase.UNKNOWN) }
     var cameraBlocked by remember { mutableStateOf(false) }
     var activationEpoch by remember { mutableLongStateOf(0L) }
 
@@ -229,6 +231,13 @@ internal fun CameraPreview(
                         current.cameraInfo.cameraState.observe(owner, cameraObserver)
                         current.cameraInfo.zoomState.observe(owner, zoomObserver)
                         val logicalId = Camera2CameraInfo.from(current.cameraInfo).cameraId
+                        boundTimebase = try {
+                            val source = context.getSystemService(CameraManager::class.java)
+                                .getCameraCharacteristics(selectedPhysical ?: logicalId)
+                                .get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE)
+                            if (source == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME)
+                                CaptureTimebase.ELAPSED_REALTIME else CaptureTimebase.UNKNOWN
+                        } catch (_: Exception) { CaptureTimebase.UNKNOWN }
                         probe.logicalId = logicalId
                         probe.physicalIds = if (Build.VERSION.SDK_INT >= 28) try {
                             context.getSystemService(CameraManager::class.java).getCameraCharacteristics(logicalId).physicalCameraIds.sorted()
@@ -259,13 +268,18 @@ internal fun CameraPreview(
     }
 
     val active = enabled && resumed && streaming && bound && !cameraBlocked
-    DisposableEffect(boundAnalysis, active, activationEpoch) {
+    DisposableEffect(boundAnalysis, active, activationEpoch, boundTimebase) {
         val analysis = boundAnalysis
         if (active && analysis != null) {
             // A fresh token also rejects callbacks queued before stop/background on the SAME binding.
             val source = controller.newSource()
+            val timebase = boundTimebase
             controller.configure(true, currentConfidence)
-            analysis.setAnalyzer(DetectorWorker.executor) { frame -> controller.analyze(frame, source) }
+            analysis.setAnalyzer(DetectorWorker.executor) { frame ->
+                val entryNs = SystemClock.elapsedRealtimeNanos()
+                val captureNs = try { frame.imageInfo.timestamp } catch (_: Exception) { null }
+                controller.analyze(frame, source, FrameStamp(captureNs, timebase, entryNs))
+            }
             onDispose {
                 controller.configure(false, currentConfidence)
                 analysis.clearAnalyzer()
