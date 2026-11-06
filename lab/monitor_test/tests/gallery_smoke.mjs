@@ -129,7 +129,7 @@ ok((await ls(page, 'results')).find(r => r.run_id === run2.run_id && r.step === 
 
 // ---- export ----
 await page.keyboard.press('s');
-ok((await page.locator('#summary tr').count()) === 3, 'summary lists both runs');
+ok((await page.locator('#summary table').first().locator('tr').count()) === 3, 'summary lists both runs');
 const csv = (await dl(page, '#exportCsv')).trim().split('\n');
 const head = csv[0].split(',');
 ok(csv[0] === fs.readFileSync(path.join(dir, 'results_template.csv'), 'utf8').trim() && csv.length === 23, 'CSV header = results_template.csv, 22 rows');
@@ -147,15 +147,19 @@ fs.writeFileSync('/tmp/dronecv66_session.json', JSON.stringify(js));
   ok((await ls(p3, 'results')).some(r => r.max_confidence_pct === 87.25), 'JSON import preserves fractional confidence'); await p3.close(); await c3.close(); }
 
 // Older session results have no maximum-confidence field.
-const old = JSON.parse(JSON.stringify(js)); old.results.forEach(r => delete r.max_confidence_pct);
+const old = JSON.parse(JSON.stringify(js)); old.results.forEach(r => {
+  for (const key of ['max_confidence_pct', 'drone_width_cm', 'drone_width_source', 'screen_object_width_mm', 'object_angular_width_deg', 'equivalent_distance_m']) delete r[key];
+}); delete old.size_summary;
 fs.writeFileSync('/tmp/dronecv66_session_old.json', JSON.stringify(old));
 { const c = await newCtx(); const p = await open(c); await p.setInputFiles('#importJson', '/tmp/dronecv66_session_old.json');
   await p.waitForFunction(() => JSON.parse(localStorage.getItem('dronecv66v2.results') || '[]').length === 22);
   const exported = await p.evaluate(() => JSON.parse(sessionJson()));
   ok(exported.results.every(r => r.max_confidence_pct === null), 'old JSON imports and re-exports with explicit null');
+  ok(exported.results.every(r => r.drone_width_cm === null && r.screen_object_width_mm === null && r.equivalent_distance_m === null), 'old JSON has no invented physical sizes or distances');
   await p.evaluate(results => localStorage.setItem('dronecv66v2.results', JSON.stringify(results)), old.results);
   await p.reload();
   ok((await p.evaluate(() => JSON.parse(sessionJson()))).results.every(r => r.max_confidence_pct === null), 'old localStorage results export with null');
+  ok((await p.evaluate(() => JSON.parse(sessionJson()))).results.every(r => r.equivalent_distance_m === null), 'old localStorage keeps unknown distance null');
   await p.close(); await c.close(); }
 
 // ---- advanced mode: sizes in three units ----
@@ -198,6 +202,48 @@ await page.keyboard.press('ArrowRight'); await page.keyboard.press('r'); await p
 const adv = (await ls(page, 'results')).filter(r => r.size_level_unit === 'camera_px');
 ok(Math.abs(adv[0].object_camera_px_expected - 16) < 0.2 && Math.abs(adv[0].object_yolo_px - 16) < 0.2 && adv[0].object_yolo_px_source === 'calibration', 'calibrated: camera px 16 -> YOLO px 16 (640x480 frame, 640 input)');
 ok(adv[1].object_camera_px_measured === 20 && adv[1].object_yolo_px === 20 && adv[1].object_yolo_px_source === 'measured', 'measured camera px used for YOLO px');
+// ---- physical width / equivalent distance: synthetic operator inputs, not CV measurements ----
+await page.keyboard.press('s'); await page.fill('#distance', '150'); await page.selectOption('#zoom', '1x'); await page.fill('#appConf', '50'); await page.click('#start');
+const physicalRun = await ls(page, 'trial');
+await page.keyboard.press('r'); await page.keyboard.press('1');
+for (const id of ['recDroneWidth', 'recScreenWidth', 'recCamPx']) {
+  await page.fill('#' + id, '0'); await page.click('#recSave');
+  ok(await page.isVisible('#record'), 'invalid zero measurement rejected: ' + id); await page.fill('#' + id, '');
+}
+await page.fill('#recDroneWidth', '60'); await page.fill('#recScreenWidth', '60'); await page.fill('#recCamPx', '16');
+await page.fill('#recWidthSource', 'TEST ONLY: measured full width A-B'); await page.fill('#recMaxConf', '80.5'); await page.click('#recSave');
+let physical = (await ls(page, 'results')).find(r => r.run_id === physicalRun.run_id);
+ok(physical.equivalent_distance_m === 15 && physical.drone_width_cm === 60 && physical.screen_object_width_mm === 60 && physical.distance_cm === 150 && physical.app_conf_threshold_pct === 50, '60 cm / 150 cm / 60 mm -> 15 m with raw inputs and actual threshold');
+ok(Math.abs(physical.object_angular_width_deg - 2.291525676350207) < 1e-10, 'angular width computed from measured screen geometry');
+await page.keyboard.press('r');
+ok(await page.inputValue('#recDroneWidth') === '60' && await page.inputValue('#recScreenWidth') === '60', 'physical measurements restored on re-record');
+ok(await page.evaluate(() => { const p = document.getElementById('record'); return p.scrollWidth <= p.clientWidth + 1; }), 'physical record fields fit within panel width');
+if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT + '_range_record.png' });
+await page.keyboard.press('Escape'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('r');
+ok(await page.inputValue('#recDroneWidth') === '' && await page.inputValue('#recScreenWidth') === '', 'no physical dimensions carried to another image');
+await page.keyboard.press('3'); await page.fill('#recCamPx', '16'); await page.click('#recSave');
+await page.keyboard.press('s');
+const physicalJson = JSON.parse(await dl(page, '#exportJson'));
+const group = physicalJson.size_summary.find(g => g.run_id === physicalRun.run_id && g.camera_px_source === 'measured');
+ok(group.checks === 2 && group.correct_detections === 1 && group.detection_rate === 0.5 && group.distance_known_count === 1 && group.equivalent_distance_min_m === 15, 'size summary: 2 tests / 1 TP / 50%, 1 known distance');
+ok(/50.0%/.test(await page.textContent('#summary')) && /15.00/.test(await page.textContent('#summary')), 'size summary rendered');
+if (process.env.SHOT) { await page.locator('#summary').scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT + '_range_summary.png' }); }
+const physicalCsv = (await dl(page, '#exportCsv')).trim().split('\n'); const ph = physicalCsv[0].split(',');
+const pr = physicalCsv.slice(1).map(l => Object.fromEntries(l.split(',').map((v, i) => [ph[i], v]))).find(r => r.run_id === physicalRun.run_id && r.step === '0');
+ok(pr.drone_width_cm === '60' && pr.screen_object_width_mm === '60' && pr.equivalent_distance_m === '15', 'CSV contains measured widths and computed distance');
+fs.writeFileSync('/tmp/dronecv66_range_session.json', JSON.stringify(physicalJson));
+{ const c = await newCtx(); const p = await open(c); await p.setInputFiles('#importJson', '/tmp/dronecv66_range_session.json');
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('dronecv66v2.results') || '[]').some(r => r.equivalent_distance_m === 15));
+  const imported = await p.evaluate(() => JSON.parse(sessionJson()));
+  ok(imported.results.some(r => r.drone_width_source === 'TEST ONLY: measured full width A-B' && r.equivalent_distance_m === 15), 'new JSON round trip preserves width source and distance');
+  await p.close(); await c.close(); }
+await page.selectOption('#zoom', '5x'); await page.click('#start');
+const physical5 = await ls(page, 'trial');
+ok(JSON.stringify(physical5.order) === JSON.stringify(physicalRun.order) && physical5.settings.zoom === '5x', 'range experiment repeats same images and levels at 5x');
+await page.keyboard.press('s'); await page.fill('#distance', ''); await page.click('#start');
+await page.keyboard.press('r'); await page.keyboard.press('1'); await page.fill('#recDroneWidth', '60'); await page.fill('#recScreenWidth', '60'); await page.click('#recSave');
+const unknownDistance = (await ls(page, 'results')).filter(r => r.distance_cm === null);
+ok(unknownDistance.length === 1 && unknownDistance.every(r => r.equivalent_distance_m === null && r.object_angular_width_deg === null), 'missing camera distance stays null');
 ok(new Set((await ls(page, 'runs')).map(r => r.run_id)).size === (await ls(page, 'runs')).length, 'run ids are unique even when started within one second');
 ok(page.net.length === 0, 'no network requests (offline): ' + page.net.slice(0, 3).join(' '));
 ok(page.dialogs.length === 1 && /Заменить текущую выборку/.test(page.dialogs[0]), 'only dialog: confirmation before replacing a sample that has results: ' + page.dialogs.join(' | '));
