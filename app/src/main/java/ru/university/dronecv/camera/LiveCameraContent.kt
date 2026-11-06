@@ -123,11 +123,25 @@ private fun LiveControls(
         val fps = state.fps?.let { format(it) } ?: "—"
         val inference = state.result?.inferenceMs?.let { format(it) } ?: "—"
         val pipeline = state.pipelineMs?.let { format(it) } ?: "—"
-        Text("Обработка: $fps FPS · ORT: $inference мс\nПолный цикл: $pipeline мс · кадров: ${state.completedFrames}",
+        Text("Обработка: $fps FPS · ORT: $inference мс\nОбработка кадра: $pipeline мс · кадров: ${state.completedFrames}",
             modifier = Modifier.testTag(if (state.result != null) "live-frame-ready" else "live-frame-waiting"),
             style = MaterialTheme.typography.bodySmall)
         state.result?.let {
             Text("YOLO11s · CPU / ${threadState.threads} потока · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
+        }
+        state.target?.let { signal ->
+            val latency = signal.captureToSignalMs?.let { "${format(it)} мс" } ?: when (signal.timingIssue) {
+                "missing_capture_timestamp" -> "неизвестно: нет метки экспозиции"
+                "capture_after_analyzer" -> "неизвестно: метка экспозиции позже входа"
+                "non_monotonic_dispatch_clock" -> "неизвестно: нарушен порядок часов приложения"
+                else -> "неизвестно: часы камеры не сопоставлены"
+            }
+            Text("Экспозиция → сигнал: $latency", style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("capture-to-signal"))
+            signal.center?.let { point ->
+                Text("Цель: пиксель (${point.x.toInt()}, ${point.y.toInt()}) · ${signal.width}×${signal.height} · confidence ${format(checkNotNull(signal.confidence) * 100.0)}%",
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("target-coordinates"))
+            }
         }
         Text("Потоки ORT: ${threadState.threads}" + if (threadState.switching) " · загрузка…" else "", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -190,6 +204,10 @@ private fun LiveOverlay(state: LiveState, modifier: Modifier) {
             drawRect(Color.Black.copy(alpha = 0.8f), Offset(x, y), Size(textWidth, labelHeight))
             paint.color = android.graphics.Color.GREEN
             drawContext.canvas.nativeCanvas.drawText(text, x + 4.dp.toPx(), y + 15.dp.toPx(), paint)
+        }
+        state.target?.let { signal ->
+            fun screen(p: PixelPoint) = Offset((p.x / signal.width * size.width).toFloat(), (p.y / signal.height * size.height).toFloat())
+            signal.center?.let { drawCircle(Color.Yellow, 4.dp.toPx(), screen(it)) }
         }
     }
 }

@@ -76,18 +76,19 @@ fun inspectUniformInput(modelFile: File): Int =
 
 ## Камера: управление и backend
 
-Источник: [LiveController.kt](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt). Constructor получает `LiveBackend<Frame>`, `Executor`, optional `DiagnosticFrames?=null`, `initialThreads=2`, `nanoTime=System::nanoTime`; `Frame : AutoCloseable`. Поток analyzer должен быть тем же worker, на котором закрывается backend.
+Источник: [LiveController.kt](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt). Constructor получает `LiveBackend<Frame>`, `Executor`, optional `DiagnosticFrames?=null`, `initialThreads=2`, `eventTime: (() -> Long)?=null`, `maxAnalyzerAgeMs=250.0`, `nanoTime=System::nanoTime`; `Frame : AutoCloseable`. Поток analyzer должен быть тем же worker, на котором закрывается backend. `CameraScreen` явно передаёт elapsedRealtimeNanos для сигнала; при отсутствии eventTime сигналы отключены, чтобы не смешать базы часов. Для сигнала нужен также FrameStamp при анализе. Pipeline продолжает использовать nanoTime.
 
 | Операция | Вход → результат | Условия, ошибки, эффекты |
 |---|---|---|
 | `configure(enabled: Boolean, threshold: Float)` | Настройки → `Unit` | Threshold `0.01..1.0`, иначе `IllegalArgumentException`; инвалидирует результат, при выключении ставит backend.close на worker; после close игнорируется |
 | `updateThreshold(threshold)` | Float → `Unit` | То же при текущем active |
 | `newSource()` | Нет → Long token | Выключает текущую активацию и увеличивает source; затем вызывающий активирует analyzer |
-| `analyze(frame, sourceId: Long?=null)` | Frame/token → `Unit` | Синхронно на worker, принимает только актуальный источник; `finally` всегда закрывает frame. Ошибки infer/OOM превращаются в ERROR при актуальной generation; ошибка самого frame.close может выйти наружу |
+| `analyze(frame, sourceId: Long?=null, stamp: FrameStamp?=null)` | Frame/token/метки времени → `Unit` | Синхронно на worker, принимает только актуальный источник; известный возраст >maxAnalyzerAgeMs отбрасывается до ORT. `finally` всегда закрывает frame. Ошибки infer/OOM превращаются в ERROR при актуальной generation; ошибка самого frame.close может выйти наружу |
 | `requestThreads(threads: Int)` | 1/2/4 → Boolean | Неверный Int → `IllegalArgumentException`; false при запрещённой смене/закрытии; true — запрос принят. Результат и ошибка асинхронно в StateFlow |
 | `expire(revision: Long)` | Ревизия → `Unit` | Удаляет result/FPS/pipeline только при совпадении текущей ревизии |
 | `close()` | Нет → `Unit` | Идемпотентно инвалидирует generation/source, сбрасывает state и ставит release в очередь |
 | `state` / `threadConfiguration` | Нет → StateFlow | `LiveState` / `ThreadConfiguration`; не публикуют старый infer/error |
+| `signals` | Нет → `StateFlow<TargetSignal?>` | Последний внутренний сигнал текущего кадра; conflated, null при invalidation/expiry. Содержит статус, пиксель/центр выбранного обнаружения, confidence и времена. Не подтверждает получение внешним устройством |
 | `LiveBackend.infer(frame, confidence)` | Frame/Float → `LiveInference` | Блокирующий, не должен удерживать frame после возврата; его закрывает контроллер |
 | `LiveBackend.changeThreads(threads)` / `close()` | Int / нет → Unit | На том же worker; default changeThreads бросает `UnsupportedOperationException` |
 

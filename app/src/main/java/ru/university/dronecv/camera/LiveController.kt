@@ -26,6 +26,7 @@ data class LiveState(
     val completedFrames: Long = 0,
     val error: String? = null,
     val revision: Long = 0,
+    val target: TargetSignal? = null,
 )
 
 /** All backend methods run on the same worker, including release after pause or failure. */
@@ -47,11 +48,18 @@ class LiveController<Frame : AutoCloseable>(
     private val worker: Executor,
     private val diagnostics: DiagnosticFrames? = null,
     initialThreads: Int = 2,
+    private val eventTime: (() -> Long)? = null,
+    private val maxAnalyzerAgeMs: Double = 250.0,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
+    init { require(maxAnalyzerAgeMs.isFinite() && maxAnalyzerAgeMs >= 0) }
     private val lock = Any()
     private val mutableState = MutableStateFlow(LiveState())
     val state = mutableState.asStateFlow()
+    private val mutableSignals = MutableStateFlow<TargetSignal?>(null)
+    /** Conflated internal signal stream; null invalidates the target on Stop/pause/error/expiry. */
+    val signals = mutableSignals.asStateFlow()
+    private var frameId = 0L
     private val mutableThreads = MutableStateFlow(ThreadConfiguration(initialThreads))
     val threadConfiguration = mutableThreads.asStateFlow()
     private var active = false
@@ -69,12 +77,15 @@ class LiveController<Frame : AutoCloseable>(
         val wasActive = active
         active = enabled
         confidence = threshold
-        generation++
+        val configuredGeneration = ++generation
         completions.clear()
-        mutableState.value = LiveState(
-            phase = if (active) LivePhase.STARTING else LivePhase.STOPPED,
-            revision = ++revision,
-        )
+        mutableSignals.value = null
+        if (generation == configuredGeneration && !closed) {
+            mutableState.value = LiveState(
+                phase = if (active) LivePhase.STARTING else LivePhase.STOPPED,
+                revision = ++revision,
+            )
+        }
         if (wasActive && !active) worker.execute { backend.close() }
     }
 
@@ -116,7 +127,7 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     /** Call only on the worker supplied to CameraX.setAnalyzer. */
-    fun analyze(frame: Frame, sourceId: Long? = null) {
+    fun analyze(frame: Frame, sourceId: Long? = null, stamp: FrameStamp? = null) {
         try {
             val request = synchronized(lock) {
                 if (closed || !active || busy || (sourceId != null && sourceId != source) ||
@@ -124,17 +135,18 @@ class LiveController<Frame : AutoCloseable>(
                 else { busy = true; generation to confidence }
             } ?: return
             val token = diagnostics?.currentToken()
-            if (token != null) diagnostics?.received(token)
             try {
+                if (stamp?.ageAt(stamp.analyzerEntryNs)?.let { it > maxAnalyzerAgeMs } == true) {
+                    if (token != null) diagnostics?.discardStale(token)
+                    return
+                }
+                if (token != null) diagnostics?.received(token)
                 val start = nanoTime()
                 val result = backend.infer(frame, request.second)
                 val end = nanoTime()
                 synchronized(lock) {
                     if (!closed && active && generation == request.first) {
-                        if (token != null && result.conversionMs != null && result.preprocessMs != null && result.postprocessMs != null) {
-                            diagnostics?.completed(token, end, result.conversionMs, result.preprocessMs,
-                                result.inferenceMs, result.postprocessMs, (end - start) / 1_000_000.0)
-                        }
+                        val selected = selectTarget(result.detections, result.width, result.height)
                         completions.addLast(end)
                         while (completions.size > 30 ||
                             (completions.size > 2 && end - completions.first() > 3_000_000_000L)) {
@@ -144,10 +156,19 @@ class LiveController<Frame : AutoCloseable>(
                         val fps = if (completions.size > 1 && elapsed > 0)
                             (completions.size - 1) * 1_000_000_000.0 / elapsed else null
                         val previous = mutableState.value
-                        mutableState.value = LiveState(
+                        val signal = if (stamp != null && eventTime != null) targetSignal(++frameId, source, stamp,
+                            eventTime(), result.width, result.height, selected) else null
+                        val next = LiveState(
                             LivePhase.RUNNING, result, (end - start) / 1_000_000.0, fps,
-                            previous.completedFrames + 1, revision = ++revision,
+                            previous.completedFrames + 1, revision = ++revision, target = signal,
                         )
+                        mutableSignals.value = signal
+                        if (token != null && result.conversionMs != null && result.preprocessMs != null && result.postprocessMs != null) {
+                            diagnostics?.completed(token, end, result.conversionMs, result.preprocessMs,
+                                result.inferenceMs, result.postprocessMs, (end - start) / 1_000_000.0, signal)
+                        }
+                        // An unconfined signal subscriber may synchronously stop/reconfigure this controller.
+                        if (!closed && active && generation == request.first) mutableState.value = next
                     }
                 }
             } catch (e: Exception) {
@@ -164,15 +185,23 @@ class LiveController<Frame : AutoCloseable>(
 
     private fun fail(id: Long, message: String) = synchronized(lock) {
         if (closed || !active || generation != id) return@synchronized
-        generation++
-        mutableState.value = LiveState(LivePhase.ERROR, error = message, revision = ++revision)
+        val failureGeneration = ++generation
+        mutableSignals.value = null
+        if (generation == failureGeneration && !closed && active) {
+            mutableState.value = LiveState(LivePhase.ERROR, error = message, revision = ++revision)
+        }
         worker.execute { backend.close() }
     }
 
     /** Clear boxes if the camera stops supplying frames without reporting an error. */
     fun expire(revision: Long) = synchronized(lock) {
-        if (mutableState.value.revision == revision && mutableState.value.result != null) {
-            mutableState.value = mutableState.value.copy(result = null, fps = null, pipelineMs = null)
+        val current = mutableState.value
+        val expiredGeneration = generation
+        if (current.revision == revision && current.result != null) {
+            if (mutableSignals.value === current.target) mutableSignals.value = null
+            if (generation == expiredGeneration && mutableState.value.revision == revision) {
+                mutableState.value = current.copy(result = null, fps = null, pipelineMs = null, target = null)
+            }
         }
     }
 
@@ -182,6 +211,7 @@ class LiveController<Frame : AutoCloseable>(
         active = false
         generation++
         source++
+        mutableSignals.value = null
         mutableState.value = LiveState(revision = ++revision)
         worker.execute { backend.close() } // ordered after any in-flight native call; never wait on UI.
     }

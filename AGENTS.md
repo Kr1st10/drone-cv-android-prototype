@@ -12,6 +12,7 @@
 - `camera/CameraScreen.kt` — разрешение CAMERA, состояния экрана, ошибки.
 - `camera/CameraPreview.kt` — общий ViewPort Preview/ImageAnalysis, привязка к lifecycle и display rotation.
 - `camera/LiveController.kt` — последовательный analyzer, generation/source tokens и владение кадром; `AndroidLiveBackend` — RGBA crop → общий YOLO engine.
+- `camera/TargetSignal.kt` — FrameStamp, выбор максимального confidence в текущем кадре и пиксельный центр; внутренний сигнал через StateFlow и диагностический JSON, без сопоставления объектов между кадрами.
 - `detection/DetectorWorker.kt` — единственный process-wide ML-worker для фото и видео; ORT CPU sequential/2 потока без spinning.
 - `detection/ObjectDetector.kt` — контракт детектора (`ObjectDetector`, `Detection`, `NormalizedBox`).
 - `detection/onnx/` — Android-адаптер, проверка файла и общий JVM/Android ORT-движок; `detection/yolo/` — чистые Kotlin pre/postprocessing.
@@ -72,8 +73,10 @@ JVM-тесты включают реальный ORT-инференс; моде�
 ## Владение ресурсами живой камеры
 - Preview и ImageAnalysis одной задней камеры привязываются одним UseCaseGroup с `PreviewView.viewPort`, FILL_CENTER. Рамки нормализованы относительно raw cropRect после `rotationDegrees`; повторно их не вращать. Изменение layout/display rotation требует нового ViewPort и invalidation.
 - ImageAnalysis RGBA/KEEP_ONLY_LATEST вызывает backend синхронно на `DetectorWorker.executor`, без дополнительной очереди. Каждый ImageProxy закрывается в `finally` контроллера. RGBA converter возвращает заимствованный буфер: использовать только до следующего кадра на том же worker.
+- До передачи контроллеру за кадр отвечает CameraPreview: сбой метаданных/создания FrameStamp тоже должен закрыть ImageProxy; после передачи повторно закрывать его нельзя.
 - Stop/pause/error/rebind сначала инвалидируют результат; source token защищает и от callback старой активации. Старые ошибки тоже отбрасываются. Монотонная revision для UI expiry не совпадает с generation запросов.
 - Снимать analyzer при остановке; закрывать модель только в очереди того же ML-worker после native call. Не ждать ORT и не применять shutdownNow на UI. Общий idle worker живёт до завершения процесса; backend владеет ORT-сессией.
 
 - Размер области превью не должен зависеть от появления/текста результата или статистики: иначе layout → ViewPort rebind → invalidate может сбрасывать каждый результат. Панель имеет фиксированный размер относительно доступного окна и прокручивается внутри.
 - UI-коллекция StateFlow детектора явно использует Dispatchers.Main.immediate; unit controller остаётся Android-independent. Это также исключает перенос Compose test frame/layout на ML-worker через unconfined test continuation.
+- Метки экспозиции вычитать только из `elapsedRealtimeNanos` и только при Camera2 timestamp source REALTIME; UNKNOWN даёт null с причиной, без подгонки смещения к `nanoTime`. FrameStamp и eventTime должны иметь согласованную базу; без eventTime сигналы отключены. При invalidation сбрасывать сигнал. Каждый кадр выбирает максимальный confidence независимо; отсутствие обнаружений публикует NO_TARGET с null-координатами и confidence.
