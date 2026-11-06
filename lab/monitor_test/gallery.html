@@ -11,7 +11,11 @@
   #stage.clean { cursor: none; }
   .panel { position: fixed; z-index: 10; background: rgba(20,20,24,.96); border: 1px solid #555; border-radius: 8px; padding: 16px 20px; max-height: 92vh; overflow: auto; }
   #settings { top: 3vh; left: 50%; transform: translateX(-50%); width: min(1100px, 94vw); }
-  #record { bottom: 2vh; right: 2vw; width: 560px; }
+  #record { bottom: 2vh; right: 2vw; width: min(560px, calc(96vw - 40px)); }
+  #record label { white-space: normal; }
+  #record fieldset { min-width: 0; }
+  #record fieldset label { display: block; }
+  #record input[type=text] { max-width: 100%; box-sizing: border-box; }
   #answer { top: 2vh; left: 2vw; font-size: 28px; max-width: 46vw; }
   #toast { position: fixed; z-index: 20; left: 50%; bottom: 3vh; transform: translateX(-50%); background: rgba(30,30,36,.95); border: 1px solid #777; border-radius: 6px; padding: 8px 16px; font-size: 18px; }
   #calib { inset: 0; border: 0; border-radius: 0; background: #fff; color: #000; max-height: none; }
@@ -57,7 +61,7 @@
   <fieldset><legend>2. Прогон</legend>
     <label>Телефон <input type="text" id="phone" value="Xiaomi 17T Pro" list="phones"><datalist id="phones"><option>Xiaomi 17T Pro</option><option>Xiaomi 17 Pro</option></datalist></label>
     <label>Зум камеры <select id="zoom"><option value="1x">1×</option><option value="5x">5×</option></select></label>
-    <label>Расстояние до экрана, см <input type="number" id="distance" value="100"></label>
+    <label>От камеры до плоскости экрана, см <input type="number" id="distance" min="0" step="any" placeholder="не измерено"></label>
     <label class="adv">Оператор <input type="text" id="operator" value=""></label>
   </fieldset>
 
@@ -115,7 +119,13 @@
     <label>max confidence на объекте, % <input type="number" id="recConf" min="0" max="100"></label><br>
     <label>ложных рамок (вне объекта) <input type="number" id="recFp" min="0" placeholder="не считали"></label>
     <label>max confidence ложных, % <input type="number" id="recFpConf" min="0" max="100"></label><br>
-    <label>размер объекта в кадре камеры, px (если измерен) <input type="number" id="recCamPx" min="0" placeholder="не измерено"></label><br>
+    <label>большая сторона объекта в кадре анализа, px <input type="number" id="recCamPx" min="0" step="any" placeholder="не измерено"></label><br>
+    <fieldset><legend>Физическая ширина (для этого изображения)</legend>
+      <label>Ширина коптера, см <input type="number" id="recDroneWidth" min="0" step="any" placeholder="не измерено"></label><br>
+      <label>Модель, источник габарита и границы ширины <input type="text" id="recWidthSource" style="width:360px" placeholder="характеристики / собственный замер"></label><br>
+      <label>Та же ширина на экране, мм <input type="number" id="recScreenWidth" min="0" step="any" placeholder="замер линейкой"></label>
+      <div class="muted">10″ — диаметр пропеллера, не габарит коптера. Измеряйте одну и ту же ширину между одинаковыми точками. Оценка мм по рамке манифеста не подставляется. Для неизвестной модели оставьте габарит пустым.</div>
+    </fieldset>
     <label>заметки <input type="text" id="recNote" style="width:360px"></label><br>
     <button id="recSave">Сохранить (Enter)</button>
   </div>
@@ -147,7 +157,7 @@ const CAT_NAMES = (window.MANIFEST && window.MANIFEST.categories) || {};
 const CATS = Object.keys(CAT_NAMES).filter(c => M.some(m => m.category === c));
 const $ = id => document.getElementById(id);
 const img = $('img'), stage = $('stage');
-let S = load('settings', null), SAMPLE = load('sample', null), T = load('trial', null), R = load('results', []).map(r => ({ ...r, max_confidence_pct: r.detection === 'no_box' ? null : r.max_confidence_pct ?? null })), RUNS = load('runs', []);
+let S = load('settings', null), SAMPLE = load('sample', null), T = load('trial', null), R = load('results', []).map(normalizeRecord), RUNS = load('runs', []);
 const ui = { hud: false, manual: 1, available: {}, chosen: null, toastT: 0 };
 
 function load(k, d) { try { const v = localStorage.getItem(LS + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
@@ -157,6 +167,20 @@ function shuffle(arr, seed) { const r = mulberry32(seed), a = arr.slice(); for (
 function fnv(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16).padStart(8, '0'); }
 function esc(v) { return String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function num(v) { if (v === '' || v == null) return null; const x = parseFloat(v); return Number.isFinite(x) ? x : null; }
+function positive(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0; }
+function equivalentDistance(droneWidthCm, screenDistanceCm, screenWidthMm) {
+  if (![droneWidthCm, screenDistanceCm, screenWidthMm].every(positive)) return null;
+  const d = droneWidthCm * screenDistanceCm / (screenWidthMm / 10) / 100;
+  return Number.isFinite(d) ? d : null;
+}
+function normalizeRecord(r) { // additive fields: old sessions stay valid; never infer physical width from a bbox
+  const width = positive(r.drone_width_cm) ? r.drone_width_cm : null;
+  const screen = positive(r.screen_object_width_mm) ? r.screen_object_width_mm : null;
+  return { ...r, max_confidence_pct: r.detection === 'no_box' ? null : r.max_confidence_pct ?? null,
+    drone_width_cm: width, drone_width_source: r.drone_width_source ?? '', screen_object_width_mm: screen,
+    object_angular_width_deg: screen != null && positive(r.distance_cm) ? 2 * Math.atan(screen / (20 * r.distance_cm)) * 180 / Math.PI : null,
+    equivalent_distance_m: DRONE_CATS.includes(r.category) ? equivalentDistance(width, r.distance_cm, screen) : null };
+}
 function byId(id) { return M.find(x => x.id === id); }
 function isQuick() { return document.querySelector('input[name=mode]:checked').value === 'quick'; }
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.remove('hidden'); clearTimeout(ui.toastT); ui.toastT = setTimeout(() => e.classList.add('hidden'), 3000); }
@@ -223,7 +247,7 @@ function startRun() {
   const s = readSettings();
   if (!SAMPLE) { alert('Сначала сформируйте выборку («Пилот — 20 фото» или свои количества).'); return; }
   if (!s.phone) { alert('Укажите модель телефона.'); return; }
-  if (s.distance_cm == null) { alert('Укажите расстояние до экрана, см.'); return; }
+  if (!$('distance').validity.valid || (s.distance_cm != null && !positive(s.distance_cm))) { alert('Расстояние до экрана должно быть положительным или пустым (не измерено).'); return; }
   const rs = runSettings(s);
   if (rs.scaleMode === 'camera' && !rs.k) { alert('Для режима «px кадра камеры» сначала выполните калибровку (C).'); return; }
   if ((rs.scaleMode === 'monitor' || rs.scaleMode === 'camera') && !rs.sizes.length) { alert('Укажите уровни размера N.'); return; }
@@ -303,6 +327,8 @@ function openRecord() {
   $('recMaxConfField').classList.toggle('hidden', ui.chosen === 'no_box');
   $('recConf').value = prev?.target_conf_pct ?? ''; $('recFp').value = prev?.fp_count ?? ''; $('recFpConf').value = prev?.fp_max_conf_pct ?? '';
   $('recCamPx').value = prev?.object_camera_px_measured ?? ''; $('recNote').value = prev?.note ?? '';
+  $('recDroneWidth').value = prev?.drone_width_cm ?? ''; $('recWidthSource').value = prev?.drone_width_source ?? '';
+  $('recScreenWidth').value = prev?.screen_object_width_mm ?? '';
   $('record').classList.remove('hidden'); document.activeElement?.blur();
 }
 function choose(det) {
@@ -323,14 +349,19 @@ function saveRecord() {
     toast('Максимальный confidence YOLO: введите число от 0 до 100 или оставьте поле пустым'); return;
   }
   const st = current(), m = byId(st.id), s = T.settings, adv = s.mode !== 'quick';
+  if (adv && ['recDroneWidth', 'recScreenWidth', 'recCamPx'].some(id => !$(id).validity.valid || (num($(id).value) != null && !positive(num($(id).value))))) {
+    toast('Размеры должны быть положительными или пустыми (не измерено)'); return;
+  }
   const fp = adv ? num($('recFp').value) : null;
-  const rec = { run_id: T.run_id, sample_id: T.sample_id, sample_name: T.sample_name, sample_seed: T.sample_seed, step: T.index, image_id: m.id, category: m.category,
+  const rec = normalizeRecord({ run_id: T.run_id, sample_id: T.sample_id, sample_name: T.sample_name, sample_seed: T.sample_seed, step: T.index, image_id: m.id, category: m.category,
     phone: s.phone, camera_zoom: s.zoom, distance_cm: s.distance_cm, test_mode: s.mode, detection: ui.chosen, ...classify(m.category, ui.chosen, fp),
     scale_mode: s.scaleMode, size_level: st.level, size_level_unit: st.level == null ? null : s.scaleMode === 'monitor' ? 'monitor_px' : 'camera_px',
     display_scale: +(ui.scale * (window.devicePixelRatio || 1)).toFixed(5), calibration_k: s.k,
     ...sizes(m, s, adv ? num($('recCamPx').value) : null), analysis_frame_w: s.frame_w, analysis_frame_h: s.frame_h, yolo_input_px: s.yolo_input,
     max_confidence_pct: maxConf, target_conf_pct: adv ? num($('recConf').value) : null, fp_count: fp, fp_max_conf_pct: adv ? num($('recFpConf').value) : null,
-    app_conf_threshold_pct: s.app_conf_pct, operator: s.operator || '', recorded_at: new Date().toISOString(), note: adv ? $('recNote').value : '' };
+    drone_width_cm: adv ? num($('recDroneWidth').value) : null, drone_width_source: adv ? $('recWidthSource').value.trim() : '',
+    screen_object_width_mm: adv ? num($('recScreenWidth').value) : null,
+    app_conf_threshold_pct: s.app_conf_pct, operator: s.operator || '', recorded_at: new Date().toISOString(), note: adv ? $('recNote').value : '' });
   R = R.filter(r => !(r.run_id === rec.run_id && r.step === rec.step)); R.push(rec); save('results', R);
   $('record').classList.add('hidden'); document.activeElement?.blur(); hud();
   const done = R.filter(r => r.run_id === T.run_id).length;
@@ -350,19 +381,51 @@ function showAnswer() {
 const COLS = ['run_id', 'sample_id', 'sample_name', 'sample_seed', 'step', 'image_id', 'category', 'phone', 'camera_zoom', 'distance_cm', 'test_mode', 'detection', 'result_class', 'false_alarm',
   'scale_mode', 'size_level', 'size_level_unit', 'display_scale', 'object_monitor_px', 'object_monitor_mm', 'calibration_k', 'object_camera_px_expected', 'object_camera_px_measured',
   'analysis_frame_w', 'analysis_frame_h', 'yolo_input_px', 'object_yolo_px', 'object_yolo_px_source', 'max_confidence_pct', 'target_conf_pct', 'fp_count', 'fp_max_conf_pct', 'app_conf_threshold_pct',
-  'operator', 'recorded_at', 'note'];
+  'operator', 'recorded_at', 'note', 'drone_width_cm', 'drone_width_source', 'screen_object_width_mm', 'object_angular_width_deg', 'equivalent_distance_m'];
 function csv() { const q = v => v == null ? '' : /[",\n;]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
   const rows = R.slice().sort((a, b) => a.run_id < b.run_id ? -1 : a.run_id > b.run_id ? 1 : a.step - b.step);
   return [COLS.join(',')].concat(rows.map(r => COLS.map(c => q(r[c])).join(','))).join('\n') + '\n'; }
 function sessionJson() { return JSON.stringify({ format: FORMAT, exported: new Date().toISOString(), manifest_version: window.MANIFEST && window.MANIFEST.version,
-  manifest_sha256: window.MANIFEST_SHA256 || null, sample: SAMPLE, runs: RUNS, trial: T, settings: S, results: R }, null, 1); }
+  manifest_sha256: window.MANIFEST_SHA256 || null, sample: SAMPLE, runs: RUNS, trial: T, settings: S, results: R, size_summary: sizeSummary(R) }, null, 1); }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+function sizeSummary(records) {
+  const groups = new Map();
+  for (const r of records) {
+    const drone = DRONE_CATS.includes(r.category);
+    const measured = positive(r.object_camera_px_measured), expected = positive(r.object_camera_px_expected);
+    const px = measured ? r.object_camera_px_measured : expected ? r.object_camera_px_expected : null;
+    // Backgrounds have no object size. A nominal camera level labels their scheduled control block only.
+    const source = px != null ? (measured ? 'measured' : 'calibration') : r.category === 'negative' && r.size_level_unit === 'camera_px' ? 'control_level' : 'unknown';
+    const level = px != null ? +px.toFixed(1) : source === 'control_level' ? r.size_level : null;
+    const key = JSON.stringify([r.run_id, drone, source, level]);
+    if (!groups.has(key)) groups.set(key, { run_id: r.run_id, camera_zoom: r.camera_zoom, kind: drone ? 'drone' : 'negative',
+      camera_px: level, camera_px_source: source, checks: 0, correct_detections: 0, detection_rate: null,
+      false_positives: 0, false_positive_rate: null, distance_known_count: 0, equivalent_distance_min_m: null, equivalent_distance_max_m: null });
+    const g = groups.get(key); g.checks++;
+    if (drone && r.result_class === 'TP') g.correct_detections++;
+    if (!drone && r.false_alarm) g.false_positives++;
+    if (drone && positive(r.equivalent_distance_m)) {
+      const d = r.equivalent_distance_m; g.distance_known_count++;
+      g.equivalent_distance_min_m = g.equivalent_distance_min_m == null ? d : Math.min(g.equivalent_distance_min_m, d);
+      g.equivalent_distance_max_m = g.equivalent_distance_max_m == null ? d : Math.max(g.equivalent_distance_max_m, d);
+    }
+    g.detection_rate = drone ? g.correct_detections / g.checks : null;
+    g.false_positive_rate = drone ? null : g.false_positives / g.checks;
+  }
+  return [...groups.values()].sort((a, b) => a.run_id.localeCompare(b.run_id) || a.kind.localeCompare(b.kind) || a.camera_px_source.localeCompare(b.camera_px_source) || (a.camera_px ?? -1) - (b.camera_px ?? -1));
+}
 function summary() {
   const rows = RUNS.map(run => { const rr = R.filter(r => r.run_id === run.run_id), c = k => rr.filter(r => r.result_class === k).length;
     return `<tr><td>${esc(run.run_id)}</td><td>${esc(run.sample_name)} (${run.sample_id})</td><td>${esc(run.phone)}</td><td>${run.zoom}</td><td>${run.distance_cm ?? '—'}</td><td>${run.mode === 'quick' ? 'быстрый' : 'расширенный'}</td>` +
       `<td>${rr.length}/${run.shows}</td><td>${c('TP')}</td><td>${c('FN')}</td><td>${c('FP')}</td><td>${c('TN')}</td></tr>`; }).join('');
   $('summary').innerHTML = (T ? `<p>Текущий прогон: ${esc(T.run_id)}, показ ${T.index + 1}/${T.order.length}</p>` : '') +
     (rows ? `<table><tr><th>прогон</th><th>выборка</th><th>телефон</th><th>зум</th><th>см</th><th>режим</th><th>записано</th><th>TP</th><th>FN</th><th>FP</th><th>TN</th></tr>${rows}</table>` : '<p class="muted">Прогонов ещё нет.</p>');
+  const fmt = x => x == null ? '—' : x.toFixed(2);
+  const levels = sizeSummary(R).map(g => `<tr><td>${esc(g.run_id)}</td><td>${esc(g.camera_zoom)}</td><td>${g.kind === 'drone' ? 'дроны' : 'негативы'}</td>` +
+    `<td>${g.camera_px ?? '—'}</td><td>${esc(g.camera_px_source)}</td><td>${g.checks}</td><td>${g.correct_detections}</td><td>${g.detection_rate == null ? '—' : (100 * g.detection_rate).toFixed(1) + '%'}</td>` +
+    `<td>${g.false_positives}</td><td>${g.false_positive_rate == null ? '—' : (100 * g.false_positive_rate).toFixed(1) + '%'}</td><td>${fmt(g.equivalent_distance_min_m)}…${fmt(g.equivalent_distance_max_m)} (${g.distance_known_count})</td></tr>`).join('');
+  if (levels) $('summary').innerHTML += `<h3>Доля обнаружений по размеру в кадре анализа</h3><p class="muted">Большая сторона, округление 0,1 px. measured — замер, calibration — оценка k, control_level — только номер блока пустого фона, unknown — нет размера. Прогоны не смешиваются. Эквивалентная дальность — геометрическая оценка, не подтверждённая реальная дальность.</p>` +
+    `<table><tr><th>прогон</th><th>зум</th><th>тип</th><th>px</th><th>источник px</th><th>проверок</th><th>TP</th><th>TP / проверок</th><th>FP</th><th>FP / негативов</th><th>экв. м min…max (известно)</th></tr>${levels}</table>`;
   $('start').textContent = SAMPLE ? `Начать прогон: ${SAMPLE.name}, ${$('zoom').value === '5x' ? '5×' : '1×'}` : 'Начать прогон';
 }
 function openSettings() { closeOverlays(); writeSettings(); sampleInfo(); summary(); stage.className = ''; $('settings').classList.remove('hidden'); }
@@ -421,7 +484,7 @@ $('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f
   if (d.sample && Array.isArray(d.sample.ids) && d.sample.ids.every(byId)) { SAMPLE = d.sample; save('sample', SAMPLE); writeCounts(SAMPLE.counts); $('seed').value = SAMPLE.seed; }
   if (d.trial) { T = d.trial; save('trial', T); }
   if (Array.isArray(d.runs)) { const have = new Set(RUNS.map(r => r.run_id)); RUNS = RUNS.concat(d.runs.filter(r => !have.has(r.run_id))); save('runs', RUNS); }
-  if (Array.isArray(d.results) && d.results.length && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.run_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r))).map(r => ({ ...r, max_confidence_pct: r.detection === 'no_box' ? null : r.max_confidence_pct ?? null }))); save('results', R); }
+  if (Array.isArray(d.results) && d.results.length && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.run_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r))).map(normalizeRecord)); save('results', R); }
   sampleInfo(); summary(); e.target.value = ''; }); };
 $('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); summary(); sampleInfo(); } };
 const LEGACY = localStorage.getItem('dronecv66.results');
