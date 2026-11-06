@@ -12,13 +12,14 @@ function definition(name) {
   return script.slice(start, end);
 }
 const ctx = vm.createContext({ R: [], RUNS: [], SAMPLE: null, T: null, S: null,
-  window: {}, SCREEN_CAL: null, BOUNDS: {}, FORMAT: 'dronecv66-session-2' });
+  window: {}, SCREEN_CAL: null, BOUNDS: {}, EXPERIMENTS: [], LOCAL_IMAGES: {}, REFERENCE_IMAGE: null, DEVICE_PROFILE: null, CAMERA_CAL: null, GALLERY_STATE: null, FORMAT: 'dronecv66-session-2' });
 vm.runInContext(script.match(/const DRONE_CATS = .*?;/)[0] + '\n' +
   script.match(/const COLS = \[[\s\S]*?\];/)[0] + '\n' +
   ['positive', 'equivalentDistance', 'physicalScale', 'validBounds', 'physicalWidth', 'normalizeRecord', 'sizeSummary', 'median', 'repeatSummary', 'csv', 'sessionJson'].map(definition).join('\n'), ctx);
 const call = (fn, ...args) => ctx[fn](...args);
 assert.equal(call('equivalentDistance', 60, 150, 60), 15);
 assert.equal(call('equivalentDistance', 60, 150, 30), 30);
+assert.equal(call('equivalentDistance', 57, 150, 30), 28.5);
 assert.equal(call('physicalScale', 400, 100), 0.25);
 assert.equal(call('physicalWidth', [100, 50, 400, 200], 1000, 500, 0.4, 0.25), 30); // object, not 1000-px photo
 assert.equal(call('physicalWidth', [100, 50, 400, 200], 1000, 500, 0.2, 0.25), 15); // resize, no new ruler reading

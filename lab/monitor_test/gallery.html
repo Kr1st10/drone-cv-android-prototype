@@ -19,8 +19,19 @@
   #answer { top: 2vh; left: 2vw; font-size: 28px; max-width: 46vw; }
   #toast { position: fixed; z-index: 20; left: 50%; bottom: 3vh; transform: translateX(-50%); background: rgba(30,30,36,.95); border: 1px solid #777; border-radius: 6px; padding: 8px 16px; font-size: 18px; }
   #calib { inset: 0; border: 0; border-radius: 0; background: #fff; color: #000; max-height: none; }
-  #screenLine { position: absolute; top: 48%; left: 50%; transform: translateX(-50%); border-top: 3px solid #000; height: 24px; border-left: 2px solid; border-right: 2px solid; box-sizing: border-box; }
-  #screenLine span { display: block; text-align: center; margin-top: 28px; }
+  #screenMeasure { padding: 24px; display: flex; align-items: center; flex-direction: column; gap: 8px; position: sticky; top: 0; background: #fff; z-index: 1; }
+  #screenLine { display: block; max-width: calc(100vw - 112px); height: 90px; overflow: visible; flex-shrink: 0; }
+  #screenLineCaption { text-align: center; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  nav button[aria-selected=true] { background: #2a5; color: white; border: 1px solid #3c6; }
+  details { border: 1px solid #444; border-radius: 6px; padding: 10px; margin: 12px 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  #mainSetup { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  #limitChart { width: 100%; min-height: 260px; background: #15191f; }
+  #researchStatus, #comparison { margin: 10px 0; }
+  #stageControls { bottom: 8px; right: 8px; padding: 8px; }
+  #stageControls button { padding: 4px 8px; }
+  #researchSection input[type=file] { max-width: 100%; }
   #boundsEditor { inset: 3vh 3vw; }
   #boundsCanvas { display: block; max-width: 100%; max-height: 52vh; touch-action: none; cursor: crosshair; }
   #geometry { top: 8px; left: 8px; max-width: min(620px, 90vw); }
@@ -51,9 +62,61 @@
 <div id="answer" class="panel hidden"></div>
 <div id="geometry" class="panel hidden"></div>
 <div id="toast" class="hidden"></div>
+<div id="stageControls" class="panel hidden">
+  <button id="previousImage">←</button><button id="nextImage">→</button>
+  <button id="smallerImage">−</button><button id="largerImage">+</button>
+  <button id="recordButton">Записать (R)</button><button id="currentBounds">Границы текущего объекта</button><button id="settingsButton">Настройки (S)</button>
+</div>
 
 <div id="settings" class="panel">
   <h2 style="margin-top:0">Лабораторная галерея: проверка детекции с экрана</h2>
+  <nav aria-label="Разделы стенда">
+    <button data-section="gallery" aria-selected="true">Галерея и сравнение</button>
+    <button data-section="research" aria-selected="false">Измерить предел</button>
+    <button data-section="results" aria-selected="false">Результаты</button>
+    <button id="helpBtn">Как пользоваться?</button>
+  </nav>
+  <div id="mainSetup"></div>
+  <details id="help"><summary>Как пользоваться?</summary>
+    <p><b>Первый запуск.</b> Откройте HTML на нужном дисплее, включите полный экран F. Нажмите «Калибровка экрана», измерьте линию между двумя высокими рисками и введите длину в см. Поставьте смартфон напротив центра экрана и введите расстояние от объектива до экрана.</p>
+    <p><b>Измерить предел.</b> Профиль Flex FPV 10 выбран. Загрузите свой допустимый снимок аппарата с известной проекцией, один раз обведите коптер. Запустите YOLO на Xiaomi. Для оси пикселей камеры один раз откалибруйте установку (C, в «Дополнительно»): измерьте контрольный квадрат в кадре анализа, проверьте второй квадрат и размеры кадра. Начните готовую серию: G скрывает подписи и кнопки; после стабилизации фиксируйте заранее выбранный кадр и нажимайте R → 1/2/3. Лучший кадр за окно не выбирайте. Результаты появляются в графике автоматически. Не считайте соседние кадры независимыми проверками.</p>
+    <p><b>Галерея.</b> Выберите 20/90 фото или свой набор, начните прогон. Если границы объекта ещё не подтверждены, один раз задайте их через «Границы текущего объекта». Масштабируйте +/−/0. G показывает ширину, эквивалентную дальность и сравнение с сохранённым пределом; перед наблюдением G скрывает текст. При неизвестной модели это предположение о ширине, не исходная дальность съёмки.</p>
+    <p><b>Сохранение.</b> Записи, свои снимки и график хранятся в этом браузере. В «Результатах» экспортируйте JSON для резервной копии или переноса; CSV — для таблиц. После открытия сохранённого файла проверьте экран и установку. Порог относится к испытанной модели/камере/условиям и не гарантирует обнаружение другой фотографии.</p>
+  </details>
+  <section id="gallerySection"></section>
+  <section id="researchSection" class="hidden">
+    <h3>Эталон Draganfly Flex FPV 10</h3>
+    <p>Пропеллеры 10″; собранный аппарат 570 × 570 × 60 мм. Номинальная ширина 57 см применима к соответствующей фронтальной/ортографической проекции.</p>
+    <p><a href="https://draganfly.com/flex-fpv-system/" target="_blank" rel="noopener noreferrer">Производитель</a> · <a href="https://draganfly.com/wp-content/uploads/2026/02/DPRO-Product-Brochure-Feb-2026.pdf" target="_blank" rel="noopener noreferrer">Характеристики, стр. 11</a></p>
+    <p class="warn">Допустимое для распространения фото с подтверждённой проекцией 57 см не найдено. Официальные фото перспективные; их ширина не приравнивается к 57 см. Загрузите свой снимок или снимок с разрешением на использование. Он сохраняется локально вместе с разметкой.</p>
+    <label>Снимок эталона <input type="file" id="referencePhoto" accept="image/png,image/jpeg,image/webp"></label>
+    <p id="referencePhotoStatus"></p>
+    <label><input type="checkbox" id="referenceProjection"> Подтверждаю модель и соответствие видимой ширины снимка габариту выбранного эталона</label>
+    <p><button id="prepareReference">Выделить границы эталона</button><button id="cameraSetup">Калибровка камеры (C)</button></p>
+    <details><summary>Автоматически заполнить настройки из Android JSON</summary><input type="file" id="androidSetupJson" accept=".json"><p id="androidSetupStatus">Импортируются фактические модель, порог и размер кадра. Это ещё не результаты проверки эталона.</p></details>
+    <p><label><input type="checkbox" id="cameraScaleVerified"> Калибровка камеры проверена по второму квадрату; кадр, зум и установка соответствуют замеру</label></p>
+    <p><label><input type="checkbox" id="independentChecks"> Каждая проверка — заранее выбранный кадр после стабилизации; соседние кадры не считаю независимыми испытаниями</label></p>
+    <p><button id="startResearch" class="primary">Начать исследование: 20 проверок на размер</button><button id="resumeResearch">Продолжить исследование</button><button id="refineResearch">Добавить промежуточный размер</button></p>
+    <p id="researchStatus" class="warn"></p>
+    <p>Готовые ширины на экране: 6, 4, 3, 2, 1, 0,5 см. Критерий: ≥90 % и ≥20 отдельных проверок на уровне. При необходимости добавьте меньший или промежуточный размер. До измерений подтверждённого порога нет.</p>
+  </section>
+  <section id="resultsSection" class="hidden">
+    <h3>Сохранённые исследования</h3>
+    <label>Серия <select id="experimentSelect"></select></label>
+    <label>Ось X <select id="chartAxis"><option value="camera">Ширина в кадре камеры, px</option><option value="distance">Эквивалентная дальность, м</option></select></label>
+    <div id="limitStatus"></div><div id="chartContainer"></div><div id="limitPoints"></div>
+    <p><button id="saveExperiment">Сохранить набор результатов</button><button id="exportExperiment">Экспорт набора JSON</button><button id="exportPlot">Сохранить график SVG</button></p>
+    <div id="exports"></div>
+    <details><summary>Все прогоны и подробная сводка</summary><div id="allSummaries"></div></details>
+  </section>
+  <details id="advanced"><summary>Дополнительно</summary><div id="legacyControls"></div>
+    <label>Профиль <select id="referenceProfile"><option value="flex10">Draganfly Flex FPV 10 — 57 см</option><option value="custom">Пользовательский эталон</option></select></label>
+    <label>Предполагаемая ширина неизвестного коптера, см <input id="assumedWidth" type="number" value="57" min="0" step="any"></label>
+    <label>Модель / SHA-256 <input id="modelHash" type="text" placeholder="автоматически из диагностики Android"></label>
+    <label>Физическая камера <input id="cameraId" type="text" placeholder="если известна"></label>
+    <label>Условия серии <input id="sceneConditions" type="text" placeholder="яркость, свет, фокус, версия APK"></label>
+    <p>Android JSON заполняет доступные модель, порог, кадр и confidence. В текущем экспорте нет bbox объекта и связи кадра с фотографией, поэтому импорт сам по себе не доказывает правильность рамки или независимость кадров.</p>
+  </details>
   <p id="status" class="warn"></p>
   <p><label><input type="radio" name="mode" value="quick" checked> <b>Быстрый тест</b> (телефон, 1×/5×, расстояние, результат)</label>
      <label><input type="radio" name="mode" value="advanced"> Расширенный режим (масштаб, калибровка, confidence, ложные рамки)</label></p>
@@ -68,7 +131,7 @@
   </fieldset>
 
   <fieldset><legend>2. Прогон</legend>
-    <label>Телефон <input type="text" id="phone" value="Xiaomi 17T Pro" list="phones"><datalist id="phones"><option>Xiaomi 17T Pro</option><option>Xiaomi 17 Pro</option></datalist></label>
+    <label>Телефон <input type="text" id="phone" value="Xiaomi 17 Pro" list="phones"><datalist id="phones"><option>Xiaomi 17T Pro</option><option>Xiaomi 17 Pro</option></datalist></label>
     <label>Зум камеры <select id="zoom"><option value="1x">1×</option><option value="5x">5×</option></select></label>
     <label>От камеры до плоскости экрана, см <input type="number" id="distance" min="0" step="any" placeholder="не измерено"></label>
     <label class="adv">Оператор <input type="text" id="operator" value=""></label>
@@ -91,7 +154,7 @@
     <label><input type="checkbox" id="center" checked> центрировать объект</label>
     <label>Фон <select id="bg"><option value="#000">чёрный</option><option value="#808080">серый</option></select></label>
     <br>
-    <label>Порог confidence в приложении, % <input type="number" id="appConf" value="25"></label>
+    <label>Порог confidence в приложении, % <input type="number" id="appConf" value="50"></label>
     <label>Монитор: ширина активной области, мм <input type="number" id="monitorMm" value="" placeholder="не измерено"></label>
     <label>ширина, px <input type="number" id="monitorPx" value="3840"></label>
     <br>
@@ -138,8 +201,8 @@
   <b>Запись результата — показ <span id="recIdx"></span></b>
   <div class="muted">Что видно на экране телефона? Правильный ответ откроется клавишей A после сохранения.</div>
   <div id="recMaxConfField">
-    <label>Максимальный confidence YOLO (%) <input type="number" id="recMaxConf" min="0" max="100" step="any"></label>
-    <div class="muted">Укажите наибольшую уверенность рамки за время наблюдения. Можно оставить пустым</div>
+    <label><span id="confidenceCaption">Максимальный confidence YOLO (%)</span> <input type="number" id="recMaxConf" min="0" max="100" step="any"></label>
+    <div class="muted" id="confidenceHint">Укажите наибольшую уверенность рамки за время наблюдения. Можно оставить пустым</div>
   </div>
   <button class="big det" data-det="box_on_object"><span class="kbd">1</span> Рамка на показанном объекте</button>
   <button class="big det" data-det="box_elsewhere"><span class="kbd">2</span> Рамка только в другом месте (не на объекте)</button>
@@ -164,6 +227,10 @@
     <button id="recSave">Сохранить (Enter)</button>
   </div>
   <button id="recCancel">Отмена (Esc)</button>
+  <details id="diagnosticImport"><summary>Импорт Android для текущей проверки</summary>
+    <input type="file" id="androidJson" accept=".json"><button id="clearAndroidImport">Снять импорт</button><div id="androidPreview"></div>
+    <p>Файл должен относиться только к этому статичному показу. Для исследования заранее выбран первый сохранённый кадр: проверьте соответствие его рамки объекту и выберите 1/2/3 вручную. Один файл — одна проверка; число его кадров не становится числом независимых испытаний.</p>
+  </details>
 </div>
 
 <div id="calib" class="panel hidden">
@@ -178,14 +245,19 @@
   <div id="calibgrid"></div>
   <div id="screenCalibSection" class="hidden" style="padding:16px;max-width:900px">
     <h2>Калибровка физического масштаба экрана</h2>
-    <p>Измерьте линейкой расстояние между крайними вертикальными рисками линии. Введите длину в мм. CSS-дюймы, диагональ и Retina не используются как физическая мера.</p>
-    <label>Дисплей (для журнала) <input type="text" id="screenLabel" placeholder="MacBook / внешний монитор"></label>
-    <label>Длина линии, мм <input type="number" id="screenLineMm" min="0" step="any" placeholder="измерьте линейкой"></label>
+    <p>Измерьте линейкой расстояние между двумя высокими вертикальными рисками. Введите длину в сантиметрах.</p>
+    <label>Длина линии, см <input type="number" id="screenLineCm" min="0" step="any" placeholder="измерьте линейкой"></label>
     <button id="applyScreenCalib">Сохранить измерение</button>
+    <details><summary>Дополнительно</summary><label>Дисплей (для журнала) <input type="text" id="screenLabel" placeholder="MacBook / внешний монитор"></label></details>
     <p id="screenCalibResult"></p>
     <p>После смены дисплея, масштаба браузера/ОС, fullscreen или перезагрузки страницы повторите измерение. Браузер не гарантирует распознавание физического монитора. C / Esc — закрыть.</p>
+    <div id="screenMeasure">
+      <svg id="screenLine" viewBox="0 0 400 90" width="400" height="90" aria-label="Контрольная линия между двумя вертикальными рисками" preserveAspectRatio="none">
+        <path d="M0 45H400 M0 12V78 M400 12V78" fill="none" stroke="#000" stroke-width="4" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <div id="screenLineCaption"></div>
+    </div>
   </div>
-  <div id="screenLine" class="hidden"><span id="screenLineCaption"></span></div>
 </div>
 
 <div id="boundsEditor" class="panel hidden">
@@ -199,24 +271,31 @@
 </div>
 
 <script src="manifest.js"></script>
+<script src="experiment.js"></script>
 <script>
 "use strict";
 const LS = 'dronecv66v2.', FORMAT = 'dronecv66-session-2';
+const FLEX_PROFILE = { id: 'draganfly-flex-fpv10', model: 'Draganfly Flex FPV 10', propeller_in: 10, width_cm: 57, height_cm: 6,
+  assembled_mm: [570, 570, 60], source: 'https://draganfly.com/wp-content/uploads/2026/02/DPRO-Product-Brochure-Feb-2026.pdf#page=11',
+  projection: 'Фронтальная/ортографическая ширина 570 мм; перспективная проекция требует отдельного подтверждения' };
 const PILOT = { name: 'Пилот — 20 фото', seed: 66020, counts: { civil_quadcopter: 5, military_uav: 5, uav_payload: 3, bird: 3, aircraft: 2, negative: 2 } };
 const DRONE_CATS = ['civil_quadcopter', 'military_uav', 'uav_payload'];
 const DET_NAMES = { box_on_object: 'рамка на объекте', box_elsewhere: 'рамка не на объекте', no_box: 'рамок нет' };
 const CLASS_NAMES = { TP: 'верное обнаружение (TP)', FN: 'пропуск дрона (FN)', FP: 'ложное срабатывание (FP)', TN: 'верно: рамок нет (TN)' };
-const M = (window.MANIFEST && window.MANIFEST.images) || [];
+let LOCAL_IMAGES = load('local_images', {});
+const M = ((window.MANIFEST && window.MANIFEST.images) || []).concat(Object.values(LOCAL_IMAGES).filter(m => m && m.custom && /^data:image\/(jpeg|png|webp);base64,/.test(m.file || '')));
 const CAT_NAMES = (window.MANIFEST && window.MANIFEST.categories) || {};
 const CATS = Object.keys(CAT_NAMES).filter(c => M.some(m => m.category === c));
 const $ = id => document.getElementById(id);
 const img = $('img'), stage = $('stage');
 let S = load('settings', null), SAMPLE = load('sample', null), T = load('trial', null), R = load('results', []).map(normalizeRecord), RUNS = load('runs', []);
 let SCREEN_CAL = load('screen_calibration', null), BOUNDS = load('object_bounds', {}), screenConfirmed = false;
-const ui = { hud: false, geometry: false, manual: 1, available: {}, chosen: null, toastT: 0, boundsImage: null, boundsDrag: null };
+let EXPERIMENTS = load('experiments', []), DEVICE_PROFILE = load('device_profile', null), REFERENCE_IMAGE = load('reference_image', null), CAMERA_CAL = load('camera_calibration', null);
+let GALLERY_STATE = load('gallery_state', null);
+const ui = { section: 'gallery', hud: false, geometry: false, manual: 1, available: {}, chosen: null, toastT: 0, boundsImage: null, boundsDrag: null, android: null };
 
 function load(k, d) { try { const v = localStorage.getItem(LS + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
-function save(k, v) { localStorage.setItem(LS + k, JSON.stringify(v)); }
+function save(k, v) { try { localStorage.setItem(LS + k, JSON.stringify(v)); return true; } catch (e) { toast('Не удалось сохранить в браузере: экспортируйте JSON, освободите место.'); return false; } }
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function shuffle(arr, seed) { const r = mulberry32(seed), a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function fnv(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16).padStart(8, '0'); }
@@ -263,6 +342,222 @@ function byId(id) { return M.find(x => x.id === id); }
 function isQuick() { return document.querySelector('input[name=mode]:checked').value === 'quick'; }
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.remove('hidden'); clearTimeout(ui.toastT); ui.toastT = setTimeout(() => e.classList.add('hidden'), 3000); }
 
+function layout() { // Reuse controls/IDs and storage; only move the existing controls into three sections.
+  const settings = $('settings'), legacy = $('legacyControls');
+  const fields = [...settings.querySelectorAll(':scope > fieldset')];
+  $('gallerySection').append($('status'), fields[0]);
+  const custom = document.createElement('button'); custom.textContent = 'Свой набор'; custom.id = 'customizeSample'; fields[0].append(custom);
+  const sampleDetails = document.createElement('div'); legacy.append(sampleDetails);
+  for (const node of [$('catCounts'), $('seed').closest('label'), $('makeSample')]) sampleDetails.append(node);
+  const mode = settings.querySelector('input[name=mode]').closest('p'); legacy.append(mode);
+  $('mainSetup').append($('distance').closest('label'), $('zoom').closest('label'), $('screenCalibBtn'));
+  const confirmed = document.createElement('button'); confirmed.id = 'confirmSavedScreen'; confirmed.textContent = 'Экран и масштаб те же — подтвердить'; confirmed.className = 'hidden'; $('mainSetup').append(confirmed);
+  $('mainSetup').append($('screenCalibStatus'));
+  fields.slice(1).forEach(f => legacy.append(f));
+  const actions = $('start').parentElement; $('gallerySection').append(actions);
+  for (const id of ['exportCsv', 'exportJson', 'clear', 'legacy']) $('exports').append($(id));
+  $('exports').append($('importJson').closest('label'));
+  $('allSummaries').append($('summary'));
+  const recordExtras = $('record').querySelector(':scope > .adv');
+  const details = document.createElement('details'); details.id = 'recordAdvanced'; details.innerHTML = '<summary>Дополнительно: размеры, confidence и ручные корректировки</summary>';
+  recordExtras.before(details); details.append(recordExtras); $('recCancel').before($('recSave'));
+  $('screenCalibSection').prepend($('screenMeasure'));
+}
+function section(name) {
+  if (name === 'gallery' && ui.galleryRestorePending && GALLERY_STATE) {
+    const common = S || {};
+    SAMPLE = GALLERY_STATE.sample; S = { ...common, ...GALLERY_STATE.settings, experiment_kind: 'gallery' };
+    for (const key of ['phone', 'zoom', 'distance_cm', 'frame_w', 'frame_h', 'k', 'screen_calibration', 'camera_geometry_verified', 'camera_calibration_context', 'device_profile', 'model_sha256', 'camera_id', 'scene_conditions', 'app_conf_pct', 'object_bounds']) S[key] = common[key];
+    save('sample', SAMPLE); save('settings', S); writeSettings(); sampleInfo(); ui.galleryRestorePending = false;
+  }
+  ui.section = name;
+  document.querySelectorAll('nav [data-section]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.section === name)));
+  ['gallery', 'research', 'results'].forEach(n => $(n + 'Section').classList.toggle('hidden', n !== name));
+  $('advanced').classList.toggle('hidden', name === 'results');
+  if (name === 'results') renderExperiments();
+}
+function referencePhotoStatus() {
+  const m = byId(REFERENCE_IMAGE);
+  $('referencePhotoStatus').textContent = m ? `Сохранён снимок: ${m.label}. ${confirmedBounds(m, null) ? 'Границы подтверждены.' : 'Один раз выделите границы.'}` : 'Снимок ещё не загружен. Для исследования нужен реальный аппарат с известной проекцией.';
+  $('referenceProjection').checked = m?.projection_confirmed === true;
+}
+function currentCondition(s = T?.settings || S || {}, metadata = null) {
+  const p = metadata || s.device_profile || DEVICE_PROFILE || {};
+  return { phone: p.phone || s.phone || null, camera_zoom: s.zoom || null,
+    analysis_frame_w: metadata ? p.analysis_frame_w : p.analysis_frame_w || s.frame_w || null, analysis_frame_h: metadata ? p.analysis_frame_h : p.analysis_frame_h || s.frame_h || null,
+    model_name: metadata ? p.model_name : p.model_name || 'YOLO11s', model_sha256: metadata ? p.model_sha256 : s.model_sha256 || p.model_sha256 || null,
+    confidence_pct: metadata ? p.confidence_pct : p.confidence_pct ?? s.app_conf_pct ?? null, nms_iou: metadata ? p.nms_iou : p.nms_iou ?? 0.7,
+    camera_id: s.camera_id || null, scene_conditions: s.scene_conditions || '',
+    screen_distance_cm: s.distance_cm ?? null, screen_label: s.screen_calibration?.label || null,
+    reference_id: s.reference?.profile_id || 'custom', reference_width_cm: s.reference?.width_cm ?? null,
+    reference_status: s.reference?.status ?? 'unknown', reference_source: s.reference?.source ?? '', reference_image_id: s.reference?.image_id ?? null,
+    observation_unit: s.observation_unit || 'window' };
+}
+function cameraContext(s) { return JSON.stringify([s.phone, s.zoom, s.camera_id || null, s.distance_cm, s.frame_w, s.frame_h, s.k, s.screen_calibration?.id, devicePixelRatio || 1]); }
+function persistTrial() {
+  if (!T) return;
+  save('trial', T); const run = RUNS.find(r => r.run_id === T.run_id);
+  if (run) { run.trial = JSON.parse(JSON.stringify(T)); save('runs', RUNS); }
+}
+function currentTruthWidth(m, s, measured = null) {
+  if (positive(measured)) return measured;
+  if (!s.camera_geometry_verified || !positive(s.k) || !calibrationFor(s) || !CAMERA_CAL || CAMERA_CAL.context !== s.camera_calibration_context?.context || CAMERA_CAL.context !== cameraContext(s)) return null;
+  const b = confirmedBounds(m, s);
+  if (!b || geometryData(m, s).screen_object_width_mm_calculated == null) return null;
+  const width = (b[2] - b[0]) * ui.scale * (devicePixelRatio || 1) * s.k, height = (b[3] - b[1]) * ui.scale * (devicePixelRatio || 1) * s.k;
+  return positive(width) && positive(s.frame_w) && positive(s.frame_h) && width <= s.frame_w && height <= s.frame_h ? width : null;
+}
+function dataSets() {
+  return window.LabExperiment.analysis(R).map(d => {
+    const trial = RUNS.find(r => r.run_id === d.id)?.trial;
+    const planned = new Set((trial?.order || []).map(st => st.level));
+    const recorded = new Set(d.points.map(p => p.size_level));
+    if ([...planned].some(level => !recorded.has(level))) { d.limit.uncertainty = true; d.warnings.push('В плане серии ещё есть уровни без записанных проверок.'); }
+    if (d.condition.observation_unit !== 'frame') { d.limit.status = 'insufficient'; d.limit.min_px = null; d.limit.max_equivalent_distance_m = null; d.limit.uncertainty = true; d.warnings.push('Единица старых наблюдений не подтверждена как заранее выбранный кадр. Покадровый предел не установлен.'); }
+    return d;
+  });
+}
+function cacheExperiments() {
+  EXPERIMENTS = dataSets().map(d => ({ ...d, saved_at: new Date().toISOString(), chart_camera_svg: plotSvg(d, 'camera'), chart_distance_svg: plotSvg(d, 'distance') }));
+  save('experiments', EXPERIMENTS);
+}
+function selectedExperiment() { return EXPERIMENTS.find(d => d.key === $('experimentSelect').value) || EXPERIMENTS.at(-1) || null; }
+function plotSvg(dataset, axis = 'camera') {
+  const points = (dataset?.points || []).filter(p => p.kind === 'drone' && positive(axis === 'camera' ? p.camera_width_px : p.equivalent_distance_m));
+  if (!points.length) return '';
+  const W = 900, H = 330, L = 64, Rg = 24, top = 24, bottom = 58;
+  const xs = points.map(p => axis === 'camera' ? p.camera_width_px : p.equivalent_distance_m), min = Math.min(...xs), max = Math.max(...xs);
+  const x = v => L + (v - (min === max ? min * 0.9 : min)) / (min === max ? Math.max(1, max * 0.2) : max - min) * (W - L - Rg);
+  const y = rate => top + (1 - rate) * (H - top - bottom);
+  let body = `<rect width="900" height="330" fill="#15191f"/><path d="M${L} ${top}V${H - bottom}H${W - Rg}" stroke="#aaa" fill="none"/>`;
+  for (const rate of [0, .5, .9, 1]) body += `<path d="M${L} ${y(rate)}H${W - Rg}" stroke="#3c4652" ${rate === .9 ? 'stroke-dasharray="5 4"' : ''}/><text x="${L - 8}" y="${y(rate) + 4}" fill="#ddd" text-anchor="end" font-size="13">${rate * 100}%</text>`;
+  for (const p of points) {
+    const value = axis === 'camera' ? p.camera_width_px : p.equivalent_distance_m, px = x(value), py = y(p.detection_rate), ci = p.ci95;
+    if (ci) body += `<path d="M${px} ${y(ci.low)}V${y(ci.high)}" stroke="#8bc"/>`;
+    body += `<circle cx="${px}" cy="${py}" r="5" fill="${p.stability_met === true ? '#5db' : p.stability_met === false ? '#f88' : '#fc6'}"><title>${esc(value.toFixed(2))}; ${p.correct}/${p.checks}; независимых ${p.independent_checks}; критерий ${p.stability_met == null ? 'не оценён' : p.stability_met ? 'выполнен' : 'не выполнен'}</title></circle>` +
+      `<text x="${px}" y="${Math.max(14, py - 12)}" text-anchor="middle" fill="#ddd" font-size="12">n=${p.checks}</text>` +
+      `<text x="${px}" y="${H - bottom + 20}" text-anchor="middle" fill="#ddd" font-size="12">${value.toFixed(1)}</text>`;
+  }
+  body += `<text x="${W / 2}" y="${H - 10}" text-anchor="middle" fill="#ddd" font-size="14">${axis === 'camera' ? 'Ширина объекта в кадре анализа, px' : 'Эквивалентная дальность, м'}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" id="limitChart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Доля правильных обнаружений по сохранённым испытаниям">${body}</svg>`;
+}
+function renderExperiments() {
+  const previous = $('experimentSelect').value || load('selected_experiment', null);
+  $('experimentSelect').innerHTML = EXPERIMENTS.map(d => `<option value="${esc(d.key)}">${esc(d.id)} — ${esc(d.condition.camera_zoom || '?')} — ${d.total_checks} проверок</option>`).join('');
+  if (EXPERIMENTS.some(d => d.key === previous)) $('experimentSelect').value = previous;
+  const d = selectedExperiment();
+  if (!d) { $('limitStatus').textContent = 'Результатов ещё нет. Проведите реальные проверки в разделе «Измерить предел». Демонстрационные точки не добавляются.'; $('chartContainer').textContent = ''; $('limitPoints').textContent = ''; return; }
+  const status = { empty: 'Нет результатов', insufficient: 'Недостаточно проверок или независимых размеров камеры', all_pass: 'Все проверенные размеры устойчивы — испытайте меньшие; предел не установлен', all_fail: 'Критерий не достигнут — испытайте большие; предел не установлен', contradictory: 'Результаты противоречат единственному порогу; повторите уровни', bracketed: 'Переход найден среди испытанных размеров' }[d.limit.status];
+  $('limitStatus').innerHTML = `<p><b>${esc(status)}</b></p>` + (d.limit.min_px != null ? `<p>Минимальный подтверждённый размер: <b>${d.limit.min_px} px</b>; максимальная проверенная эквивалентная дальность: <b>${d.limit.max_equivalent_distance_m?.toFixed(2) ?? '—'} м</b>. Доля ${(100 * d.limit.rate).toFixed(1)}%, n=${d.limit.n}. Камера ${esc(d.condition.camera_zoom)}.</p>` : '') +
+    `<p class="warn">${d.warnings.map(esc).join(' ')}</p><details><summary>Дополнительно: условия серии и интервалы</summary><p class="muted">95% интервалы Wilson — номинальные; независимость должна быть обеспечена опытом. Модель ${esc(d.condition.model_name || '?')}, SHA ${esc(d.condition.model_sha256 || 'не указан')}, кадр ${d.condition.analysis_frame_w ?? '?'}×${d.condition.analysis_frame_h ?? '?'}, порог ${d.condition.confidence_pct ?? '?'}%, экран ${d.condition.screen_distance_cm ?? '?'} см. ${esc(d.condition.scene_conditions || 'Дополнительные условия не описаны.')} Полевую дальность не доказывает.</p></details>`;
+  const chart = plotSvg(d, $('chartAxis').value);
+  $('chartContainer').innerHTML = chart ? chart + '<p class="muted">Зелёный: критерий выполнен; красный: не выполнен; жёлтый: недостаточно данных. Доля показана по всем проверкам; для порога отдельно проверяется независимая часть.</p>' : '<p>Нет независимого размера камеры для оси X. Пропуски остаются в таблице; измерьте объект или проверьте калибровку камеры.</p>';
+  $('limitPoints').innerHTML = '<table><tr><th>px камеры</th><th>экв. м</th><th>проверок</th><th>TP / FN / FP</th><th>доля TP</th><th>независимых</th><th>кадров</th></tr>' + d.points.map(p => `<tr><td>${p.camera_width_px ?? 'не измерено'}</td><td>${p.equivalent_distance_m?.toFixed(2) ?? '—'}</td><td>${p.checks}</td><td>${p.correct} / ${p.misses} / ${p.false_positives}</td><td>${p.detection_rate == null ? '—' : (100 * p.detection_rate).toFixed(1) + '%'}</td><td>${p.independent_checks}</td><td>${p.checked_frame_count ?? 'не считали'}</td></tr>`).join('') + '</table>';
+}
+function comparisonText(m, s) {
+  const d = selectedExperiment(); if (!d) return 'Сохранённого подтверждённого порога пока нет.';
+  const px = currentTruthWidth(m, s), c = window.LabExperiment.classifySize(d, px, currentCondition(s));
+  if (px == null) return 'Размер в пикселях камеры не измерен; сравнение с порогом недоступно.';
+  const prefix = `Размер в кадре: ${px.toFixed(1)} px. Сохранённый порог: ${d.limit.min_px == null ? 'не установлен' : d.limit.min_px + ' px'}. `;
+  if (c.compatibility.status !== 'match') {
+    const relation = d.limit.min_px != null ? px < d.limit.min_px ? 'Ниже сохранённого порога.' : px <= d.limit.stable_max_px ? 'По размеру в сохранённом диапазоне.' : 'Выше испытанного диапазона.' : '';
+    return prefix + 'Только ориентировочное сравнение: ' + relation + ' ' + c.compatibility.reasons.join(' ') + ' Обнаружение этой фотографии не гарантируется.';
+  }
+  const text = { below: 'Размер ниже подтверждённого диапазона устойчивого обнаружения.', inside_tested_range: 'Размер в ранее подтверждённом диапазоне эталона; это не гарантия обнаружения этой фотографии.', above: 'Размер больше испытанного диапазона; результат не экстраполируется.', unknown: 'Предел в выбранной серии не установлен.' }[c.status];
+  return prefix + text;
+}
+function builtinReference() {
+  if ($('referenceProfile').value !== 'flex10') return;
+  $('referenceModel').value = FLEX_PROFILE.model; $('referenceWidth').value = FLEX_PROFILE.width_cm;
+  $('referenceHeight').value = FLEX_PROFILE.height_cm; $('referenceSource').value = FLEX_PROFILE.source;
+  $('referenceStatus').value = 'unknown';
+}
+function imageLoaded(src) { return new Promise((resolve, reject) => { const im = new Image(); im.onload = () => resolve(im); im.onerror = () => reject(new Error('Изображение не удалось прочитать')); im.src = src; }); }
+async function sha256(bytes) {
+  if (!crypto.subtle) return null;
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function addReferencePhoto(file) {
+  if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) throw new Error('Выберите JPEG/PNG/WebP до 20 МБ.');
+  const url = URL.createObjectURL(file);
+  let im; try { im = await imageLoaded(url); } finally { URL.revokeObjectURL(url); }
+  if (im.naturalWidth > 16000 || im.naturalHeight > 16000) throw new Error('Слишком большое изображение; уменьшите его перед загрузкой.');
+  const ratio = Math.min(1, 2048 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+  c.width = Math.round(im.naturalWidth * ratio); c.height = Math.round(im.naturalHeight * ratio); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  const fileUrl = c.toDataURL('image/jpeg', .9), bytes = Uint8Array.from(atob(fileUrl.split(',')[1]), ch => ch.charCodeAt(0));
+  const hash = await sha256(bytes), id = 'ref-' + (hash ? hash.slice(0, 20) : Date.now());
+  if (fileUrl.length > 2500000) throw new Error('Для хранения уменьшите фото: подготовленная копия превышает 2,5 МБ.');
+  const m = { id, custom: true, category: 'civil_quadcopter', label: file.name, file: fileUrl, width: c.width, height: c.height, sha256: hash,
+    object_bbox: null, source: 'operator_supplied', author: 'Снимок оператора', license: 'Права подтверждает оператор', projection_confirmed: false };
+  if (!save('local_images', { ...LOCAL_IMAGES, [id]: m })) throw new Error('Не хватает места в браузере. Сначала экспортируйте результаты.');
+  LOCAL_IMAGES[id] = m; const existing = M.findIndex(x => x.id === id); if (existing >= 0) M[existing] = m; else M.push(m);
+  REFERENCE_IMAGE = id; save('reference_image', id); ui.available[id] = true; buildBoundsSelector(); $('boundImage').value = id;
+  builtinReference(); readSettings(); referencePhotoStatus();
+}
+function startResearch() {
+  const m = byId(REFERENCE_IMAGE);
+  if (!m || !$('referenceProjection').checked || !confirmedBounds(m, null)) { $('researchStatus').textContent = 'Загрузите допустимый снимок, подтвердите его проекцию и один раз выделите границы коптера.'; return; }
+  if (!activeScreenCalibration() || !positive(num($('distance').value))) { $('researchStatus').textContent = 'Подтвердите калибровку экрана и введите измеренное расстояние от камеры.'; return; }
+  if (!$('independentChecks').checked) { $('researchStatus').textContent = 'Подтвердите отдельные проверки. Соседние кадры не заменяют 20 независимых испытаний.'; return; }
+  const oldSettings = readSettings();
+  if (!ui.galleryRestorePending) { GALLERY_STATE = { sample: SAMPLE, settings: { ...oldSettings, experiment_kind: 'gallery' } }; save('gallery_state', GALLERY_STATE); }
+  ui.galleryRestorePending = true;
+  $('boundImage').value = m.id; builtinReference(); $('referenceStatus').value = 'verified';
+  document.querySelector('input[name=mode][value=advanced]').checked = true; document.body.classList.remove('quick');
+  $('scaleMode').value = 'physical'; $('sizes').value = '6,4,3,2,1,0.5'; $('center').checked = true;
+  $('repetitions').value = 20; $('minAttempts').value = 20; $('stabilityPct').value = 90;
+  if (!selectSingleImage()) return;
+  $('researchStatus').textContent = '';
+  startRun();
+}
+function selectSingleImage() {
+  const m = byId($('boundImage').value); if (!m) return false;
+  const counts = Object.fromEntries(CATS.map(c => [c, c === m.category ? 1 : 0]));
+  if (!setSample({ sample_id: 'S' + fnv(m.id), name: 'Один снимок ' + m.id, seed: 0, counts, ids: [m.id], created: new Date().toISOString(), manifest_version: window.MANIFEST.version })) return false;
+  readSettings(); summary(); return true;
+}
+function resumeKind(kind) {
+  const matches = trial => trial?.settings && (trial.settings.experiment_kind || 'gallery') === kind;
+  const trial = matches(T) ? T : RUNS.slice().reverse().find(r => matches(r.trial))?.trial;
+  if (!trial) { toast('Сохранённого прогона этого режима нет.'); return; }
+  T = JSON.parse(JSON.stringify(trial)); ui.manual = 1; persistTrial(); show();
+}
+function refineResearch() {
+  if (T?.settings?.experiment_kind !== 'limit') { toast('Сначала начните исследование.'); return; }
+  const d = dataSets().find(d => d.id === T.run_id), points = (d?.points || []).filter(p => positive(p.size_level) && p.kind === 'drone').sort((a, b) => a.size_level - b.size_level);
+  let best = null, gap = -1;
+  for (let i = 1; i < points.length; i++) { const delta = Math.abs(points[i].detection_rate - points[i - 1].detection_rate); if (delta > gap) { gap = delta; best = (points[i].size_level + points[i - 1].size_level) / 2; } }
+  if (best == null || gap < .1) best = Math.min(...T.settings.sizes) / 2;
+  best = +best.toFixed(3);
+  if (!(best > 0) || T.settings.sizes.includes(best)) { toast('Этот промежуточный размер уже есть или слишком мал. Задайте уровни в «Дополнительно».'); return; }
+  const start = T.order.length;
+  for (let attempt = 1; attempt <= 20; attempt++) T.order.push({ id: T.sample_ids[0], level: best, attempt });
+  T.settings.sizes.push(best); T.index = start; RUNS.find(r => r.run_id === T.run_id).shows = T.order.length;
+  persistTrial(); ui.manual = 1; show();
+}
+function applyDeviceMetadata(meta) {
+  DEVICE_PROFILE = meta; save('device_profile', meta);
+  if (meta.phone) $('phone').value = meta.phone;
+  if (meta.model_sha256) $('modelHash').value = meta.model_sha256;
+  if (meta.confidence_pct != null) $('appConf').value = meta.confidence_pct;
+  if (meta.analysis_frame_w) $('frameW').value = meta.analysis_frame_w;
+  if (meta.analysis_frame_h) $('frameH').value = meta.analysis_frame_h;
+  readSettings();
+}
+async function importAndroidFile(file, observation) {
+  const text = await file.text(), parsed = window.LabExperiment.parseAndroid(JSON.parse(text));
+  if (observation && !parsed.frames.length) throw new Error('В файле нет выбранного кадра для проверки.');
+  const imported = { file_name: file.name, sha256: await sha256(new TextEncoder().encode(text)), metadata: parsed.metadata,
+    frame_count: parsed.frame_count, candidate_count: parsed.candidate_count, no_target_count: parsed.no_target_count, bbox_available: false,
+    raw_confidence_median_pct: window.LabExperiment.median(parsed.frames.map(f => f.confidence_pct).filter(v => v != null)),
+    raw_confidence_max_pct: parsed.frames.reduce((value, f) => f.confidence_pct == null ? value : value == null ? f.confidence_pct : Math.max(value, f.confidence_pct), null),
+    signal_samples: parsed.frames.slice(0, 32), signal_samples_truncated: parsed.frame_count > 32,
+    selected_frame_index: observation ? 0 : null, selected_frame: observation ? parsed.frames[0] : null };
+  if (observation) ui.android = imported;
+  applyDeviceMetadata(parsed.metadata);
+  return `Кадров в файле: ${parsed.frame_count}; кандидатов detected: ${parsed.candidate_count}; no_target: ${parsed.no_target_count}. ` + parsed.warning;
+}
+
 // Physical scale is confirmed for this page only. Browser geometry cannot identify every physical display.
 function screenEnvironment() {
   return { dpr: devicePixelRatio || 1, width: screen.width, height: screen.height, available_width: screen.availWidth, available_height: screen.availHeight,
@@ -277,6 +572,7 @@ function screenStatus() {
   const cal = activeScreenCalibration();
   $('screenCalibStatus').textContent = cal ? `Подтверждена линейкой: ${cal.mm_per_css_px.toFixed(6)} мм / CSS px · ${cal.label || 'дисплей без имени'}` :
     SCREEN_CAL ? `Требуется повторный замер линейкой. Сохранённый коэффициент ${SCREEN_CAL.mm_per_css_px} мм / CSS px не применяется.` : 'Физический масштаб не измерен. Нажмите «Калибровка экрана линейкой».';
+  $('confirmSavedScreen').classList.toggle('hidden', !!cal || !SCREEN_CAL || JSON.stringify(SCREEN_CAL.environment) !== JSON.stringify(screenEnvironment()));
 }
 function calibrationFor(s) {
   const cal = activeScreenCalibration();
@@ -287,7 +583,11 @@ function confirmedBounds(m, s) {
   return r && r.image_width === m.width && r.image_height === m.height && r.image_sha256 === (m.sha256 || null) && validBounds(r.bbox, m.width, m.height) ? r.bbox : null;
 }
 function objectBox(m, s) { return confirmedBounds(m, s) || m.object_bbox; }
-function referenceFor(m, s) { return s.reference?.image_id === m.id && ['conditional', 'verified'].includes(s.reference.status) ? s.reference : null; }
+function referenceFor(m, s) {
+  if (s.reference?.image_id === m.id && ['conditional', 'verified'].includes(s.reference.status)) return s.reference;
+  return s.experiment_kind !== 'limit' && DRONE_CATS.includes(m.category) && positive(s.assumed_width_cm) ?
+    { model: 'Неизвестная модель', width_cm: s.assumed_width_cm, source: `Предположение: считаем коптер шириной ${s.assumed_width_cm} см`, status: 'assumed' } : null;
+}
 function geometryData(m, s, manualMm = null) {
   const b = confirmedBounds(m, s), cal = calibrationFor(s);
   let automatic = b && cal ? physicalWidth(b, m.width, m.height, ui.scale, cal.mm_per_css_px) : null;
@@ -305,17 +605,18 @@ function geometryText(m, s, widthCm, manualMm = null, status = 'unknown') {
   const g = geometryData(m, s, manualMm), d = DRONE_CATS.includes(m.category) ? equivalentDistance(widthCm, s.distance_cm, g.screen_object_width_mm) : null;
   const source = g.screen_width_source === 'manual' ? 'ручной замер' : g.screen_width_source === 'screen_calibration' ? 'расчёт по линейке' : 'нет источника';
   const calibration = { valid: 'актуальна', stale: 'нужен повторный замер', missing: 'нет измерения' }[g.screen_calibration_status];
-  const reference = status === 'conditional' ? 'УСЛОВНЫЙ ЭТАЛОН — отладка. ' : status === 'verified' ? 'Эталон подтверждён оператором. ' : 'Эталон не подтверждён. ';
-  return `Ширина объекта: ${g.screen_object_width_mm == null ? 'нет измерения' : g.screen_object_width_mm.toFixed(2) + ' мм'} (${source}). ` +
+  const reference = status === 'conditional' ? 'УСЛОВНЫЙ ЭТАЛОН — отладка. ' : status === 'assumed' ? `Предположение: считаем коптер шириной ${widthCm} см. ` : status === 'verified' ? 'Эталон подтверждён оператором. ' : 'Эталон не подтверждён. ';
+  return `Ширина объекта: ${g.screen_object_width_mm == null ? 'нет измерения' : (g.screen_object_width_mm / 10).toFixed(2) + ' см / ' + g.screen_object_width_mm.toFixed(2) + ' мм'} (${source}). ` +
     `По калибровке: ${g.screen_object_width_mm_calculated?.toFixed(2) ?? '—'} мм. Эквивалентная дальность: ${d == null ? 'нет данных' : d.toFixed(2) + ' м'}. ` +
     `${reference}Калибровка: ${calibration}. Не полевая дальность.`;
 }
 function refreshGeometry() {
   if (!T || !current()) return;
   const m = byId(current().id), s = T.settings, ref = referenceFor(m, s);
-  $('geometry').textContent = geometryText(m, s, ref?.width_cm ?? null, null, ref?.status);
+  $('geometry').textContent = geometryText(m, s, ref?.width_cm ?? null, null, ref?.status) + ' ' + comparisonText(m, s);
   const unobscured = $('settings').classList.contains('hidden') && $('calib').classList.contains('hidden') && $('boundsEditor').classList.contains('hidden');
-  $('geometry').classList.toggle('hidden', !ui.geometry || s.mode === 'quick' || !unobscured);
+  $('geometry').classList.toggle('hidden', !ui.geometry || !unobscured);
+  $('stageControls').classList.toggle('hidden', !ui.geometry || !unobscured || !$('record').classList.contains('hidden'));
   if (!$('record').classList.contains('hidden')) {
     const width = num($('recDroneWidth').value), unchanged = ref && width === ref.width_cm && $('recWidthSource').value.trim() === [ref.model, ref.source].filter(Boolean).join(' · ');
     $('recordGeometry').textContent = geometryText(m, s, width, num($('recScreenWidth').value), unchanged ? ref.status : 'manual_unverified');
@@ -352,7 +653,7 @@ function editBounds() {
 function makeSample(counts, seed, name) {
   const ids = [];
   for (const c of CATS) {
-    const pool = M.filter(m => m.category === c).map(m => m.id).sort();
+    const pool = M.filter(m => m.category === c && !m.custom).map(m => m.id).sort();
     const n = Math.max(0, Math.min(counts[c] | 0, pool.length));
     ids.push(...shuffle(pool, (seed ^ parseInt(fnv(c), 16)) >>> 0).slice(0, n));
   }
@@ -378,7 +679,7 @@ function sampleInfo() {
 }
 function buildCats() {
   $('catCounts').innerHTML = '<table><tr>' + CATS.map(c => `<th>${esc(CAT_NAMES[c] || c)}</th>`).join('') + '</tr><tr>' +
-    CATS.map(c => { const n = M.filter(m => m.category === c).length; return `<td><input type="number" class="catn" data-cat="${c}" min="0" max="${n}" value="0"> из ${n}</td>`; }).join('') + '</tr></table>';
+    CATS.map(c => { const n = M.filter(m => m.category === c && !m.custom).length; return `<td><input type="number" class="catn" data-cat="${c}" min="0" max="${n}" value="0"> из ${n}</td>`; }).join('') + '</tr></table>';
   writeCounts(SAMPLE ? SAMPLE.counts : PILOT.counts); if (SAMPLE) $('seed').value = SAMPLE.seed;
 }
 
@@ -389,10 +690,17 @@ function readSettings() {
     phone: $('phone').value.trim(), zoom: $('zoom').value, distance_cm: num($('distance').value), app_conf_pct: num($('appConf').value),
     monitor_mm: num($('monitorMm').value), monitor_px: num($('monitorPx').value), k: num($('k').value), frame_w: num($('frameW').value), frame_h: num($('frameH').value),
     yolo_input: num($('yoloIn').value), operator: $('operator').value,
+    experiment_kind: ui.section === 'research' ? 'limit' : 'gallery', observation_unit: ui.section === 'research' ? 'frame' : 'window', assumed_width_cm: num($('assumedWidth').value),
+    model_sha256: $('modelHash').value.trim() || DEVICE_PROFILE?.model_sha256 || null, camera_id: $('cameraId').value.trim(), scene_conditions: $('sceneConditions').value.trim(),
+    device_profile: DEVICE_PROFILE, reference_profile: $('referenceProfile').value,
     repetitions: num($('repetitions').value), stability_pct: num($('stabilityPct').value), min_attempts: num($('minAttempts').value),
     screen_calibration: activeScreenCalibration(), object_bounds: JSON.parse(JSON.stringify(BOUNDS)),
-    reference: { image_id: $('boundImage').value, model: $('referenceModel').value.trim(), propeller_in: 10, width_cm: num($('referenceWidth').value),
+    reference: { image_id: $('boundImage').value, profile_id: $('referenceProfile').value === 'flex10' ? FLEX_PROFILE.id : 'custom', model: $('referenceModel').value.trim(), propeller_in: 10, width_cm: num($('referenceWidth').value),
       height_cm: num($('referenceHeight').value), source: $('referenceSource').value.trim(), status: $('referenceStatus').value } };
+  s.camera_geometry_verified = $('cameraScaleVerified').checked && CAMERA_CAL?.context === cameraContext(s);
+  if (CAMERA_CAL && CAMERA_CAL.context !== cameraContext(s)) { CAMERA_CAL = null; $('cameraScaleVerified').checked = false; save('camera_calibration', null); }
+  s.camera_calibration_context = s.camera_geometry_verified ? CAMERA_CAL : null;
+  s.independent_checks = $('independentChecks').checked;
   S = s; save('settings', s); return s;
 }
 function writeSettings() {
@@ -406,11 +714,19 @@ function writeSettings() {
   if (byId(S.reference?.image_id)) $('boundImage').value = S.reference.image_id;
   $('referenceModel').value = S.reference?.model ?? ''; $('referenceWidth').value = S.reference?.width_cm ?? ''; $('referenceHeight').value = S.reference?.height_cm ?? '';
   $('referenceSource').value = S.reference?.source ?? ''; $('referenceStatus').value = S.reference?.status ?? 'unknown';
+  $('assumedWidth').value = S.assumed_width_cm ?? 57; $('modelHash').value = S.model_sha256 ?? DEVICE_PROFILE?.model_sha256 ?? '';
+  $('cameraId').value = S.camera_id ?? ''; $('sceneConditions').value = S.scene_conditions ?? '';
+  $('referenceProfile').value = S.reference_profile ?? (S.reference?.model && S.reference.model !== FLEX_PROFILE.model ? 'custom' : 'flex10');
+  $('cameraScaleVerified').checked = S.camera_geometry_verified === true; $('independentChecks').checked = S.independent_checks === true;
 }
 function runSettings(s) { // quick mode: everything except phone/zoom/distance has fixed defaults, unmeasured values are null
   if (s.mode !== 'quick') return Object.assign({}, s);
   return { mode: 'quick', scaleMode: 'fit', scaleFactor: 1, sizes: [], center: true, bg: '#000', phone: s.phone, zoom: s.zoom, distance_cm: s.distance_cm,
-    app_conf_pct: null, monitor_mm: null, monitor_px: null, k: null, frame_w: null, frame_h: null, yolo_input: null, operator: '', repetitions: 1 };
+    app_conf_pct: s.app_conf_pct, monitor_mm: null, monitor_px: null, k: s.camera_geometry_verified ? s.k : null,
+    frame_w: s.camera_geometry_verified ? s.frame_w : null, frame_h: s.camera_geometry_verified ? s.frame_h : null, yolo_input: null, operator: '', repetitions: 1,
+    experiment_kind: s.experiment_kind, assumed_width_cm: s.assumed_width_cm, screen_calibration: s.screen_calibration, object_bounds: s.object_bounds,
+    reference: s.reference, camera_geometry_verified: s.camera_geometry_verified, camera_calibration_context: s.camera_calibration_context,
+    model_sha256: s.model_sha256, camera_id: s.camera_id, device_profile: s.device_profile, scene_conditions: s.scene_conditions, observation_unit: 'window' };
 }
 
 // ---------- runs ----------
@@ -453,7 +769,7 @@ function startRun() {
         manifest_sha256: window.MANIFEST_SHA256 || null, sample_id: SAMPLE.sample_id, sample_name: SAMPLE.name, sample_seed: SAMPLE.seed, sample_ids: SAMPLE.ids.slice(),
         settings: rs, order, index: 0 };
   RUNS.push({ run_id: T.run_id, created: T.created, sample_id: T.sample_id, sample_name: T.sample_name, phone: rs.phone, zoom: rs.zoom, distance_cm: rs.distance_cm, mode: rs.mode, shows: order.length });
-  save('trial', T); save('runs', RUNS); ui.manual = 1; ui.geometry = rs.scaleMode === 'physical'; show();
+  persistTrial(); ui.manual = 1; ui.geometry = rs.scaleMode === 'physical' || !!calibrationFor(rs); show();
 }
 function current() { return T && T.order[T.index]; }
 function recOf(step) { return R.find(r => r.run_id === T.run_id && r.step === step); }
@@ -474,6 +790,7 @@ function show() {
   const m = byId(step.id), s = T.settings;
   stage.style.setProperty('--bg', s.bg); stage.className = 'clean';
   $('settings').classList.add('hidden');
+  $('stageControls').classList.remove('hidden');
   const baseScale = scaleFor(m, step, s);
   if (!positive(baseScale)) { img.style.visibility = 'hidden'; ui.scale = null; $('settings').classList.remove('hidden'); screenStatus(); toast('Физический масштаб недоступен. Повторите калибровку и начните новый прогон.'); return; }
   const sc = baseScale * ui.manual; ui.scale = sc;
@@ -515,7 +832,7 @@ function go(d) {
   if (!T) return; const n = T.index + d;
   if (n >= T.order.length) { const done = R.filter(r => r.run_id === T.run_id).length; toast(`Последнее изображение. Записано ${done} из ${T.order.length}. S — настройки (экспорт, повтор с другим зумом).`); return; }
   if (n < 0) return;
-  T.index = n; save('trial', T); ui.manual = 1; show();
+  T.index = n; persistTrial(); ui.manual = 1; show();
 }
 
 // ---------- R: record (never reveals the answer) ----------
@@ -523,9 +840,13 @@ function openRecord() {
   if (!T) return; $('answer').classList.add('hidden');
   $('recIdx').textContent = `${T.index + 1}/${T.order.length}`;
   const prev = recOf(T.index); ui.chosen = prev ? prev.detection : null;
+  ui.android = prev?.android_import ?? null;
+  $('androidPreview').textContent = ui.android ? `Привязан импорт: ${ui.android.file_name}, сохранённых кадров ${ui.android.frame_count}; правильность подтверждается вручную.` : '';
   $('recChosen').textContent = ui.chosen ? DET_NAMES[ui.chosen] : '—';
   document.querySelectorAll('.det').forEach(b => b.style.outline = b.dataset.det === ui.chosen ? '3px solid #3c6' : '');
   $('recMaxConf').value = prev?.max_confidence_pct ?? '';
+  $('confidenceCaption').textContent = T.settings.experiment_kind === 'limit' ? 'Confidence на выбранном кадре (%)' : 'Максимальный confidence YOLO (%)';
+  $('confidenceHint').textContent = T.settings.experiment_kind === 'limit' ? 'Запишите уверенность правильной рамки на заранее выбранном кадре. Если нет измерения — оставьте пустым. Лучший кадр задним числом не выбирайте.' : 'Укажите наибольшую уверенность рамки за время наблюдения. Можно оставить пустым';
   $('recMaxConfField').classList.toggle('hidden', ui.chosen === 'no_box');
   $('recConf').value = prev?.target_conf_pct ?? ''; $('recFp').value = prev?.fp_count ?? ''; $('recFpConf').value = prev?.fp_max_conf_pct ?? '';
   $('recCamPx').value = prev?.object_camera_px_measured ?? ''; $('recNote').value = prev?.note ?? '';
@@ -545,7 +866,7 @@ function fillPhysicalRecord(prev) {
 function choose(det) {
   ui.chosen = det;
   $('recMaxConfField').classList.toggle('hidden', det === 'no_box');
-  if (T.settings.mode === 'quick') { saveRecord(); return; }
+  if (T.settings.mode === 'quick' || (T.settings.experiment_kind === 'limit' && !$('recordAdvanced').open)) { saveRecord(); return; }
   $('recChosen').textContent = DET_NAMES[det]; document.querySelectorAll('.det').forEach(b => b.style.outline = b.dataset.det === det ? '3px solid #3c6' : '');
 }
 function classify(cat, det, fp) {
@@ -564,31 +885,54 @@ function saveRecord() {
     toast('Размеры должны быть положительными или пустыми (не измерено)'); return;
   }
   if (s.scaleMode === 'physical' && (!calibrationFor(s) || !positive(ui.scale))) { screenStatus(); refreshGeometry(); toast('Калибровка утратила актуальность. Повторите замер и начните новый прогон.'); return; }
+  if (s.scaleMode === 'physical' && m.category !== 'negative' && geometryData(m, s).screen_object_width_mm_calculated == null) { toast('Объект обрезан экраном. Уменьшите масштаб перед записью.'); return; }
   const camW = adv ? num($('recCamW').value) : null, camH = adv ? num($('recCamH').value) : null;
   if ((camW != null && positive(s.frame_w) && camW > s.frame_w) || (camH != null && positive(s.frame_h) && camH > s.frame_h)) { toast('Размер объекта не может превышать соответствующий размер кадра анализа.'); return; }
   const measuredSide = adv ? num($('recCamPx').value) ?? (camW != null && camH != null ? Math.max(camW, camH) : null) : null;
-  const ref = referenceFor(m, s), widthCm = adv ? num($('recDroneWidth').value) : null;
-  const source = adv ? $('recWidthSource').value.trim() : '';
+  const ref = referenceFor(m, s), widthCm = adv ? num($('recDroneWidth').value) : ref?.width_cm ?? null;
+  const source = adv ? $('recWidthSource').value.trim() : ref ? [ref.model, ref.source].filter(Boolean).join(' · ') : '';
   const refUnchanged = ref && widthCm === ref.width_cm && source === [ref.model, ref.source].filter(Boolean).join(' · ');
+  if (s.experiment_kind === 'limit' && !refUnchanged) { toast('Эталон серии зафиксирован. Для другого габарита или источника создайте новый прогон с пользовательским профилем.'); return; }
   const fp = adv ? num($('recFp').value) : null;
+  const imported = ui.android, actual = currentCondition(s, imported?.metadata);
+  if (s.experiment_kind === 'limit' && imported?.selected_frame &&
+      ((imported.selected_frame.status === 'no_target' && ui.chosen !== 'no_box') || (imported.selected_frame.status === 'detected' && ui.chosen === 'no_box'))) {
+    toast('Исход противоречит первому кадру импорта. Проверьте кадр или отмените импорт для ручной проверки.'); return;
+  }
+  const sameFrame = actual.analysis_frame_w === s.frame_w && actual.analysis_frame_h === s.frame_h && actual.phone === s.phone;
+  const manualTruth = camW != null && $('recCamSource').value === 'manual_screenshot' ? camW : null;
+  const truth = sameFrame ? currentTruthWidth(m, s, manualTruth) : null;
+  const duplicateImport = imported && R.some(r => r.android_import?.sha256 === imported.sha256 && !(r.run_id === T.run_id && r.step === T.index));
   const rec = normalizeRecord({ run_id: T.run_id, sample_id: T.sample_id, sample_name: T.sample_name, sample_seed: T.sample_seed, step: T.index, image_id: m.id, category: m.category,
-    phone: s.phone, camera_zoom: s.zoom, distance_cm: s.distance_cm, test_mode: s.mode, detection: ui.chosen, ...classify(m.category, ui.chosen, fp),
+    phone: actual.phone, camera_zoom: s.zoom, distance_cm: s.distance_cm, test_mode: s.mode, detection: ui.chosen, ...classify(m.category, ui.chosen, fp),
     scale_mode: s.scaleMode, size_level: st.level, size_level_unit: st.level == null ? null : s.scaleMode === 'physical' ? 'screen_cm' : s.scaleMode === 'monitor' ? 'monitor_px' : 'camera_px',
     display_scale: +(ui.scale * (window.devicePixelRatio || 1)).toFixed(5), calibration_k: s.k,
-    ...sizes(m, s, measuredSide), analysis_frame_w: s.frame_w, analysis_frame_h: s.frame_h, yolo_input_px: s.yolo_input,
+    ...sizes(m, s, measuredSide), analysis_frame_w: actual.analysis_frame_w, analysis_frame_h: actual.analysis_frame_h, yolo_input_px: s.yolo_input,
+    ...(!sameFrame ? { object_camera_width_px_expected: null, object_camera_height_px_expected: null, object_camera_px_expected: null, object_yolo_px: null, object_yolo_px_source: null } : {}),
     object_camera_width_px_measured: camW, object_camera_height_px_measured: camH,
     camera_measurement_source: measuredSide != null || camW != null || camH != null ? $('recCamSource').value : null,
     max_confidence_pct: maxConf, target_conf_pct: adv ? num($('recConf').value) : null, fp_count: fp, fp_max_conf_pct: adv ? num($('recFpConf').value) : null,
     drone_width_cm: widthCm, drone_width_source: source,
-    ...(adv ? geometryData(m, s, num($('recScreenWidth').value)) : {}),
+    ...geometryData(m, s, adv ? num($('recScreenWidth').value) : null),
     reference_model: ref?.model ?? '', reference_status: refUnchanged ? ref.status : widthCm != null ? 'manual_unverified' : 'unknown',
     reference_propeller_in: ref?.propeller_in ?? null, reference_height_cm: ref?.height_cm ?? null,
     attempt: st.attempt ?? 1, stability_threshold_pct: s.stability_pct ?? null, stability_min_attempts: s.min_attempts ?? null,
-    app_conf_threshold_pct: s.app_conf_pct, operator: s.operator || '', recorded_at: new Date().toISOString(), note: adv ? $('recNote').value : '' });
-  R = R.filter(r => !(r.run_id === rec.run_id && r.step === rec.step)); R.push(rec); save('results', R);
+    experiment_kind: s.experiment_kind || 'gallery', experiment_condition: actual,
+    truth_camera_width_px: truth, camera_size_independent: positive(truth),
+    truth_size_source: manualTruth != null ? 'manual_object_annotation' : truth != null ? 'verified_camera_calibration' : null,
+    independent_check: s.independent_checks === true && !duplicateImport, observation_source: imported ? 'android_with_manual_confirmation' : 'manual_confirmation',
+    android_import: imported, android_frame_count: imported?.frame_count ?? null, candidate_frame_count: imported?.candidate_count ?? null,
+    observation_unit: s.observation_unit || 'window',
+    checked_frame_count: s.observation_unit === 'frame' ? 1 : null,
+    matched_frame_count: s.observation_unit === 'frame' ? (DRONE_CATS.includes(m.category) && ui.chosen === 'box_on_object' ? 1 : 0) : null,
+    missed_frame_count: s.observation_unit === 'frame' ? (DRONE_CATS.includes(m.category) && ui.chosen !== 'box_on_object' ? 1 : 0) : null,
+    false_positive_frame_count: s.observation_unit === 'frame' ? (classify(m.category, ui.chosen, fp).false_alarm ? 1 : 0) : null,
+    app_conf_threshold_pct: actual.confidence_pct, operator: s.operator || '', recorded_at: new Date().toISOString(), note: adv ? $('recNote').value : '' });
+  R = R.filter(r => !(r.run_id === rec.run_id && r.step === rec.step)); R.push(rec); const stored = save('results', R);
+  cacheExperiments();
   $('record').classList.add('hidden'); document.activeElement?.blur(); hud();
   const done = R.filter(r => r.run_id === T.run_id).length;
-  toast(`Сохранено (${done}/${T.order.length}). A — правильный ответ, → — следующее.`);
+  toast(stored ? `Сохранено (${done}/${T.order.length}). A — правильный ответ, → — следующее.` : 'Запись пока только в памяти: не закрывайте страницу, экспортируйте JSON.');
 }
 // ---------- A: answer, only after the result is saved ----------
 function showAnswer() {
@@ -607,14 +951,17 @@ const COLS = ['run_id', 'sample_id', 'sample_name', 'sample_seed', 'step', 'imag
   'operator', 'recorded_at', 'note', 'drone_width_cm', 'drone_width_source', 'screen_object_width_mm', 'object_angular_width_deg', 'equivalent_distance_m',
   'screen_width_source', 'screen_object_width_mm_measured', 'screen_object_width_mm_calculated', 'screen_calibration', 'screen_calibration_status', 'object_bounds',
   'object_camera_width_px_measured', 'object_camera_height_px_measured', 'object_camera_width_px_expected', 'object_camera_height_px_expected', 'camera_measurement_source',
-  'reference_model', 'reference_status', 'reference_propeller_in', 'reference_height_cm', 'attempt', 'stability_threshold_pct', 'stability_min_attempts'];
+  'reference_model', 'reference_status', 'reference_propeller_in', 'reference_height_cm', 'attempt', 'stability_threshold_pct', 'stability_min_attempts',
+  'experiment_kind', 'experiment_condition', 'truth_camera_width_px', 'camera_size_independent', 'truth_size_source', 'independent_check', 'observation_source',
+  'android_import', 'android_frame_count', 'candidate_frame_count', 'checked_frame_count', 'matched_frame_count', 'missed_frame_count', 'false_positive_frame_count', 'observation_unit'];
 function csv() { const q = value => { const v = value != null && typeof value === 'object' ? JSON.stringify(value) : value;
     return v == null ? '' : /[",\n;]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v); };
   const rows = R.slice().sort((a, b) => a.run_id < b.run_id ? -1 : a.run_id > b.run_id ? 1 : a.step - b.step);
   return [COLS.join(',')].concat(rows.map(r => COLS.map(c => q(r[c])).join(','))).join('\n') + '\n'; }
 function sessionJson() { return JSON.stringify({ format: FORMAT, exported: new Date().toISOString(), manifest_version: window.MANIFEST && window.MANIFEST.version,
   manifest_sha256: window.MANIFEST_SHA256 || null, sample: SAMPLE, runs: RUNS, trial: T, settings: S, results: R, size_summary: sizeSummary(R),
-  repeat_summary: repeatSummary(R), screen_calibration: SCREEN_CAL, object_bounds: BOUNDS }, null, 1); }
+  repeat_summary: repeatSummary(R), screen_calibration: SCREEN_CAL, object_bounds: BOUNDS,
+  experiments: EXPERIMENTS, local_images: LOCAL_IMAGES, reference_image: REFERENCE_IMAGE, device_profile: DEVICE_PROFILE, camera_calibration: CAMERA_CAL, gallery_state: GALLERY_STATE }, null, 1); }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
 function sizeSummary(records) {
   const groups = new Map();
@@ -701,7 +1048,7 @@ function summary() {
     `<table><tr><th>прогон / снимок</th><th>ширина, мм</th><th>проверок</th><th>TP</th><th>доля TP</th><th>FP</th><th>median confidence % (известно)</th><th>ширина px замер (известно)</th><th>ширина px оценка k</th><th>экв. м / эталон</th><th>критерий серии</th></tr>${repeated}</table>`;
   $('start').textContent = SAMPLE ? `Начать прогон: ${SAMPLE.name}, ${$('zoom').value === '5x' ? '5×' : '1×'}` : 'Начать прогон';
 }
-function openSettings() { closeOverlays(); $('geometry').classList.add('hidden'); writeSettings(); sampleInfo(); summary(); screenStatus(); boundsStatus(); stage.className = ''; $('settings').classList.remove('hidden'); }
+function openSettings() { closeOverlays(); $('geometry').classList.add('hidden'); $('stageControls').classList.add('hidden'); writeSettings(); sampleInfo(); summary(); screenStatus(); boundsStatus(); referencePhotoStatus(); stage.className = ''; $('settings').classList.remove('hidden'); if (ui.section === 'results') renderExperiments(); }
 function calib(mode = 'camera') {
   if (!$('settings').classList.contains('hidden')) readSettings();
   closeOverlays(); $('settings').classList.add('hidden'); const dpr = window.devicePixelRatio || 1;
@@ -709,7 +1056,7 @@ function calib(mode = 'camera') {
   const physical = mode === 'screen';
   $('cameraCalibSection').classList.toggle('hidden', physical); $('calibgrid').classList.toggle('hidden', physical);
   $('screenCalibSection').classList.toggle('hidden', !physical); $('screenLine').classList.toggle('hidden', !physical);
-  $('screenLine').style.width = Math.min(400, innerWidth * 0.65) + 'px';
+  $('screenLine').style.width = Math.max(80, Math.min(400, innerWidth - 128)) + 'px';
   $('calibgrid').innerHTML = [512, 256, 128, 64, 32, 16].map(p => `<div class="sq" style="width:${p / dpr}px;height:${p / dpr}px"><span>${p} px</span></div>`).join('');
   $('dpr').textContent = `devicePixelRatio = ${dpr}; окно ${Math.round(innerWidth * dpr)}×${Math.round(innerHeight * dpr)} px монитора` + (Math.round(innerWidth * dpr) < 3800 ? ' — окно меньше 4K: проверьте полноэкранный режим (F)' : '');
   $('calib').classList.remove('hidden');
@@ -752,34 +1099,74 @@ window.visualViewport?.addEventListener('resize', environmentChanged);
 setInterval(() => { screenStatus(); if (T) refreshGeometry(); }, 1000);
 
 // ---------- buttons ----------
+layout();
+document.querySelectorAll('[data-section]').forEach(b => b.onclick = () => { openSettings(); section(b.dataset.section); });
+$('helpBtn').onclick = () => { $('help').open = !$('help').open; $('help').scrollIntoView({ block: 'nearest' }); };
+$('customizeSample').onclick = () => { $('advanced').open = true; $('catCounts').scrollIntoView({ block: 'nearest' }); };
+$('previousImage').onclick = () => go(-1); $('nextImage').onclick = () => go(1);
+$('smallerImage').onclick = () => { ui.manual /= 1.1; show(); }; $('largerImage').onclick = () => { ui.manual *= 1.1; show(); };
+$('recordButton').onclick = openRecord; $('settingsButton').onclick = openSettings;
+$('currentBounds').onclick = () => { if (!T) return; $('boundImage').value = current().id; ui.editingCurrent = true; editBounds(); };
+$('confirmSavedScreen').onclick = () => { if (SCREEN_CAL && JSON.stringify(SCREEN_CAL.environment) === JSON.stringify(screenEnvironment())) { screenConfirmed = true; screenStatus(); toast('Калибровка подтверждена оператором для той же установки. При сомнении повторите замер.'); } };
+$('referencePhoto').onchange = async e => { try { await addReferencePhoto(e.target.files[0]); } catch (x) { $('referencePhotoStatus').textContent = x.message; } e.target.value = ''; };
+$('referenceProjection').onchange = () => { const m = LOCAL_IMAGES[REFERENCE_IMAGE]; if (m) { m.projection_confirmed = $('referenceProjection').checked; save('local_images', LOCAL_IMAGES); } };
+$('prepareReference').onclick = () => { if (!byId(REFERENCE_IMAGE)) { toast('Сначала загрузите допустимый снимок эталона.'); return; } $('boundImage').value = REFERENCE_IMAGE; editBounds(); };
+$('referenceProfile').onchange = () => { builtinReference(); readSettings(); };
+$('cameraSetup').onclick = () => calib('camera');
+$('cameraScaleVerified').onchange = () => {
+  const s = readSettings();
+  if ($('cameraScaleVerified').checked && positive(s.k) && positive(s.distance_cm) && positive(s.frame_w) && positive(s.frame_h) && activeScreenCalibration()) {
+    CAMERA_CAL = { context: cameraContext(s), verified_at: new Date().toISOString(), method: 'operator_second_square_verification' };
+  } else { CAMERA_CAL = null; if ($('cameraScaleVerified').checked) { $('cameraScaleVerified').checked = false; toast('Нужны актуальный экран, расстояние, k и фактический размер кадра.'); } }
+  save('camera_calibration', CAMERA_CAL); readSettings();
+};
+$('startResearch').onclick = startResearch; $('resumeResearch').onclick = () => resumeKind('limit'); $('refineResearch').onclick = refineResearch;
+$('assumedWidth').onchange = () => { const s = readSettings(); if (T?.settings.experiment_kind === 'gallery' && positive(s.assumed_width_cm)) { T.settings.assumed_width_cm = s.assumed_width_cm; persistTrial(); refreshGeometry(); } };
+$('experimentSelect').onchange = () => { save('selected_experiment', $('experimentSelect').value); renderExperiments(); }; $('chartAxis').onchange = renderExperiments;
+$('saveExperiment').onclick = () => { cacheExperiments(); renderExperiments(); toast('Набор сохранён в браузере. Экспортируйте JSON для резервной копии.'); };
+$('exportPlot').onclick = () => { const d = selectedExperiment(), svg = d && plotSvg(d, $('chartAxis').value); if (!svg) { toast('Нет измеренных точек для графика.'); return; } download(`dronecv_limit_${d.id}.svg`, svg, 'image/svg+xml'); };
+$('exportExperiment').onclick = () => {
+  const d = selectedExperiment(); if (!d) { toast('Сначала проведите измерения.'); return; }
+  const data = JSON.parse(sessionJson()); data.results = R.filter(r => r.run_id === d.id); data.runs = RUNS.filter(r => r.run_id === d.id); data.experiments = [d];
+  data.trial = data.runs[0]?.trial || null; download(`dronecv_limit_${d.id}.json`, JSON.stringify(data, null, 1), 'application/json');
+};
+$('androidJson').onchange = async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    $('androidPreview').textContent = await importAndroidFile(file, true);
+  } catch (x) { ui.android = null; $('androidPreview').textContent = 'Импорт не принят: ' + x.message; }
+  e.target.value = '';
+};
+$('androidSetupJson').onchange = async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try { $('androidSetupStatus').textContent = await importAndroidFile(file, false); } catch (x) { $('androidSetupStatus').textContent = 'Импорт не принят: ' + x.message; }
+  e.target.value = '';
+};
+$('clearAndroidImport').onclick = () => { ui.android = null; $('androidPreview').textContent = 'Импорт снят; результат будет ручным подтверждением выбранного кадра.'; };
 document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { document.body.classList.toggle('quick', isQuick()); readSettings(); });
 $('zoom').onchange = () => { readSettings(); summary(); };
 $('presetPilot').onclick = () => { if (setSample(makeSample(PILOT.counts, PILOT.seed, PILOT.name))) { readSettings(); summary(); } };
-$('presetAll').onclick = () => { const c = {}; CATS.forEach(x => c[x] = M.filter(m => m.category === x).length); if (setSample(makeSample(c, parseInt($('seed').value) || 0, 'Все 90 фото'))) summary(); };
+$('presetAll').onclick = () => { const c = {}; CATS.forEach(x => c[x] = M.filter(m => m.category === x && !m.custom).length); if (setSample(makeSample(c, parseInt($('seed').value) || 0, 'Все 90 фото'))) summary(); };
 $('makeSample').onclick = () => { if (setSample(makeSample(readCounts(), parseInt($('seed').value) || 0))) summary(); };
 document.querySelectorAll('.det').forEach(b => b.onclick = () => choose(b.dataset.det));
 $('recSave').onclick = saveRecord;
 $('recCancel').onclick = () => { $('record').classList.add('hidden'); document.activeElement?.blur(); };
 $('start').onclick = startRun;
-$('resume').onclick = () => { if (T) { ui.manual = 1; show(); } else alert('Нет сохранённого прогона'); };
+$('resume').onclick = () => { if (T?.settings.experiment_kind === 'limit' && RUNS.some(r => r.trial?.settings && (r.trial.settings.experiment_kind || 'gallery') === 'gallery')) resumeKind('gallery'); else if (T) { ui.manual = 1; show(); } else alert('Нет сохранённого прогона'); };
 $('calibBtn').onclick = () => calib('camera');
 $('screenCalibBtn').onclick = () => calib('screen');
 $('invalidateScreen').onclick = () => { screenConfirmed = false; screenStatus(); };
 $('applyScreenCalib').onclick = () => {
-  const cssPx = $('screenLine').getBoundingClientRect().width, mm = num($('screenLineMm').value), factor = physicalScale(cssPx, mm);
-  if (!$('screenLineMm').validity.valid || factor == null) { $('screenCalibResult').textContent = 'Введите положительную измеренную длину линии в мм.'; return; }
+  const cssPx = $('screenLine').getBoundingClientRect().width, cm = num($('screenLineCm').value), mm = cm == null ? null : cm * 10, factor = physicalScale(cssPx, mm);
+  if (!$('screenLineCm').validity.valid || factor == null) { $('screenCalibResult').textContent = 'Введите положительную измеренную длину линии в см.'; return; }
   SCREEN_CAL = { id: 'C' + Date.now() + '-' + Math.random().toString(16).slice(2, 8), created: new Date().toISOString(),
     label: $('screenLabel').value.trim(), line_css_px: cssPx, line_mm: mm, mm_per_css_px: factor, environment: screenEnvironment() };
   screenConfirmed = true; save('screen_calibration', SCREEN_CAL); readSettings(); screenStatus();
-  $('screenCalibResult').textContent = `Сохранено: ${factor.toFixed(6)} мм / CSS px. Для применения начните новый прогон.`;
+  $('screenCalibResult').textContent = `Сохранено: ${(factor / 10).toFixed(6)} см / CSS px (${factor.toFixed(6)} мм / CSS px). Для нового замера начните новый прогон.`;
 };
 $('editBounds').onclick = editBounds;
 $('boundImage').onchange = () => { boundsStatus(); readSettings(); };
-$('singleImage').onclick = () => {
-  const m = byId($('boundImage').value); if (!m) return;
-  const counts = Object.fromEntries(CATS.map(c => [c, c === m.category ? 1 : 0]));
-  if (setSample({ sample_id: 'S' + fnv(m.id), name: 'Один снимок ' + m.id, seed: 0, counts, ids: [m.id], created: new Date().toISOString(), manifest_version: window.MANIFEST.version })) { readSettings(); summary(); }
-};
+$('singleImage').onclick = selectSingleImage;
 ['boundX1', 'boundY1', 'boundX2', 'boundY2'].forEach(id => $(id).oninput = drawBounds);
 $('boundsCanvas').onpointerdown = e => {
   const m = byId($('boundImage').value), c = $('boundsCanvas'), r = c.getBoundingClientRect();
@@ -799,16 +1186,34 @@ $('saveBounds').onclick = () => {
   if (m.category === 'negative' || !validBounds(b, m.width, m.height)) { $('boundInfo').textContent = 'Задайте непустые границы внутри фотографии объекта. У пустого фона нет коптера.'; return; }
   BOUNDS[m.id] = { bbox: b, image_width: m.width, image_height: m.height, image_sha256: m.sha256 || null, confirmed_at: new Date().toISOString() };
   save('object_bounds', BOUNDS); readSettings(); openSettings();
+  if (ui.editingCurrent && T?.settings.experiment_kind !== 'limit') {
+    T.settings.object_bounds ||= {}; T.settings.object_bounds[m.id] = JSON.parse(JSON.stringify(BOUNDS[m.id]));
+    persistTrial(); ui.editingCurrent = false; show();
+  }
 };
 $('removeBounds').onclick = () => { delete BOUNDS[$('boundImage').value]; save('object_bounds', BOUNDS); readSettings(); openSettings(); };
 $('closeBounds').onclick = openSettings;
 ['recDroneWidth', 'recScreenWidth', 'recWidthSource'].forEach(id => $(id).oninput = refreshGeometry);
-$('calibApply').onclick = () => { const v = parseFloat($('calibMeasured').value); if (!(v > 0)) return; const k = v / 256; $('k').value = k.toFixed(4); readSettings();
+$('calibApply').onclick = () => { const v = parseFloat($('calibMeasured').value); if (!(v > 0)) return; const k = v / 256; $('k').value = k.toFixed(4);
+  $('cameraScaleVerified').checked = false; CAMERA_CAL = null; save('camera_calibration', null);
+  readSettings();
   $('calibOut').textContent = `k = ${k.toFixed(4)} px кадра на 1 px монитора; объект 16 px в кадре = ${(16 / k).toFixed(0)} px монитора`; };
 $('exportCsv').onclick = () => download(`dronecv66_results_${Date.now()}.csv`, csv(), 'text/csv');
 $('exportJson').onclick = () => download(`dronecv66_session_${Date.now()}.json`, sessionJson(), 'application/json');
-$('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { let d; try { d = JSON.parse(t); } catch (x) { alert('Файл не JSON'); return; }
+$('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(async t => { let d; try { d = JSON.parse(t); } catch (x) { alert('Файл не JSON'); return; }
   if (d.format !== FORMAT) { alert('Неизвестный формат (нужен ' + FORMAT + ')'); return; }
+  if (d.local_images && typeof d.local_images === 'object') {
+    for (const [id, m] of Object.entries(d.local_images)) {
+      if (!m || m.id !== id || !m.custom || !/^data:image\/(jpeg|png|webp);base64,/.test(m.file || '') || m.file.length > 2500000 || !positive(m.width) || !positive(m.height)) continue;
+      try { const im = await imageLoaded(m.file); if (im.naturalWidth !== m.width || im.naturalHeight !== m.height) continue;
+        if (!byId(id)) { M.push(m); LOCAL_IMAGES[id] = m; ui.available[id] = true; }
+      } catch (x) { /* unusable image does not invalidate the previous gallery */ }
+    }
+    save('local_images', LOCAL_IMAGES); buildBoundsSelector();
+  }
+  if (d.reference_image && LOCAL_IMAGES[d.reference_image]) { REFERENCE_IMAGE = d.reference_image; save('reference_image', REFERENCE_IMAGE); }
+  if (d.gallery_state?.sample?.ids?.every(byId) && d.gallery_state.settings && typeof d.gallery_state.settings === 'object') { GALLERY_STATE = d.gallery_state; save('gallery_state', GALLERY_STATE); }
+  if (d.device_profile && typeof d.device_profile === 'object') { DEVICE_PROFILE = d.device_profile; save('device_profile', DEVICE_PROFILE); }
   screenConfirmed = false; // imported files cannot confirm the physical display of this browser
   if (d.screen_calibration && positive(d.screen_calibration.mm_per_css_px)) { SCREEN_CAL = d.screen_calibration; save('screen_calibration', SCREEN_CAL); }
   if (d.object_bounds && typeof d.object_bounds === 'object' && !Array.isArray(d.object_bounds)) {
@@ -821,14 +1226,19 @@ $('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f
   if (d.trial) { T = d.trial; save('trial', T); }
   if (Array.isArray(d.runs)) { const have = new Set(RUNS.map(r => r.run_id)); RUNS = RUNS.concat(d.runs.filter(r => !have.has(r.run_id))); save('runs', RUNS); }
   if (Array.isArray(d.results) && d.results.length && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.run_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r))).map(normalizeRecord)); save('results', R); }
-  sampleInfo(); summary(); screenStatus(); boundsStatus(); e.target.value = ''; }); };
-$('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); summary(); sampleInfo(); } };
+  cacheExperiments(); sampleInfo(); summary(); screenStatus(); boundsStatus(); referencePhotoStatus(); renderExperiments(); e.target.value = ''; }).catch(() => alert('Не удалось импортировать сессию. Проверьте файл и свободное место.')); };
+$('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); cacheExperiments(); summary(); sampleInfo(); renderExperiments(); } };
 const LEGACY = localStorage.getItem('dronecv66.results');
 if (LEGACY && LEGACY !== '[]') { $('legacy').classList.remove('hidden'); $('legacy').onclick = () => download(`dronecv66_v1_results_${Date.now()}.json`, LEGACY, 'application/json'); }
 
 // ---------- init ----------
 if (!M.length) $('status').textContent = 'manifest.js не найден: запустите python3 fetch_images.py (скачает изображения и создаст manifest.js).';
-buildCats(); buildBoundsSelector(); writeSettings(); sampleInfo(); summary(); screenStatus(); boundsStatus();
+buildCats(); buildBoundsSelector(); writeSettings();
+if (!S?.reference?.model) builtinReference();
+if (T) persistTrial();
+sampleInfo(); summary(); screenStatus(); boundsStatus(); referencePhotoStatus();
+cacheExperiments(); renderExperiments();
+if (T?.settings.experiment_kind === 'limit' && GALLERY_STATE) { ui.galleryRestorePending = true; section('gallery'); }
 (function probe() { let missing = 0, done = 0; M.forEach(m => { const t = new Image(); t.onload = () => { ui.available[m.id] = true; fin(); }; t.onerror = () => { ui.available[m.id] = false; missing++; fin(); }; t.src = m.file; });
   function fin() { if (++done === M.length) { $('status').textContent = missing ? `Не найдено файлов: ${missing} из ${M.length}. Запустите: python3 fetch_images.py` : `Изображений: ${M.length}, все файлы на месте.`; sampleInfo(); } } })();
 </script>

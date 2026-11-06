@@ -18,15 +18,15 @@ const results = () => page.evaluate(() => JSON.parse(sessionJson()));
 async function open() {
   await page.goto('file://' + path.join(dir, 'gallery.html'));
   await page.waitForFunction(() => /Изображений: 90/.test(document.getElementById('status').textContent));
-  await page.check('input[name=mode][value=advanced]');
+  await page.locator('#advanced').evaluate(e => e.open = true); await page.check('input[name=mode][value=advanced]'); await page.locator('#recordAdvanced').evaluate(e => e.open = true);
 }
 async function calibrate(mm) {
   await page.click('#screenCalibBtn');
   const line = await page.locator('#screenLine').boundingBox();
   assert.equal(line.width, 400);
-  await page.fill('#screenLineMm', '0'); await page.click('#applyScreenCalib');
+  await page.fill('#screenLineCm', '0'); await page.click('#applyScreenCalib');
   assert.match(await page.textContent('#screenCalibResult'), /положительную/);
-  await page.fill('#screenLabel', 'TEST DISPLAY — synthetic'); await page.fill('#screenLineMm', String(mm)); await page.click('#applyScreenCalib');
+  await page.locator('#screenLabel').evaluate(e => e.closest('details').open = true); await page.fill('#screenLabel', 'TEST DISPLAY — synthetic'); await page.fill('#screenLineCm', String(mm / 10)); await page.click('#applyScreenCalib');
   assert.match(await page.textContent('#screenCalibResult'), /Сохранено/);
   if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT + '_screen_calibration.png' });
   await page.keyboard.press('Escape');
@@ -98,8 +98,8 @@ await page.keyboard.press('ArrowRight'); await record('no_box');
 session = await results();
 assert.equal(session.results.find(r => r.run_id === runId && r.step === 11).screen_object_width_mm, 10); // no manual carry-over
 await page.keyboard.press('s');
-if (process.env.SHOT) { await page.locator('#summary').scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT + '_screen_summary.png' }); }
-const [download] = await Promise.all([page.waitForEvent('download'), page.click('#exportCsv')]);
+if (process.env.SHOT) { await page.click('[data-section=results]'); await page.locator('#allSummaries').evaluate(e => e.closest('details').open = true); await page.locator('#summary').scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT + '_screen_summary.png' }); await page.click('[data-section=gallery]'); }
+await page.click('[data-section=results]'); const [download] = await Promise.all([page.waitForEvent('download'), page.click('#exportCsv')]); await page.click('[data-section=gallery]');
 const csv = fs.readFileSync(await download.path(), 'utf8');
 assert.ok(csv.includes('screen_calibration')); assert.ok(csv.includes('""mm_per_css_px"":0.25'));
 if (process.env.SCREEN_CSV) fs.writeFileSync(process.env.SCREEN_CSV, csv);
@@ -129,8 +129,8 @@ assert.match(await other.textContent('#screenCalibStatus'), /повторный 
 const imported = await other.evaluate(() => JSON.parse(sessionJson()));
 assert.equal(imported.results[0].equivalent_distance_m, 30);
 assert.deepEqual(imported.object_bounds.civ01.bbox, manifest.object_bbox);
-await other.check('input[name=mode][value=advanced]');
-await other.click('#screenCalibBtn'); await other.fill('#screenLineMm', '200'); await other.click('#applyScreenCalib'); await other.keyboard.press('Escape');
+await other.locator('#advanced').evaluate(e => e.open = true); await other.check('input[name=mode][value=advanced]'); await other.locator('#recordAdvanced').evaluate(e => e.open = true);
+await other.click('#screenCalibBtn'); await other.fill('#screenLineCm', '20'); await other.click('#applyScreenCalib'); await other.keyboard.press('Escape');
 assert.match(await other.textContent('#screenCalibStatus'), /0.500000/); // remeasurement, no monitor diagonal assumptions
 await other.selectOption('#boundImage', 'civ01'); await other.click('#singleImage'); await other.selectOption('#scaleMode', 'physical');
 await other.fill('#sizes', '3'); await other.fill('#distance', '150'); await other.fill('#referenceWidth', '60'); await other.selectOption('#referenceStatus', 'conditional');
