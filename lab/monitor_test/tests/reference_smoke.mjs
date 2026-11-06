@@ -1,0 +1,107 @@
+// Real browser regressions. Synthetic axis below proves UI arithmetic only, never photo/CV acceptance.
+import { createRequire } from 'node:module';
+import { execSync } from 'node:child_process';
+import path from 'node:path';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const { chromium } = createRequire(path.join(process.cwd(), 'x.js'))('playwright');
+const dir = path.resolve(process.argv[2]);
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || execSync('command -v chromium').toString().trim(), args: ['--allow-file-access-from-files'] });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 1000 }, deviceScaleFactor: 2, acceptDownloads: true });
+const page = await ctx.newPage(), errors = [], requests = [];
+page.on('pageerror', e => errors.push(String(e)));
+page.on('request', r => { if (/^https?:/.test(r.url())) requests.push(r.url()); });
+page.on('dialog', d => d.accept());
+const snapshot = () => page.evaluate(() => referenceTab.snapshot());
+const session = () => page.evaluate(() => JSON.parse(sessionJson()));
+const nav = name => page.click(`[data-section=${name}]`);
+async function open() {
+  await page.goto('file://' + path.join(dir, 'gallery.html'));
+  await page.waitForFunction(() => /Изображений: 90/.test(document.getElementById('status').textContent));
+}
+await open();
+const ids = await page.locator('[id]').evaluateAll(nodes => nodes.map(n => n.id));
+assert.equal(ids.length, new Set(ids).size, 'new tab must not shadow legacy element IDs');
+// Save one real-schema synthetic response first: the new tab must preserve legacy data and exports.
+await page.click('#presetPilot'); await page.fill('#distance', '150'); await page.click('#start');
+await page.keyboard.press('r'); await page.click('.det[data-det=no_box]'); await page.keyboard.press('s');
+const old = await session(); assert.equal(old.results.length, 1); assert.equal(old.sample.ids.length, 20);
+await nav('reference');
+assert.ok(await page.isVisible('#referenceSection')); assert.ok(await page.isHidden('#advanced'));
+assert.ok(await page.isHidden('#zoom')); assert.equal(await page.locator('#referenceDrone option').count(), 3);
+await page.waitForFunction(() => document.getElementById('referenceDisplay').naturalWidth === 416);
+assert.equal((await snapshot()).equivalent_distance_m, null);
+await page.click('#screenCalibBtn'); await page.fill('#screenLineCm', '10'); await page.click('#applyScreenCalib'); await page.keyboard.press('Escape');
+assert.equal((await session()).screen_calibration.mm_per_css_px, 0.25);
+await page.fill('#referenceScaleNumber', '50');
+const width50 = (await snapshot()).display_width_cm; assert.ok(Math.abs(width50 - 3) < 1e-9);
+await page.fill('#referenceScaleNumber', '25'); assert.equal((await snapshot()).display_width_cm, width50 / 2);
+assert.equal((await snapshot()).equivalent_distance_m, null); // passport size never unlocks uncertain axes
+await page.selectOption('#referenceDrone', 'gedz_10_dji');
+await page.waitForFunction(() => document.getElementById('referenceDisplay').naturalWidth === 800);
+assert.match(await page.textContent('#referenceDimensions'), /500 × 419 × 60/);
+assert.match(await page.textContent('#referenceIssue'), /оснастка/);
+assert.equal((await snapshot()).equivalent_distance_m, null);
+if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT + '_reference_gedz.png' });
+await page.selectOption('#referenceDrone', 'unik_sd_10ufp');
+assert.ok(await page.isVisible('#referenceMissing')); assert.match(await page.textContent('#referenceIssue'), /525/);
+assert.equal((await snapshot()).display_width_cm, null);
+assert.match(await page.textContent('#referenceDimensions'), /590 × 530 × 200/);
+await page.selectOption('#referenceDrone', 'skydroid_mx330t');
+await page.waitForFunction(() => document.getElementById('referenceDisplay').naturalWidth === 416);
+if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT + '_reference_skydroid.png' });
+// Only this test temporarily supplies an invented verified axis. Production profiles stay unverified.
+await page.evaluate(() => {
+  const p = DroneReferences.profiles[0].photo;
+  p.model_confirmed = p.projection_confirmed = true;
+  p.axis = { from: [90, 200], to: [330, 200], real_cm: 57.85, source: 'SYNTHETIC TEST ONLY' };
+});
+await page.fill('#referenceScaleNumber', String(57.85 / (240 * 0.25) * 100));
+assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 15) < 0.002); // actual browser subpixel rounding
+await page.click('#referenceHalf'); assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 30) < 0.004);
+await page.fill('#distance', '300'); assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 60) < 0.008);
+// A target clipped by the scroll panel is not fully displayed even if its own viewport is inside the window.
+await page.locator('#referenceSection details').evaluate(e => e.open = true);
+const clipped = await page.evaluate(() => {
+  const panel = document.getElementById('settings'), image = document.getElementById('referenceDisplay');
+  panel.style.maxHeight = '500px'; // ensure enough scroll range without invalidating the calibrated window
+  const p = DroneReferences.profiles[0].photo, r = image.getBoundingClientRect(), c = panel.getBoundingClientRect();
+  panel.scrollTop += r.top + p.bounds_px[1] * r.width / p.width - (c.top - 5);
+  return image.getBoundingClientRect().top + p.bounds_px[1] * r.width / p.width < c.top;
+});
+assert.ok(clipped); assert.equal((await snapshot()).equivalent_distance_m, null);
+await page.locator('#settings').evaluate(e => { e.style.maxHeight = ''; e.scrollTop = 0; });
+await page.locator('#referenceSection details').evaluate(e => e.open = false);
+assert.ok((await snapshot()).equivalent_distance_m > 0);
+await page.fill('#distance', ''); assert.equal((await snapshot()).equivalent_distance_m, null);
+await page.fill('#distance', '150');
+await page.fill('#referenceScaleNumber', '200'); assert.equal((await snapshot()).equivalent_distance_m, null); // clipped object
+await page.fill('#referenceScaleNumber', '25');
+const stable = await snapshot(); await page.fill('#referenceScaleNumber', '0');
+assert.equal((await snapshot()).scale_percent, stable.scale_percent);
+assert.equal(await page.locator('#referenceScaleNumber').evaluate(e => e.validity.valid), false);
+await page.fill('#referenceScaleNumber', '25');
+await nav('gallery'); assert.deepEqual((await session()).results, old.results); assert.deepEqual((await session()).trial, old.trial);
+await page.click('#presetAll'); assert.equal((await session()).sample.ids.length, 90);
+await nav('results'); const [download] = await Promise.all([page.waitForEvent('download'), page.click('#exportJson')]);
+assert.deepEqual(JSON.parse(fs.readFileSync(await download.path(), 'utf8')).results, old.results);
+await nav('reference'); await page.selectOption('#referenceDrone', 'gedz_10_dji'); await page.fill('#referenceScaleNumber', '50');
+const cal = (await session()).screen_calibration;
+await page.reload(); await nav('reference');
+assert.equal(await page.inputValue('#distance'), '150'); assert.equal(await page.inputValue('#referenceDrone'), 'gedz_10_dji');
+assert.equal(await page.inputValue('#referenceScaleNumber'), '50');
+await page.click('#confirmSavedScreen'); assert.equal((await session()).screen_calibration.id, cal.id);
+// Both annotated strokes and contrast labels are within the narrow viewport. No detector is involved.
+await page.setViewportSize({ width: 460, height: 600 });
+assert.equal((await snapshot()).equivalent_distance_m, null);
+await page.click('#screenCalibBtn');
+for (const selector of ['#screenLine path', '#screenLine text', '#screenLine rect']) {
+  for (const node of await page.locator(selector).all()) {
+    const r = await node.boundingBox(); assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.width <= 460 && r.y + r.height <= 600);
+  }
+}
+assert.deepEqual(await page.locator('#screenLine text').allTextContents(), ['A', 'B']);
+if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT + '_reference_narrow_ticks.png' });
+assert.deepEqual(requests, []); assert.deepEqual(errors, []);
+await ctx.close(); await browser.close();
+console.log('Reference tab: local assets, blocked geometry, 15 m UI fixture, scaling, distance, reload, calibration, legacy results/90/20/export: OK');

@@ -22,6 +22,11 @@
   #screenMeasure { padding: 24px; display: flex; align-items: center; flex-direction: column; gap: 8px; position: sticky; top: 0; background: #fff; z-index: 1; }
   #screenLine { display: block; max-width: calc(100vw - 112px); height: 90px; overflow: visible; flex-shrink: 0; }
   #screenLineCaption { text-align: center; }
+  #referenceViewport { position: relative; height: min(360px, 45vh); overflow: hidden; background: #fff; color: #111; }
+  #referenceDisplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: none; }
+  #referenceMissing { padding: 24px; }
+  #referenceSection input[type=range] { width: min(240px, 40vw); vertical-align: middle; }
+  #referenceSection a { color: #9cf; }
   nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   nav button[aria-selected=true] { background: #2a5; color: white; border: 1px solid #3c6; }
   details { border: 1px solid #444; border-radius: 6px; padding: 10px; margin: 12px 0; }
@@ -73,6 +78,7 @@
   <nav aria-label="Разделы стенда">
     <button data-section="gallery" aria-selected="true">Галерея и сравнение</button>
     <button data-section="research" aria-selected="false">Измерить предел</button>
+    <button data-section="reference" aria-selected="false">Эксперимент с эталонными БПЛА</button>
     <button data-section="results" aria-selected="false">Результаты</button>
     <button id="helpBtn">Как пользоваться?</button>
   </nav>
@@ -84,6 +90,7 @@
     <p><b>Сохранение.</b> Записи, свои снимки и график хранятся в этом браузере. В «Результатах» экспортируйте JSON для резервной копии или переноса; CSV — для таблиц. После открытия сохранённого файла проверьте экран и установку. Порог относится к испытанной модели/камере/условиям и не гарантирует обнаружение другой фотографии.</p>
   </details>
   <section id="gallerySection"></section>
+  <section id="referenceSection" class="hidden"></section>
   <section id="researchSection" class="hidden">
     <h3>Эталон Draganfly Flex FPV 10</h3>
     <p>Пропеллеры 10″; собранный аппарат 570 × 570 × 60 мм. Номинальная ширина 57 см применима к соответствующей фронтальной/ортографической проекции.</p>
@@ -253,7 +260,11 @@
     <p>После смены дисплея, масштаба браузера/ОС, fullscreen или перезагрузки страницы повторите измерение. Браузер не гарантирует распознавание физического монитора. C / Esc — закрыть.</p>
     <div id="screenMeasure">
       <svg id="screenLine" viewBox="0 0 400 90" width="400" height="90" aria-label="Контрольная линия между двумя вертикальными рисками" preserveAspectRatio="none">
+        <rect x="0" y="3" width="14" height="84" fill="#ffda00"/>
+        <rect x="386" y="3" width="14" height="84" fill="#ffda00"/>
         <path d="M0 45H400 M0 12V78 M400 12V78" fill="none" stroke="#000" stroke-width="4" vector-effect="non-scaling-stroke"/>
+        <text x="20" y="22" fill="#000" font-size="16" font-weight="bold">A</text>
+        <text x="380" y="22" fill="#000" font-size="16" font-weight="bold" text-anchor="end">B</text>
       </svg>
       <div id="screenLineCaption"></div>
     </div>
@@ -272,6 +283,7 @@
 
 <script src="manifest.js"></script>
 <script src="experiment.js"></script>
+<script src="reference_drones.js"></script>
 <script>
 "use strict";
 const LS = 'dronecv66v2.', FORMAT = 'dronecv66-session-2';
@@ -293,6 +305,7 @@ let SCREEN_CAL = load('screen_calibration', null), BOUNDS = load('object_bounds'
 let EXPERIMENTS = load('experiments', []), DEVICE_PROFILE = load('device_profile', null), REFERENCE_IMAGE = load('reference_image', null), CAMERA_CAL = load('camera_calibration', null);
 let GALLERY_STATE = load('gallery_state', null);
 const ui = { section: 'gallery', hud: false, geometry: false, manual: 1, available: {}, chosen: null, toastT: 0, boundsImage: null, boundsDrag: null, android: null };
+let referenceTab = null;
 
 function load(k, d) { try { const v = localStorage.getItem(LS + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(LS + k, JSON.stringify(v)); return true; } catch (e) { toast('Не удалось сохранить в браузере: экспортируйте JSON, освободите место.'); return false; } }
@@ -372,8 +385,10 @@ function section(name) {
   }
   ui.section = name;
   document.querySelectorAll('nav [data-section]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.section === name)));
-  ['gallery', 'research', 'results'].forEach(n => $(n + 'Section').classList.toggle('hidden', n !== name));
-  $('advanced').classList.toggle('hidden', name === 'results');
+  ['gallery', 'research', 'reference', 'results'].forEach(n => $(n + 'Section').classList.toggle('hidden', n !== name));
+  $('advanced').classList.toggle('hidden', name === 'results' || name === 'reference');
+  $('zoom').closest('label').classList.toggle('hidden', name === 'reference');
+  if (name === 'reference') referenceTab?.update();
   if (name === 'results') renderExperiments();
 }
 function referencePhotoStatus() {
@@ -573,6 +588,7 @@ function screenStatus() {
   $('screenCalibStatus').textContent = cal ? `Подтверждена линейкой: ${cal.mm_per_css_px.toFixed(6)} мм / CSS px · ${cal.label || 'дисплей без имени'}` :
     SCREEN_CAL ? `Требуется повторный замер линейкой. Сохранённый коэффициент ${SCREEN_CAL.mm_per_css_px} мм / CSS px не применяется.` : 'Физический масштаб не измерен. Нажмите «Калибровка экрана линейкой».';
   $('confirmSavedScreen').classList.toggle('hidden', !!cal || !SCREEN_CAL || JSON.stringify(SCREEN_CAL.environment) !== JSON.stringify(screenEnvironment()));
+  if (ui.section === 'reference') referenceTab?.update();
 }
 function calibrationFor(s) {
   const cal = activeScreenCalibration();
@@ -1100,6 +1116,10 @@ setInterval(() => { screenStatus(); if (T) refreshGeometry(); }, 1000);
 
 // ---------- buttons ----------
 layout();
+referenceTab = DroneReferences.mount({ element: $('referenceSection'), load, save,
+  getCalibration: activeScreenCalibration, getDistance: () => num($('distance').value), geometry: { physicalWidth, equivalentDistance } });
+$('distance').addEventListener('input', () => { readSettings(); if (ui.section === 'reference') referenceTab.update(); });
+$('settings').addEventListener('scroll', () => { if (ui.section === 'reference') referenceTab.update(); });
 document.querySelectorAll('[data-section]').forEach(b => b.onclick = () => { openSettings(); section(b.dataset.section); });
 $('helpBtn').onclick = () => { $('help').open = !$('help').open; $('help').scrollIntoView({ block: 'nearest' }); };
 $('customizeSample').onclick = () => { $('advanced').open = true; $('catCounts').scrollIntoView({ block: 'nearest' }); };
