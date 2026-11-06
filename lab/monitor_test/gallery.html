@@ -19,6 +19,14 @@
   #answer { top: 2vh; left: 2vw; font-size: 28px; max-width: 46vw; }
   #toast { position: fixed; z-index: 20; left: 50%; bottom: 3vh; transform: translateX(-50%); background: rgba(30,30,36,.95); border: 1px solid #777; border-radius: 6px; padding: 8px 16px; font-size: 18px; }
   #calib { inset: 0; border: 0; border-radius: 0; background: #fff; color: #000; max-height: none; }
+  #screenLine { position: absolute; top: 48%; left: 50%; transform: translateX(-50%); border-top: 3px solid #000; height: 24px; border-left: 2px solid; border-right: 2px solid; box-sizing: border-box; }
+  #screenLine span { display: block; text-align: center; margin-top: 28px; }
+  #boundsEditor { inset: 3vh 3vw; }
+  #boundsCanvas { display: block; max-width: 100%; max-height: 52vh; touch-action: none; cursor: crosshair; }
+  #geometry { top: 8px; left: 8px; max-width: min(620px, 90vw); }
+  #settings label { white-space: normal; }
+  #settings fieldset { min-width: 0; }
+  #boundImage { display: block; width: min(700px, 100%); max-width: 100%; box-sizing: border-box; }
   #hud { position: fixed; z-index: 5; left: 8px; bottom: 6px; font-size: 13px; color: #888; pointer-events: none; }
   .hidden { display: none !important; }
   body.quick .adv { display: none !important; }
@@ -41,6 +49,7 @@
 <div id="stage"><img id="img" alt=""></div>
 <div id="hud"></div>
 <div id="answer" class="panel hidden"></div>
+<div id="geometry" class="panel hidden"></div>
 <div id="toast" class="hidden"></div>
 
 <div id="settings" class="panel">
@@ -72,9 +81,13 @@
         <option value="native">фиксированный коэффициент от исходного</option>
         <option value="monitor">объект = N px монитора</option>
         <option value="camera">объект = N px кадра камеры (нужна калибровка)</option>
+        <option value="physical">ширина коптера = N см экрана (линейка + границы)</option>
       </select></label>
     <label>коэффициент <input type="number" id="scaleFactor" value="0.5" step="0.05" min="0.01"></label>
     <label>Уровни N (через запятую) <input type="text" id="sizes" value="16,32,64"></label>
+    <label>Попыток на снимок и уровень <input type="number" id="repetitions" value="1" min="1" max="100"></label>
+    <label>Критерий устойчивости, % <input type="number" id="stabilityPct" value="90" min="1" max="100" step="any"></label>
+    <label>Минимум попыток для критерия <input type="number" id="minAttempts" value="10" min="1" max="100"></label>
     <label><input type="checkbox" id="center" checked> центрировать объект</label>
     <label>Фон <select id="bg"><option value="#000">чёрный</option><option value="#808080">серый</option></select></label>
     <br>
@@ -86,6 +99,23 @@
     <label>Кадр анализа, px <input type="number" id="frameW" value="640">×<input type="number" id="frameH" value="480"></label>
     <label>Вход YOLO, px <input type="number" id="yoloIn" value="640"></label>
     <div class="muted">Три разных размера: <b>px монитора</b> — считает галерея по рамке манифеста; <b>px кадра камеры</b> — только по калибровке k или измерению по скриншоту; <b>px входа YOLO</b> = px кадра × min(вход/ширина кадра, вход/высота кадра) (letterbox). Без калибровки и измерения размеры в кадре и на входе YOLO записываются как «не измерено» (null).</div>
+  </fieldset>
+
+  <fieldset class="adv"><legend>Физический масштаб экрана и эталон</legend>
+    <button id="screenCalibBtn">Калибровка экрана линейкой</button>
+    <button id="invalidateScreen">Дисплей или масштаб изменён</button>
+    <p id="screenCalibStatus" class="warn"></p>
+    <label>Изображение для границ и эталона <select id="boundImage"></select></label>
+    <button id="editBounds">Проверить / выделить границы</button>
+    <button id="singleImage">Выборка: только этот снимок</button>
+    <p id="boundsStatus" class="muted"></p>
+    <label>Модель эталона <input type="text" id="referenceModel" placeholder="не выбрана"></label>
+    <label>Диаметр пропеллеров, дюймы <input type="number" id="referenceProp" value="10" readonly></label><br>
+    <label>Реальная ширина, см <input type="number" id="referenceWidth" min="0" step="any" placeholder="нет данных"></label>
+    <label>Доп. габарит / высота, см <input type="number" id="referenceHeight" min="0" step="any" placeholder="необязательно"></label>
+    <label>Статус <select id="referenceStatus"><option value="unknown">габарит не подтверждён</option><option value="conditional">условный эталон — отладка формулы</option><option value="verified">модель и габарит подтверждены оператором</option></select></label><br>
+    <label>Источник и границы ширины A–B <input type="text" id="referenceSource" placeholder="характеристики / собственный замер" style="width:min(600px,90%)"></label>
+    <p class="muted">Эталон применяется только к выбранному снимку. 10″ — не полная ширина аппарата. Подтверждая модель, проверьте соответствие фото, комплектации и ракурса. Для условного эталона результат явно помечается как условный.</p>
   </fieldset>
 
   <div>
@@ -120,11 +150,15 @@
     <label>ложных рамок (вне объекта) <input type="number" id="recFp" min="0" placeholder="не считали"></label>
     <label>max confidence ложных, % <input type="number" id="recFpConf" min="0" max="100"></label><br>
     <label>большая сторона объекта в кадре анализа, px <input type="number" id="recCamPx" min="0" step="any" placeholder="не измерено"></label><br>
+    <label>Ширина в кадре анализа, px <input type="number" id="recCamW" min="0" step="any" placeholder="не измерено"></label>
+    <label>Высота, px <input type="number" id="recCamH" min="0" step="any" placeholder="не измерено"></label><br>
+    <label>Источник ручного замера <select id="recCamSource"><option value="manual_screenshot">скриншот с пересчётом в кадр анализа</option><option value="manual_diagnostic">ручной перенос из диагностики кадра</option><option value="manual_other">другой замер (описать в заметке)</option></select></label>
     <fieldset><legend>Физическая ширина (для этого изображения)</legend>
       <label>Ширина коптера, см <input type="number" id="recDroneWidth" min="0" step="any" placeholder="не измерено"></label><br>
       <label>Модель, источник габарита и границы ширины <input type="text" id="recWidthSource" style="width:360px" placeholder="характеристики / собственный замер"></label><br>
-      <label>Та же ширина на экране, мм <input type="number" id="recScreenWidth" min="0" step="any" placeholder="замер линейкой"></label>
-      <div class="muted">10″ — диаметр пропеллера, не габарит коптера. Измеряйте одну и ту же ширину между одинаковыми точками. Оценка мм по рамке манифеста не подставляется. Для неизвестной модели оставьте габарит пустым.</div>
+      <label>Контрольный ручной замер той же ширины на экране, мм <input type="number" id="recScreenWidth" min="0" step="any" placeholder="необязательно; приоритет над расчётом"></label>
+      <div id="recordGeometry" class="muted"></div>
+      <div class="muted">Расчёт ширины требует актуальной калибровки экрана и подтверждённых границ. Ручной замер имеет приоритет; оба значения экспортируются. Ширина фотографии и приблизительная рамка манифеста автоматически не подставляются.</div>
     </fieldset>
     <label>заметки <input type="text" id="recNote" style="width:360px"></label><br>
     <button id="recSave">Сохранить (Enter)</button>
@@ -133,7 +167,7 @@
 </div>
 
 <div id="calib" class="panel hidden">
-  <div style="position:absolute;left:20px;top:16px;font:16px system-ui">
+  <div id="cameraCalibSection" style="position:absolute;left:20px;top:16px;font:16px system-ui">
     Калибровка. Квадраты имеют точный размер в пикселях монитора (масштаб страницы браузера должен быть 100 %, <span class="kbd">Ctrl+0</span>).
     Сделайте скриншот экрана приложения с рабочего места и измерьте сторону квадрата 256 px в кадре камеры.
     <br>Размер в кадре = (сторона квадрата на скриншоте ÷ ширина превью на скриншоте) × ширина кадра анализа, показанная приложением (например, 640).
@@ -142,6 +176,26 @@
     <br><span id="dpr"></span>
   </div>
   <div id="calibgrid"></div>
+  <div id="screenCalibSection" class="hidden" style="padding:16px;max-width:900px">
+    <h2>Калибровка физического масштаба экрана</h2>
+    <p>Измерьте линейкой расстояние между крайними вертикальными рисками линии. Введите длину в мм. CSS-дюймы, диагональ и Retina не используются как физическая мера.</p>
+    <label>Дисплей (для журнала) <input type="text" id="screenLabel" placeholder="MacBook / внешний монитор"></label>
+    <label>Длина линии, мм <input type="number" id="screenLineMm" min="0" step="any" placeholder="измерьте линейкой"></label>
+    <button id="applyScreenCalib">Сохранить измерение</button>
+    <p id="screenCalibResult"></p>
+    <p>После смены дисплея, масштаба браузера/ОС, fullscreen или перезагрузки страницы повторите измерение. Браузер не гарантирует распознавание физического монитора. C / Esc — закрыть.</p>
+  </div>
+  <div id="screenLine" class="hidden"><span id="screenLineCaption"></span></div>
+</div>
+
+<div id="boundsEditor" class="panel hidden">
+  <h2>Границы объекта в исходной фотографии</h2>
+  <p>Обведите коптер мышью или задайте координаты в пикселях исходного изображения. Проверяйте видимую ширину между теми же точками A–B, что у физического эталона. Предложение из манифеста ещё не подтверждено.</p>
+  <canvas id="boundsCanvas"></canvas>
+  <label>x₁ <input type="number" id="boundX1" step="any"></label><label>y₁ <input type="number" id="boundY1" step="any"></label>
+  <label>x₂ <input type="number" id="boundX2" step="any"></label><label>y₂ <input type="number" id="boundY2" step="any"></label>
+  <p id="boundInfo"></p>
+  <button id="saveBounds">Подтвердить и сохранить границы</button><button id="removeBounds">Удалить подтверждение</button><button id="closeBounds">Закрыть</button>
 </div>
 
 <script src="manifest.js"></script>
@@ -158,7 +212,8 @@ const CATS = Object.keys(CAT_NAMES).filter(c => M.some(m => m.category === c));
 const $ = id => document.getElementById(id);
 const img = $('img'), stage = $('stage');
 let S = load('settings', null), SAMPLE = load('sample', null), T = load('trial', null), R = load('results', []).map(normalizeRecord), RUNS = load('runs', []);
-const ui = { hud: false, manual: 1, available: {}, chosen: null, toastT: 0 };
+let SCREEN_CAL = load('screen_calibration', null), BOUNDS = load('object_bounds', {}), screenConfirmed = false;
+const ui = { hud: false, geometry: false, manual: 1, available: {}, chosen: null, toastT: 0, boundsImage: null, boundsDrag: null };
 
 function load(k, d) { try { const v = localStorage.getItem(LS + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function save(k, v) { localStorage.setItem(LS + k, JSON.stringify(v)); }
@@ -173,17 +228,125 @@ function equivalentDistance(droneWidthCm, screenDistanceCm, screenWidthMm) {
   const d = droneWidthCm * screenDistanceCm / (screenWidthMm / 10) / 100;
   return Number.isFinite(d) ? d : null;
 }
+function physicalScale(lineCssPx, lineMm) {
+  const k = positive(lineCssPx) && positive(lineMm) ? lineMm / lineCssPx : null;
+  return positive(k) ? k : null;
+}
+function validBounds(b, width, height) {
+  return Array.isArray(b) && b.length === 4 && b.every(Number.isFinite) && b[0] >= 0 && b[1] >= 0 && b[2] <= width && b[3] <= height && b[2] > b[0] && b[3] > b[1];
+}
+function physicalWidth(b, imageWidth, imageHeight, cssScale, mmPerCssPx) {
+  if (!validBounds(b, imageWidth, imageHeight) || !positive(cssScale) || !positive(mmPerCssPx)) return null;
+  const mm = (b[2] - b[0]) * cssScale * mmPerCssPx;
+  return positive(mm) ? mm : null;
+}
 function normalizeRecord(r) { // additive fields: old sessions stay valid; never infer physical width from a bbox
   const width = positive(r.drone_width_cm) ? r.drone_width_cm : null;
-  const screen = positive(r.screen_object_width_mm) ? r.screen_object_width_mm : null;
+  const screen = (r.screen_width_source !== 'screen_calibration' || r.screen_calibration_status === 'valid') && positive(r.screen_object_width_mm) ? r.screen_object_width_mm : null;
   return { ...r, max_confidence_pct: r.detection === 'no_box' ? null : r.max_confidence_pct ?? null,
     drone_width_cm: width, drone_width_source: r.drone_width_source ?? '', screen_object_width_mm: screen,
+    screen_width_source: r.screen_width_source ?? (screen != null ? 'manual' : null),
+    screen_object_width_mm_measured: r.screen_object_width_mm_measured ?? (r.screen_width_source !== 'screen_calibration' ? screen : null),
+    screen_object_width_mm_calculated: r.screen_object_width_mm_calculated ?? null,
+    screen_calibration: r.screen_calibration ?? null, screen_calibration_status: r.screen_calibration_status ?? 'missing',
+    object_bounds: r.object_bounds ?? null, object_camera_width_px_measured: r.object_camera_width_px_measured ?? null,
+    object_camera_height_px_measured: r.object_camera_height_px_measured ?? null,
+    object_camera_width_px_expected: r.object_camera_width_px_expected ?? null, object_camera_height_px_expected: r.object_camera_height_px_expected ?? null,
+    camera_measurement_source: r.camera_measurement_source ?? (positive(r.object_camera_px_measured) ? 'legacy_manual' : null),
+    reference_model: r.reference_model ?? '', reference_status: r.reference_status ?? (width != null ? 'legacy_manual' : 'unknown'),
+    reference_propeller_in: r.reference_propeller_in ?? null, reference_height_cm: r.reference_height_cm ?? null,
+    attempt: r.attempt ?? 1, stability_threshold_pct: r.stability_threshold_pct ?? null, stability_min_attempts: r.stability_min_attempts ?? null,
     object_angular_width_deg: screen != null && positive(r.distance_cm) ? 2 * Math.atan(screen / (20 * r.distance_cm)) * 180 / Math.PI : null,
     equivalent_distance_m: DRONE_CATS.includes(r.category) ? equivalentDistance(width, r.distance_cm, screen) : null };
 }
 function byId(id) { return M.find(x => x.id === id); }
 function isQuick() { return document.querySelector('input[name=mode]:checked').value === 'quick'; }
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.remove('hidden'); clearTimeout(ui.toastT); ui.toastT = setTimeout(() => e.classList.add('hidden'), 3000); }
+
+// Physical scale is confirmed for this page only. Browser geometry cannot identify every physical display.
+function screenEnvironment() {
+  return { dpr: devicePixelRatio || 1, width: screen.width, height: screen.height, available_width: screen.availWidth, available_height: screen.availHeight,
+    viewport_width: innerWidth, viewport_height: innerHeight, x: window.screenX, y: window.screenY, visual_scale: window.visualViewport?.scale ?? 1 };
+}
+function activeScreenCalibration() {
+  if (!SCREEN_CAL || !screenConfirmed) return null;
+  if (JSON.stringify(SCREEN_CAL.environment) !== JSON.stringify(screenEnvironment())) { screenConfirmed = false; return null; }
+  return positive(SCREEN_CAL.mm_per_css_px) ? SCREEN_CAL : null;
+}
+function screenStatus() {
+  const cal = activeScreenCalibration();
+  $('screenCalibStatus').textContent = cal ? `Подтверждена линейкой: ${cal.mm_per_css_px.toFixed(6)} мм / CSS px · ${cal.label || 'дисплей без имени'}` :
+    SCREEN_CAL ? `Требуется повторный замер линейкой. Сохранённый коэффициент ${SCREEN_CAL.mm_per_css_px} мм / CSS px не применяется.` : 'Физический масштаб не измерен. Нажмите «Калибровка экрана линейкой».';
+}
+function calibrationFor(s) {
+  const cal = activeScreenCalibration();
+  return cal && s.screen_calibration?.id === cal.id ? cal : null;
+}
+function confirmedBounds(m, s) {
+  const r = (s ? s.object_bounds : BOUNDS)?.[m.id];
+  return r && r.image_width === m.width && r.image_height === m.height && r.image_sha256 === (m.sha256 || null) && validBounds(r.bbox, m.width, m.height) ? r.bbox : null;
+}
+function objectBox(m, s) { return confirmedBounds(m, s) || m.object_bbox; }
+function referenceFor(m, s) { return s.reference?.image_id === m.id && ['conditional', 'verified'].includes(s.reference.status) ? s.reference : null; }
+function geometryData(m, s, manualMm = null) {
+  const b = confirmedBounds(m, s), cal = calibrationFor(s);
+  let automatic = b && cal ? physicalWidth(b, m.width, m.height, ui.scale, cal.mm_per_css_px) : null;
+  // An object clipped by the browser viewport does not have the requested visible width.
+  if (automatic != null) {
+    const r = img.getBoundingClientRect(), left = r.left + b[0] * ui.scale, right = r.left + b[2] * ui.scale;
+    if (left < -0.5 || right > innerWidth + 0.5 || r.top + b[1] * ui.scale < -0.5 || r.top + b[3] * ui.scale > innerHeight + 0.5) automatic = null;
+  }
+  return { screen_object_width_mm_calculated: automatic, screen_object_width_mm_measured: positive(manualMm) ? manualMm : null,
+    screen_object_width_mm: positive(manualMm) ? manualMm : automatic,
+    screen_width_source: positive(manualMm) ? 'manual' : automatic != null ? 'screen_calibration' : null,
+    screen_calibration: s.screen_calibration ?? null, screen_calibration_status: cal ? 'valid' : s.screen_calibration ? 'stale' : 'missing', object_bounds: b ? b.slice() : null };
+}
+function geometryText(m, s, widthCm, manualMm = null, status = 'unknown') {
+  const g = geometryData(m, s, manualMm), d = DRONE_CATS.includes(m.category) ? equivalentDistance(widthCm, s.distance_cm, g.screen_object_width_mm) : null;
+  const source = g.screen_width_source === 'manual' ? 'ручной замер' : g.screen_width_source === 'screen_calibration' ? 'расчёт по линейке' : 'нет источника';
+  const calibration = { valid: 'актуальна', stale: 'нужен повторный замер', missing: 'нет измерения' }[g.screen_calibration_status];
+  const reference = status === 'conditional' ? 'УСЛОВНЫЙ ЭТАЛОН — отладка. ' : status === 'verified' ? 'Эталон подтверждён оператором. ' : 'Эталон не подтверждён. ';
+  return `Ширина объекта: ${g.screen_object_width_mm == null ? 'нет измерения' : g.screen_object_width_mm.toFixed(2) + ' мм'} (${source}). ` +
+    `По калибровке: ${g.screen_object_width_mm_calculated?.toFixed(2) ?? '—'} мм. Эквивалентная дальность: ${d == null ? 'нет данных' : d.toFixed(2) + ' м'}. ` +
+    `${reference}Калибровка: ${calibration}. Не полевая дальность.`;
+}
+function refreshGeometry() {
+  if (!T || !current()) return;
+  const m = byId(current().id), s = T.settings, ref = referenceFor(m, s);
+  $('geometry').textContent = geometryText(m, s, ref?.width_cm ?? null, null, ref?.status);
+  const unobscured = $('settings').classList.contains('hidden') && $('calib').classList.contains('hidden') && $('boundsEditor').classList.contains('hidden');
+  $('geometry').classList.toggle('hidden', !ui.geometry || s.mode === 'quick' || !unobscured);
+  if (!$('record').classList.contains('hidden')) {
+    const width = num($('recDroneWidth').value), unchanged = ref && width === ref.width_cm && $('recWidthSource').value.trim() === [ref.model, ref.source].filter(Boolean).join(' · ');
+    $('recordGeometry').textContent = geometryText(m, s, width, num($('recScreenWidth').value), unchanged ? ref.status : 'manual_unverified');
+  }
+}
+
+// Operator-confirmed object geometry. Manifest boxes are suggestions, never physical measurements.
+function buildBoundsSelector() {
+  $('boundImage').innerHTML = M.map(m => `<option value="${esc(m.id)}">${esc(m.id)} — ${esc(m.label || '')}</option>`).join('');
+}
+function boundsStatus() {
+  const m = byId($('boundImage').value); if (!m) return;
+  const b = confirmedBounds(m, null);
+  $('boundsStatus').textContent = b ? `Подтверждённая ширина объекта: ${(b[2] - b[0]).toFixed(1)} px исходного изображения. Изменения применяются к новым прогонам.` : 'Границы не подтверждены: автоматической физической ширины нет. Подтвердите предложение или выделите объект.';
+}
+function readBoundsInputs() { return ['boundX1', 'boundY1', 'boundX2', 'boundY2'].map(id => num($(id).value)); }
+function writeBoundsInputs(b) { ['boundX1', 'boundY1', 'boundX2', 'boundY2'].forEach((id, i) => $(id).value = b?.[i] ?? ''); }
+function drawBounds() {
+  const m = byId($('boundImage').value), c = $('boundsCanvas'); if (!m || !ui.boundsImage) return;
+  const ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); ctx.drawImage(ui.boundsImage, 0, 0, c.width, c.height);
+  const b = readBoundsInputs(); if (!validBounds(b, m.width, m.height)) return;
+  ctx.strokeStyle = '#00ff60'; ctx.lineWidth = Math.max(2, m.width / 400); ctx.strokeRect(b[0], b[1], b[2] - b[0], b[3] - b[1]);
+}
+function editBounds() {
+  const m = byId($('boundImage').value); if (!m) return;
+  readSettings();
+  closeOverlays(); $('geometry').classList.add('hidden'); $('boundsEditor').classList.remove('hidden');
+  $('boundInfo').textContent = `${m.id}: ${m.width}×${m.height} px. Сохраняется в браузере и JSON, исходный манифест не меняется.`;
+  writeBoundsInputs(confirmedBounds(m, null) || m.object_bbox); ui.boundsImage = null;
+  const im = new Image(); im.onload = () => { if ($('boundImage').value !== m.id) return; ui.boundsImage = im; $('boundsCanvas').width = m.width; $('boundsCanvas').height = m.height; drawBounds(); }; im.src = m.file;
+}
 
 // ---------- sample: fixed random subset, deterministic from (counts, seed) ----------
 function makeSample(counts, seed, name) {
@@ -225,7 +388,11 @@ function readSettings() {
     sizes: $('sizes').value.split(',').map(x => parseFloat(x)).filter(x => x > 0), center: $('center').checked, bg: $('bg').value,
     phone: $('phone').value.trim(), zoom: $('zoom').value, distance_cm: num($('distance').value), app_conf_pct: num($('appConf').value),
     monitor_mm: num($('monitorMm').value), monitor_px: num($('monitorPx').value), k: num($('k').value), frame_w: num($('frameW').value), frame_h: num($('frameH').value),
-    yolo_input: num($('yoloIn').value), operator: $('operator').value };
+    yolo_input: num($('yoloIn').value), operator: $('operator').value,
+    repetitions: num($('repetitions').value), stability_pct: num($('stabilityPct').value), min_attempts: num($('minAttempts').value),
+    screen_calibration: activeScreenCalibration(), object_bounds: JSON.parse(JSON.stringify(BOUNDS)),
+    reference: { image_id: $('boundImage').value, model: $('referenceModel').value.trim(), propeller_in: 10, width_cm: num($('referenceWidth').value),
+      height_cm: num($('referenceHeight').value), source: $('referenceSource').value.trim(), status: $('referenceStatus').value } };
   S = s; save('settings', s); return s;
 }
 function writeSettings() {
@@ -235,11 +402,15 @@ function writeSettings() {
   $('center').checked = S.center; $('bg').value = S.bg; $('phone').value = S.phone; $('zoom').value = S.zoom; $('distance').value = S.distance_cm ?? '';
   $('appConf').value = S.app_conf_pct ?? ''; $('monitorMm').value = S.monitor_mm ?? ''; $('monitorPx').value = S.monitor_px ?? ''; $('k').value = S.k ?? '';
   $('frameW').value = S.frame_w ?? ''; $('frameH').value = S.frame_h ?? ''; $('yoloIn').value = S.yolo_input ?? ''; $('operator').value = S.operator || '';
+  $('repetitions').value = S.repetitions ?? 1; $('stabilityPct').value = S.stability_pct ?? 90; $('minAttempts').value = S.min_attempts ?? 10;
+  if (byId(S.reference?.image_id)) $('boundImage').value = S.reference.image_id;
+  $('referenceModel').value = S.reference?.model ?? ''; $('referenceWidth').value = S.reference?.width_cm ?? ''; $('referenceHeight').value = S.reference?.height_cm ?? '';
+  $('referenceSource').value = S.reference?.source ?? ''; $('referenceStatus').value = S.reference?.status ?? 'unknown';
 }
 function runSettings(s) { // quick mode: everything except phone/zoom/distance has fixed defaults, unmeasured values are null
   if (s.mode !== 'quick') return Object.assign({}, s);
   return { mode: 'quick', scaleMode: 'fit', scaleFactor: 1, sizes: [], center: true, bg: '#000', phone: s.phone, zoom: s.zoom, distance_cm: s.distance_cm,
-    app_conf_pct: null, monitor_mm: null, monitor_px: null, k: null, frame_w: null, frame_h: null, yolo_input: null, operator: '' };
+    app_conf_pct: null, monitor_mm: null, monitor_px: null, k: null, frame_w: null, frame_h: null, yolo_input: null, operator: '', repetitions: 1 };
 }
 
 // ---------- runs ----------
@@ -249,25 +420,50 @@ function startRun() {
   if (!s.phone) { alert('Укажите модель телефона.'); return; }
   if (!$('distance').validity.valid || (s.distance_cm != null && !positive(s.distance_cm))) { alert('Расстояние до экрана должно быть положительным или пустым (не измерено).'); return; }
   const rs = runSettings(s);
+  if (!Number.isInteger(rs.repetitions) || rs.repetitions < 1 || rs.repetitions > 100 || (rs.mode !== 'quick' &&
+      (!positive(rs.stability_pct) || rs.stability_pct > 100 || !Number.isInteger(rs.min_attempts) || rs.min_attempts < 1 || rs.min_attempts > 100))) {
+    alert('Задайте 1–100 попыток, критерий 1–100 % и минимум 1–100 попыток.'); return;
+  }
+  if (rs.reference && ['conditional', 'verified'].includes(rs.reference.status)) {
+    if (!positive(rs.reference.width_cm) || !$('referenceWidth').validity.valid ||
+        (rs.reference.height_cm != null && !positive(rs.reference.height_cm)) ||
+        (rs.reference.status === 'verified' && (!rs.reference.model || !rs.reference.source))) {
+      alert('Для эталона нужна положительная ширина; для подтверждённого — модель и источник габарита.'); return;
+    }
+  }
   if (rs.scaleMode === 'camera' && !rs.k) { alert('Для режима «px кадра камеры» сначала выполните калибровку (C).'); return; }
-  if ((rs.scaleMode === 'monitor' || rs.scaleMode === 'camera') && !rs.sizes.length) { alert('Укажите уровни размера N.'); return; }
+  if (['monitor', 'camera', 'physical'].includes(rs.scaleMode) && !rs.sizes.length) { alert('Укажите уровни размера N.'); return; }
+  if (rs.scaleMode === 'physical') {
+    if (!calibrationFor(rs)) { alert('Сначала откалибруйте экран линейкой при текущем дисплее и масштабе.'); return; }
+    if (!rs.center) { alert('Для физического масштаба включите центрирование объекта.'); return; }
+    const noBounds = SAMPLE.ids.filter(id => byId(id).category !== 'negative' && !confirmedBounds(byId(id), rs));
+    if (noBounds.length) { alert(`Подтвердите границы ${noBounds.length} объектов выборки или используйте один подготовленный снимок.`); return; }
+    const tooLarge = SAMPLE.ids.some(id => { const m = byId(id), b = confirmedBounds(m, rs); return b && rs.sizes.some(cm => {
+      const w = cm * 10 / rs.screen_calibration.mm_per_css_px; return w > innerWidth || w * (b[3] - b[1]) / (b[2] - b[0]) > innerHeight;
+    }); });
+    if (tooLarge) { alert('На одном из уровней объект обрезается экраном. Уменьшите уровни N.'); return; }
+  }
   const missing = SAMPLE.ids.filter(id => !byId(id) || ui.available[id] === false);
   if (missing.length) { alert(`Нет ${missing.length} файлов выборки. Запустите python3 fetch_images.py.`); return; }
-  const levels = (rs.scaleMode === 'monitor' || rs.scaleMode === 'camera') ? rs.sizes : [null];
-  const order = []; for (const lv of levels) for (const id of SAMPLE.ids) order.push({ id, level: lv });
+  const levels = ['monitor', 'camera', 'physical'].includes(rs.scaleMode) ? rs.sizes : [null];
+  const order = []; for (const lv of levels) for (const id of SAMPLE.ids) for (let attempt = 1; attempt <= rs.repetitions; attempt++) order.push({ id, level: lv, attempt });
   const now = new Date();
   let run_id = 'R' + now.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14) + '-' + rs.zoom; for (let i = 2; RUNS.some(r => r.run_id === run_id); i++) run_id = run_id.replace(/(-\d+)?$/, '') + '-' + i;
   T = { run_id, created: now.toISOString(), manifest_version: window.MANIFEST.version,
         manifest_sha256: window.MANIFEST_SHA256 || null, sample_id: SAMPLE.sample_id, sample_name: SAMPLE.name, sample_seed: SAMPLE.seed, sample_ids: SAMPLE.ids.slice(),
         settings: rs, order, index: 0 };
   RUNS.push({ run_id: T.run_id, created: T.created, sample_id: T.sample_id, sample_name: T.sample_name, phone: rs.phone, zoom: rs.zoom, distance_cm: rs.distance_cm, mode: rs.mode, shows: order.length });
-  save('trial', T); save('runs', RUNS); ui.manual = 1; show();
+  save('trial', T); save('runs', RUNS); ui.manual = 1; ui.geometry = rs.scaleMode === 'physical'; show();
 }
 function current() { return T && T.order[T.index]; }
 function recOf(step) { return R.find(r => r.run_id === T.run_id && r.step === step); }
-function objSide(m) { return m.object_bbox ? Math.max(m.object_bbox[2] - m.object_bbox[0], m.object_bbox[3] - m.object_bbox[1]) : null; } // native px, longer side
+function objSide(m, s) { const b = objectBox(m, s); return b ? Math.max(b[2] - b[0], b[3] - b[1]) : null; } // native px, longer side
 function scaleFor(m, step, s) { // CSS px per native image px; monitor px = CSS px * devicePixelRatio
-  const side = objSide(m), dpr = window.devicePixelRatio || 1;
+  const side = objSide(m, s), dpr = window.devicePixelRatio || 1;
+  if (s.scaleMode === 'physical' && m.category !== 'negative') {
+    const b = confirmedBounds(m, s), cal = calibrationFor(s);
+    return b && cal ? step.level * 10 / cal.mm_per_css_px / (b[2] - b[0]) : null;
+  }
   if (s.scaleMode === 'native') return s.scaleFactor / dpr;
   if ((s.scaleMode === 'monitor' || s.scaleMode === 'camera') && side && step.level) return (s.scaleMode === 'monitor' ? step.level : step.level / s.k) / side / dpr;
   return Math.min(innerWidth / m.width, innerHeight / m.height); // fit; also negatives in size modes
@@ -278,27 +474,33 @@ function show() {
   const m = byId(step.id), s = T.settings;
   stage.style.setProperty('--bg', s.bg); stage.className = 'clean';
   $('settings').classList.add('hidden');
-  const sc = scaleFor(m, step, s) * ui.manual; ui.scale = sc;
+  const baseScale = scaleFor(m, step, s);
+  if (!positive(baseScale)) { img.style.visibility = 'hidden'; ui.scale = null; $('settings').classList.remove('hidden'); screenStatus(); toast('Физический масштаб недоступен. Повторите калибровку и начните новый прогон.'); return; }
+  const sc = baseScale * ui.manual; ui.scale = sc;
   img.style.visibility = 'hidden'; place(m, sc, s); // geometry comes from the manifest, so it is exact before the file loads
   img.onload = () => { img.style.visibility = ''; };
   img.onerror = () => { ui.available[m.id] = false; toast('Нет файла изображения — запустите fetch_images.py'); };
   img.src = m.file; if (img.complete && img.naturalWidth) img.style.visibility = '';
   const nx = T.order[T.index + 1]; if (nx) new Image().src = byId(nx.id).file; // preload
   hud();
+  refreshGeometry();
 }
 function place(m, sc, s) {
   const w = m.width * sc, h = m.height * sc, W = innerWidth, H = innerHeight;
   let x = (W - w) / 2, y = (H - h) / 2;
-  if (s.center && m.object_bbox) { /* object at screen centre (also in quick mode: 5x sees only the centre) */ x = W / 2 - (m.object_bbox[0] + m.object_bbox[2]) / 2 * sc; y = H / 2 - (m.object_bbox[1] + m.object_bbox[3]) / 2 * sc; }
+  const b = objectBox(m, s);
+  if (s.center && b) { /* object at screen centre (also in quick mode: 5x sees only the centre) */ x = W / 2 - (b[0] + b[2]) / 2 * sc; y = H / 2 - (b[1] + b[3]) / 2 * sc; }
   img.style.left = x + 'px'; img.style.top = y + 'px'; img.style.width = w + 'px'; img.style.height = h + 'px';
 }
 function sizes(m, s, measuredCam) { // three distinct units; null = not measured / not applicable
-  const dpr = window.devicePixelRatio || 1, side = objSide(m);
+  const dpr = window.devicePixelRatio || 1, side = objSide(m, s), b = objectBox(m, s);
   const mon = side ? +(side * ui.scale * dpr).toFixed(1) : null;
   const camExp = mon != null && s.k ? +(mon * s.k).toFixed(1) : null;
   const cam = measuredCam != null ? measuredCam : camExp;
   const yolo = cam != null && s.frame_w && s.frame_h && s.yolo_input ? +(cam * Math.min(s.yolo_input / s.frame_w, s.yolo_input / s.frame_h)).toFixed(1) : null;
   return { object_monitor_px: mon, object_monitor_mm: mon != null && s.monitor_mm && s.monitor_px ? +(mon * s.monitor_mm / s.monitor_px).toFixed(2) : null,
+    object_camera_width_px_expected: b && positive(s.k) ? (b[2] - b[0]) * ui.scale * dpr * s.k : null,
+    object_camera_height_px_expected: b && positive(s.k) ? (b[3] - b[1]) * ui.scale * dpr * s.k : null,
     object_camera_px_expected: camExp, object_camera_px_measured: measuredCam, object_yolo_px: yolo,
     object_yolo_px_source: yolo == null ? null : measuredCam != null ? 'measured' : 'calibration' };
 }
@@ -308,7 +510,7 @@ function hud() { // no image id / category / object size before recording
   h.textContent = `${T.index + 1}/${T.order.length} · ${T.settings.phone} ${T.settings.zoom} · ${T.settings.distance_cm} см · масштаб ${(ui.scale * (window.devicePixelRatio || 1)).toFixed(3)}` +
     (r ? ` · записано · объект ${r.object_monitor_px ?? '—'} px монитора` : ' · не записано');
 }
-function closeOverlays() { ['record', 'answer', 'calib'].forEach(i => $(i).classList.add('hidden')); }
+function closeOverlays() { ['record', 'answer', 'calib', 'boundsEditor'].forEach(i => $(i).classList.add('hidden')); }
 function go(d) {
   if (!T) return; const n = T.index + d;
   if (n >= T.order.length) { const done = R.filter(r => r.run_id === T.run_id).length; toast(`Последнее изображение. Записано ${done} из ${T.order.length}. S — настройки (экспорт, повтор с другим зумом).`); return; }
@@ -329,7 +531,16 @@ function openRecord() {
   $('recCamPx').value = prev?.object_camera_px_measured ?? ''; $('recNote').value = prev?.note ?? '';
   $('recDroneWidth').value = prev?.drone_width_cm ?? ''; $('recWidthSource').value = prev?.drone_width_source ?? '';
   $('recScreenWidth').value = prev?.screen_object_width_mm ?? '';
+  fillPhysicalRecord(prev);
   $('record').classList.remove('hidden'); document.activeElement?.blur();
+  refreshGeometry();
+}
+function fillPhysicalRecord(prev) {
+  const m = byId(current().id), ref = referenceFor(m, T.settings);
+  if (!prev && ref) { $('recDroneWidth').value = ref.width_cm ?? ''; $('recWidthSource').value = [ref.model, ref.source].filter(Boolean).join(' · '); }
+  $('recScreenWidth').value = prev?.screen_object_width_mm_measured ?? (prev?.screen_width_source !== 'screen_calibration' ? prev?.screen_object_width_mm : null) ?? '';
+  $('recCamW').value = prev?.object_camera_width_px_measured ?? ''; $('recCamH').value = prev?.object_camera_height_px_measured ?? '';
+  $('recCamSource').value = ['manual_screenshot', 'manual_diagnostic', 'manual_other'].includes(prev?.camera_measurement_source) ? prev.camera_measurement_source : 'manual_screenshot';
 }
 function choose(det) {
   ui.chosen = det;
@@ -349,18 +560,30 @@ function saveRecord() {
     toast('Максимальный confidence YOLO: введите число от 0 до 100 или оставьте поле пустым'); return;
   }
   const st = current(), m = byId(st.id), s = T.settings, adv = s.mode !== 'quick';
-  if (adv && ['recDroneWidth', 'recScreenWidth', 'recCamPx'].some(id => !$(id).validity.valid || (num($(id).value) != null && !positive(num($(id).value))))) {
+  if (adv && ['recDroneWidth', 'recScreenWidth', 'recCamPx', 'recCamW', 'recCamH'].some(id => !$(id).validity.valid || (num($(id).value) != null && !positive(num($(id).value))))) {
     toast('Размеры должны быть положительными или пустыми (не измерено)'); return;
   }
+  if (s.scaleMode === 'physical' && (!calibrationFor(s) || !positive(ui.scale))) { screenStatus(); refreshGeometry(); toast('Калибровка утратила актуальность. Повторите замер и начните новый прогон.'); return; }
+  const camW = adv ? num($('recCamW').value) : null, camH = adv ? num($('recCamH').value) : null;
+  if ((camW != null && positive(s.frame_w) && camW > s.frame_w) || (camH != null && positive(s.frame_h) && camH > s.frame_h)) { toast('Размер объекта не может превышать соответствующий размер кадра анализа.'); return; }
+  const measuredSide = adv ? num($('recCamPx').value) ?? (camW != null && camH != null ? Math.max(camW, camH) : null) : null;
+  const ref = referenceFor(m, s), widthCm = adv ? num($('recDroneWidth').value) : null;
+  const source = adv ? $('recWidthSource').value.trim() : '';
+  const refUnchanged = ref && widthCm === ref.width_cm && source === [ref.model, ref.source].filter(Boolean).join(' · ');
   const fp = adv ? num($('recFp').value) : null;
   const rec = normalizeRecord({ run_id: T.run_id, sample_id: T.sample_id, sample_name: T.sample_name, sample_seed: T.sample_seed, step: T.index, image_id: m.id, category: m.category,
     phone: s.phone, camera_zoom: s.zoom, distance_cm: s.distance_cm, test_mode: s.mode, detection: ui.chosen, ...classify(m.category, ui.chosen, fp),
-    scale_mode: s.scaleMode, size_level: st.level, size_level_unit: st.level == null ? null : s.scaleMode === 'monitor' ? 'monitor_px' : 'camera_px',
+    scale_mode: s.scaleMode, size_level: st.level, size_level_unit: st.level == null ? null : s.scaleMode === 'physical' ? 'screen_cm' : s.scaleMode === 'monitor' ? 'monitor_px' : 'camera_px',
     display_scale: +(ui.scale * (window.devicePixelRatio || 1)).toFixed(5), calibration_k: s.k,
-    ...sizes(m, s, adv ? num($('recCamPx').value) : null), analysis_frame_w: s.frame_w, analysis_frame_h: s.frame_h, yolo_input_px: s.yolo_input,
+    ...sizes(m, s, measuredSide), analysis_frame_w: s.frame_w, analysis_frame_h: s.frame_h, yolo_input_px: s.yolo_input,
+    object_camera_width_px_measured: camW, object_camera_height_px_measured: camH,
+    camera_measurement_source: measuredSide != null || camW != null || camH != null ? $('recCamSource').value : null,
     max_confidence_pct: maxConf, target_conf_pct: adv ? num($('recConf').value) : null, fp_count: fp, fp_max_conf_pct: adv ? num($('recFpConf').value) : null,
-    drone_width_cm: adv ? num($('recDroneWidth').value) : null, drone_width_source: adv ? $('recWidthSource').value.trim() : '',
-    screen_object_width_mm: adv ? num($('recScreenWidth').value) : null,
+    drone_width_cm: widthCm, drone_width_source: source,
+    ...(adv ? geometryData(m, s, num($('recScreenWidth').value)) : {}),
+    reference_model: ref?.model ?? '', reference_status: refUnchanged ? ref.status : widthCm != null ? 'manual_unverified' : 'unknown',
+    reference_propeller_in: ref?.propeller_in ?? null, reference_height_cm: ref?.height_cm ?? null,
+    attempt: st.attempt ?? 1, stability_threshold_pct: s.stability_pct ?? null, stability_min_attempts: s.min_attempts ?? null,
     app_conf_threshold_pct: s.app_conf_pct, operator: s.operator || '', recorded_at: new Date().toISOString(), note: adv ? $('recNote').value : '' });
   R = R.filter(r => !(r.run_id === rec.run_id && r.step === rec.step)); R.push(rec); save('results', R);
   $('record').classList.add('hidden'); document.activeElement?.blur(); hud();
@@ -381,12 +604,17 @@ function showAnswer() {
 const COLS = ['run_id', 'sample_id', 'sample_name', 'sample_seed', 'step', 'image_id', 'category', 'phone', 'camera_zoom', 'distance_cm', 'test_mode', 'detection', 'result_class', 'false_alarm',
   'scale_mode', 'size_level', 'size_level_unit', 'display_scale', 'object_monitor_px', 'object_monitor_mm', 'calibration_k', 'object_camera_px_expected', 'object_camera_px_measured',
   'analysis_frame_w', 'analysis_frame_h', 'yolo_input_px', 'object_yolo_px', 'object_yolo_px_source', 'max_confidence_pct', 'target_conf_pct', 'fp_count', 'fp_max_conf_pct', 'app_conf_threshold_pct',
-  'operator', 'recorded_at', 'note', 'drone_width_cm', 'drone_width_source', 'screen_object_width_mm', 'object_angular_width_deg', 'equivalent_distance_m'];
-function csv() { const q = v => v == null ? '' : /[",\n;]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+  'operator', 'recorded_at', 'note', 'drone_width_cm', 'drone_width_source', 'screen_object_width_mm', 'object_angular_width_deg', 'equivalent_distance_m',
+  'screen_width_source', 'screen_object_width_mm_measured', 'screen_object_width_mm_calculated', 'screen_calibration', 'screen_calibration_status', 'object_bounds',
+  'object_camera_width_px_measured', 'object_camera_height_px_measured', 'object_camera_width_px_expected', 'object_camera_height_px_expected', 'camera_measurement_source',
+  'reference_model', 'reference_status', 'reference_propeller_in', 'reference_height_cm', 'attempt', 'stability_threshold_pct', 'stability_min_attempts'];
+function csv() { const q = value => { const v = value != null && typeof value === 'object' ? JSON.stringify(value) : value;
+    return v == null ? '' : /[",\n;]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v); };
   const rows = R.slice().sort((a, b) => a.run_id < b.run_id ? -1 : a.run_id > b.run_id ? 1 : a.step - b.step);
   return [COLS.join(',')].concat(rows.map(r => COLS.map(c => q(r[c])).join(','))).join('\n') + '\n'; }
 function sessionJson() { return JSON.stringify({ format: FORMAT, exported: new Date().toISOString(), manifest_version: window.MANIFEST && window.MANIFEST.version,
-  manifest_sha256: window.MANIFEST_SHA256 || null, sample: SAMPLE, runs: RUNS, trial: T, settings: S, results: R, size_summary: sizeSummary(R) }, null, 1); }
+  manifest_sha256: window.MANIFEST_SHA256 || null, sample: SAMPLE, runs: RUNS, trial: T, settings: S, results: R, size_summary: sizeSummary(R),
+  repeat_summary: repeatSummary(R), screen_calibration: SCREEN_CAL, object_bounds: BOUNDS }, null, 1); }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
 function sizeSummary(records) {
   const groups = new Map();
@@ -400,12 +628,13 @@ function sizeSummary(records) {
     const key = JSON.stringify([r.run_id, drone, source, level]);
     if (!groups.has(key)) groups.set(key, { run_id: r.run_id, camera_zoom: r.camera_zoom, kind: drone ? 'drone' : 'negative',
       camera_px: level, camera_px_source: source, checks: 0, correct_detections: 0, detection_rate: null,
-      false_positives: 0, false_positive_rate: null, distance_known_count: 0, equivalent_distance_min_m: null, equivalent_distance_max_m: null });
+      false_positives: 0, false_positive_rate: null, distance_known_count: 0, equivalent_distance_min_m: null, equivalent_distance_max_m: null, distance_reference_statuses: [] });
     const g = groups.get(key); g.checks++;
     if (drone && r.result_class === 'TP') g.correct_detections++;
     if (!drone && r.false_alarm) g.false_positives++;
     if (drone && positive(r.equivalent_distance_m)) {
       const d = r.equivalent_distance_m; g.distance_known_count++;
+      const status = r.reference_status ?? 'legacy_manual'; if (!g.distance_reference_statuses.includes(status)) g.distance_reference_statuses.push(status);
       g.equivalent_distance_min_m = g.equivalent_distance_min_m == null ? d : Math.min(g.equivalent_distance_min_m, d);
       g.equivalent_distance_max_m = g.equivalent_distance_max_m == null ? d : Math.max(g.equivalent_distance_max_m, d);
     }
@@ -413,6 +642,44 @@ function sizeSummary(records) {
     g.false_positive_rate = drone ? null : g.false_positives / g.checks;
   }
   return [...groups.values()].sort((a, b) => a.run_id.localeCompare(b.run_id) || a.kind.localeCompare(b.kind) || a.camera_px_source.localeCompare(b.camera_px_source) || (a.camera_px ?? -1) - (b.camera_px ?? -1));
+}
+function median(values) {
+  if (!values.length) return null;
+  const a = values.slice().sort((x, y) => x - y), n = a.length;
+  return n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+}
+function repeatSummary(records) {
+  const groups = new Map();
+  for (const r of records) {
+    // Same image, run and recorded geometry/conditions only. Measured camera px may vary between attempts.
+    const key = JSON.stringify([r.run_id, r.image_id, r.size_level, r.size_level_unit, r.display_scale, r.distance_cm, r.camera_zoom,
+      r.app_conf_threshold_pct, r.analysis_frame_w, r.analysis_frame_h, r.screen_object_width_mm, r.screen_calibration?.id, r.screen_calibration_status,
+      r.object_bounds, r.drone_width_cm, r.drone_width_source, r.reference_model, r.reference_status, r.stability_threshold_pct, r.stability_min_attempts]);
+    const drone = DRONE_CATS.includes(r.category);
+    if (!groups.has(key)) groups.set(key, { run_id: r.run_id, image_id: r.image_id, camera_zoom: r.camera_zoom, kind: drone ? 'drone' : 'negative',
+      size_level: r.size_level, size_level_unit: r.size_level_unit, screen_object_width_mm: r.screen_object_width_mm ?? null,
+      equivalent_distance_m: r.equivalent_distance_m, reference_status: r.reference_status, checks: 0, correct_detections: 0, false_positives: 0,
+      stability_threshold_pct: r.stability_threshold_pct, stability_min_attempts: r.stability_min_attempts,
+      confidence: [], width_measured: [], height_measured: [], width_expected: [] });
+    const g = groups.get(key); g.checks++;
+    if (drone && r.result_class === 'TP') g.correct_detections++;
+    if (!drone && r.false_alarm) g.false_positives++;
+    const conf = drone ? r.result_class === 'TP' ? r.target_conf_pct ?? r.max_confidence_pct : null : r.false_alarm ? r.max_confidence_pct : null;
+    if (typeof conf === 'number' && Number.isFinite(conf) && conf >= 0 && conf <= 100) g.confidence.push(conf);
+    if (positive(r.object_camera_width_px_measured)) g.width_measured.push(r.object_camera_width_px_measured);
+    if (positive(r.object_camera_height_px_measured)) g.height_measured.push(r.object_camera_height_px_measured);
+    if (positive(r.object_camera_width_px_expected)) g.width_expected.push(r.object_camera_width_px_expected);
+  }
+  return [...groups.values()].map(g => {
+    const { confidence, width_measured, height_measured, width_expected, ...o } = g;
+    const rate = g.kind === 'drone' ? g.correct_detections / g.checks : null;
+    return { ...o, detection_rate: rate, false_positive_rate: g.kind === 'negative' ? g.false_positives / g.checks : null,
+      confidence_median_pct: median(confidence), confidence_known_count: confidence.length,
+      camera_width_px_measured_median: median(width_measured), camera_width_measured_count: width_measured.length,
+      camera_height_px_measured_median: median(height_measured), camera_height_measured_count: height_measured.length,
+      camera_width_px_expected_median: median(width_expected),
+      stability_met: rate != null && positive(g.stability_min_attempts) && positive(g.stability_threshold_pct) && g.checks >= g.stability_min_attempts ? rate * 100 >= g.stability_threshold_pct : null };
+  });
 }
 function summary() {
   const rows = RUNS.map(run => { const rr = R.filter(r => r.run_id === run.run_id), c = k => rr.filter(r => r.result_class === k).length;
@@ -423,22 +690,36 @@ function summary() {
   const fmt = x => x == null ? '—' : x.toFixed(2);
   const levels = sizeSummary(R).map(g => `<tr><td>${esc(g.run_id)}</td><td>${esc(g.camera_zoom)}</td><td>${g.kind === 'drone' ? 'дроны' : 'негативы'}</td>` +
     `<td>${g.camera_px ?? '—'}</td><td>${esc(g.camera_px_source)}</td><td>${g.checks}</td><td>${g.correct_detections}</td><td>${g.detection_rate == null ? '—' : (100 * g.detection_rate).toFixed(1) + '%'}</td>` +
-    `<td>${g.false_positives}</td><td>${g.false_positive_rate == null ? '—' : (100 * g.false_positive_rate).toFixed(1) + '%'}</td><td>${fmt(g.equivalent_distance_min_m)}…${fmt(g.equivalent_distance_max_m)} (${g.distance_known_count})</td></tr>`).join('');
-  if (levels) $('summary').innerHTML += `<h3>Доля обнаружений по размеру в кадре анализа</h3><p class="muted">Большая сторона, округление 0,1 px. measured — замер, calibration — оценка k, control_level — только номер блока пустого фона, unknown — нет размера. Прогоны не смешиваются. Эквивалентная дальность — геометрическая оценка, не подтверждённая реальная дальность.</p>` +
+    `<td>${g.false_positives}</td><td>${g.false_positive_rate == null ? '—' : (100 * g.false_positive_rate).toFixed(1) + '%'}</td><td>${fmt(g.equivalent_distance_min_m)}…${fmt(g.equivalent_distance_max_m)} (${g.distance_known_count}) ${esc(g.distance_reference_statuses.join(', '))}</td></tr>`).join('');
+  if (levels) $('summary').innerHTML += `<h3>Доля обнаружений по размеру в кадре анализа</h3><p class="muted">Большая сторона, округление 0,1 px. measured — замер, calibration — оценка k, control_level — только номер блока пустого фона, unknown — нет размера. conditional — условный эталон; manual_unverified/legacy_manual — без подтверждённого эталона. Прогоны не смешиваются. Эквивалентная дальность — геометрическая оценка, не подтверждённая реальная дальность.</p>` +
     `<table><tr><th>прогон</th><th>зум</th><th>тип</th><th>px</th><th>источник px</th><th>проверок</th><th>TP</th><th>TP / проверок</th><th>FP</th><th>FP / негативов</th><th>экв. м min…max (известно)</th></tr>${levels}</table>`;
+  const repeated = repeatSummary(R).map(g => `<tr><td>${esc(g.run_id)} / ${esc(g.image_id)}</td><td>${fmt(g.screen_object_width_mm)}</td><td>${g.checks}</td><td>${g.correct_detections}</td>` +
+    `<td>${g.detection_rate == null ? '—' : (100 * g.detection_rate).toFixed(1) + '%'}</td><td>${g.false_positives}</td><td>${fmt(g.confidence_median_pct)} (${g.confidence_known_count})</td>` +
+    `<td>${fmt(g.camera_width_px_measured_median)} (${g.camera_width_measured_count})</td><td>${fmt(g.camera_width_px_expected_median)}</td><td>${fmt(g.equivalent_distance_m)} / ${esc(g.reference_status)}</td>` +
+    `<td>${g.stability_met == null ? 'недостаточно данных' : g.stability_met ? 'достигнут' : 'не достигнут'}</td></tr>`).join('');
+  if (repeated) $('summary').innerHTML += `<h3>Повторы в одинаковых условиях</h3><p class="muted">Одна строка — один снимок и масштаб в одном прогоне. Медиана confidence только по известным значениям правильных обнаружений (для негативов — ложных). Неизмеренные px не заменяются экранными. Условный эталон не является измеренной моделью.</p>` +
+    `<table><tr><th>прогон / снимок</th><th>ширина, мм</th><th>проверок</th><th>TP</th><th>доля TP</th><th>FP</th><th>median confidence % (известно)</th><th>ширина px замер (известно)</th><th>ширина px оценка k</th><th>экв. м / эталон</th><th>критерий серии</th></tr>${repeated}</table>`;
   $('start').textContent = SAMPLE ? `Начать прогон: ${SAMPLE.name}, ${$('zoom').value === '5x' ? '5×' : '1×'}` : 'Начать прогон';
 }
-function openSettings() { closeOverlays(); writeSettings(); sampleInfo(); summary(); stage.className = ''; $('settings').classList.remove('hidden'); }
-function calib() {
+function openSettings() { closeOverlays(); $('geometry').classList.add('hidden'); writeSettings(); sampleInfo(); summary(); screenStatus(); boundsStatus(); stage.className = ''; $('settings').classList.remove('hidden'); }
+function calib(mode = 'camera') {
+  if (!$('settings').classList.contains('hidden')) readSettings();
   closeOverlays(); $('settings').classList.add('hidden'); const dpr = window.devicePixelRatio || 1;
+  $('geometry').classList.add('hidden');
+  const physical = mode === 'screen';
+  $('cameraCalibSection').classList.toggle('hidden', physical); $('calibgrid').classList.toggle('hidden', physical);
+  $('screenCalibSection').classList.toggle('hidden', !physical); $('screenLine').classList.toggle('hidden', !physical);
+  $('screenLine').style.width = Math.min(400, innerWidth * 0.65) + 'px';
   $('calibgrid').innerHTML = [512, 256, 128, 64, 32, 16].map(p => `<div class="sq" style="width:${p / dpr}px;height:${p / dpr}px"><span>${p} px</span></div>`).join('');
   $('dpr').textContent = `devicePixelRatio = ${dpr}; окно ${Math.round(innerWidth * dpr)}×${Math.round(innerHeight * dpr)} px монитора` + (Math.round(innerWidth * dpr) < 3800 ? ' — окно меньше 4K: проверьте полноэкранный режим (F)' : '');
   $('calib').classList.remove('hidden');
+  $('screenLineCaption').textContent = `${$('screenLine').getBoundingClientRect().width.toFixed(1)} CSS px между рисками`;
 }
 
 // ---------- keyboard ----------
 document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase(), inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT';
+  if (!$('boundsEditor').classList.contains('hidden')) { if (k === 'escape') openSettings(); return; }
   if (!$('record').classList.contains('hidden')) {
     if (k === 'escape') { $('record').classList.add('hidden'); document.activeElement?.blur(); }
     else if (k === 'enter') { e.preventDefault(); saveRecord(); }
@@ -457,11 +738,18 @@ document.addEventListener('keydown', e => {
   else if (k === '0') { ui.manual = 1; show(); }
   else if (k === 'f' || k === 'а') fs();
   else if (k === 'i' || k === 'ш') { ui.hud = !ui.hud; hud(); }
+  else if (k === 'g') { ui.geometry = !ui.geometry; refreshGeometry(); }
   else if (k === 's' || k === 'ы' || k === 'escape') openSettings();
   else if (k === 'c' || k === 'с') calib();
 });
 function fs() { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); }
-addEventListener('resize', () => { if (T && $('settings').classList.contains('hidden')) show(); });
+function environmentChanged() {
+  screenStatus();
+  if (T && $('settings').classList.contains('hidden') && $('calib').classList.contains('hidden') && $('boundsEditor').classList.contains('hidden')) show();
+}
+addEventListener('resize', environmentChanged);
+window.visualViewport?.addEventListener('resize', environmentChanged);
+setInterval(() => { screenStatus(); if (T) refreshGeometry(); }, 1000);
 
 // ---------- buttons ----------
 document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { document.body.classList.toggle('quick', isQuick()); readSettings(); });
@@ -474,25 +762,73 @@ $('recSave').onclick = saveRecord;
 $('recCancel').onclick = () => { $('record').classList.add('hidden'); document.activeElement?.blur(); };
 $('start').onclick = startRun;
 $('resume').onclick = () => { if (T) { ui.manual = 1; show(); } else alert('Нет сохранённого прогона'); };
-$('calibBtn').onclick = calib;
+$('calibBtn').onclick = () => calib('camera');
+$('screenCalibBtn').onclick = () => calib('screen');
+$('invalidateScreen').onclick = () => { screenConfirmed = false; screenStatus(); };
+$('applyScreenCalib').onclick = () => {
+  const cssPx = $('screenLine').getBoundingClientRect().width, mm = num($('screenLineMm').value), factor = physicalScale(cssPx, mm);
+  if (!$('screenLineMm').validity.valid || factor == null) { $('screenCalibResult').textContent = 'Введите положительную измеренную длину линии в мм.'; return; }
+  SCREEN_CAL = { id: 'C' + Date.now() + '-' + Math.random().toString(16).slice(2, 8), created: new Date().toISOString(),
+    label: $('screenLabel').value.trim(), line_css_px: cssPx, line_mm: mm, mm_per_css_px: factor, environment: screenEnvironment() };
+  screenConfirmed = true; save('screen_calibration', SCREEN_CAL); readSettings(); screenStatus();
+  $('screenCalibResult').textContent = `Сохранено: ${factor.toFixed(6)} мм / CSS px. Для применения начните новый прогон.`;
+};
+$('editBounds').onclick = editBounds;
+$('boundImage').onchange = () => { boundsStatus(); readSettings(); };
+$('singleImage').onclick = () => {
+  const m = byId($('boundImage').value); if (!m) return;
+  const counts = Object.fromEntries(CATS.map(c => [c, c === m.category ? 1 : 0]));
+  if (setSample({ sample_id: 'S' + fnv(m.id), name: 'Один снимок ' + m.id, seed: 0, counts, ids: [m.id], created: new Date().toISOString(), manifest_version: window.MANIFEST.version })) { readSettings(); summary(); }
+};
+['boundX1', 'boundY1', 'boundX2', 'boundY2'].forEach(id => $(id).oninput = drawBounds);
+$('boundsCanvas').onpointerdown = e => {
+  const m = byId($('boundImage').value), c = $('boundsCanvas'), r = c.getBoundingClientRect();
+  if (!m || !ui.boundsImage) return;
+  ui.boundsDrag = [(e.clientX - r.left) / r.width * m.width, (e.clientY - r.top) / r.height * m.height]; c.setPointerCapture(e.pointerId);
+};
+$('boundsCanvas').onpointermove = e => {
+  if (!ui.boundsDrag) return;
+  const m = byId($('boundImage').value), r = $('boundsCanvas').getBoundingClientRect();
+  const x = Math.max(0, Math.min(m.width, (e.clientX - r.left) / r.width * m.width)), y = Math.max(0, Math.min(m.height, (e.clientY - r.top) / r.height * m.height));
+  const [x0, y0] = ui.boundsDrag; writeBoundsInputs([Math.min(x0, x), Math.min(y0, y), Math.max(x0, x), Math.max(y0, y)].map(v => +v.toFixed(2))); drawBounds();
+};
+$('boundsCanvas').onpointerup = () => { ui.boundsDrag = null; };
+$('boundsCanvas').onpointercancel = () => { ui.boundsDrag = null; };
+$('saveBounds').onclick = () => {
+  const m = byId($('boundImage').value), b = readBoundsInputs();
+  if (m.category === 'negative' || !validBounds(b, m.width, m.height)) { $('boundInfo').textContent = 'Задайте непустые границы внутри фотографии объекта. У пустого фона нет коптера.'; return; }
+  BOUNDS[m.id] = { bbox: b, image_width: m.width, image_height: m.height, image_sha256: m.sha256 || null, confirmed_at: new Date().toISOString() };
+  save('object_bounds', BOUNDS); readSettings(); openSettings();
+};
+$('removeBounds').onclick = () => { delete BOUNDS[$('boundImage').value]; save('object_bounds', BOUNDS); readSettings(); openSettings(); };
+$('closeBounds').onclick = openSettings;
+['recDroneWidth', 'recScreenWidth', 'recWidthSource'].forEach(id => $(id).oninput = refreshGeometry);
 $('calibApply').onclick = () => { const v = parseFloat($('calibMeasured').value); if (!(v > 0)) return; const k = v / 256; $('k').value = k.toFixed(4); readSettings();
   $('calibOut').textContent = `k = ${k.toFixed(4)} px кадра на 1 px монитора; объект 16 px в кадре = ${(16 / k).toFixed(0)} px монитора`; };
 $('exportCsv').onclick = () => download(`dronecv66_results_${Date.now()}.csv`, csv(), 'text/csv');
 $('exportJson').onclick = () => download(`dronecv66_session_${Date.now()}.json`, sessionJson(), 'application/json');
 $('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { let d; try { d = JSON.parse(t); } catch (x) { alert('Файл не JSON'); return; }
   if (d.format !== FORMAT) { alert('Неизвестный формат (нужен ' + FORMAT + ')'); return; }
+  screenConfirmed = false; // imported files cannot confirm the physical display of this browser
+  if (d.screen_calibration && positive(d.screen_calibration.mm_per_css_px)) { SCREEN_CAL = d.screen_calibration; save('screen_calibration', SCREEN_CAL); }
+  if (d.object_bounds && typeof d.object_bounds === 'object' && !Array.isArray(d.object_bounds)) {
+    for (const [id, b] of Object.entries(d.object_bounds)) { const m = byId(id);
+      if (m && !Object.hasOwn(BOUNDS, id) && b && b.image_width === m.width && b.image_height === m.height && b.image_sha256 === (m.sha256 || null) && validBounds(b.bbox, m.width, m.height)) BOUNDS[id] = b;
+    }
+    save('object_bounds', BOUNDS);
+  }
   if (d.sample && Array.isArray(d.sample.ids) && d.sample.ids.every(byId)) { SAMPLE = d.sample; save('sample', SAMPLE); writeCounts(SAMPLE.counts); $('seed').value = SAMPLE.seed; }
   if (d.trial) { T = d.trial; save('trial', T); }
   if (Array.isArray(d.runs)) { const have = new Set(RUNS.map(r => r.run_id)); RUNS = RUNS.concat(d.runs.filter(r => !have.has(r.run_id))); save('runs', RUNS); }
   if (Array.isArray(d.results) && d.results.length && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.run_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r))).map(normalizeRecord)); save('results', R); }
-  sampleInfo(); summary(); e.target.value = ''; }); };
+  sampleInfo(); summary(); screenStatus(); boundsStatus(); e.target.value = ''; }); };
 $('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); summary(); sampleInfo(); } };
 const LEGACY = localStorage.getItem('dronecv66.results');
 if (LEGACY && LEGACY !== '[]') { $('legacy').classList.remove('hidden'); $('legacy').onclick = () => download(`dronecv66_v1_results_${Date.now()}.json`, LEGACY, 'application/json'); }
 
 // ---------- init ----------
 if (!M.length) $('status').textContent = 'manifest.js не найден: запустите python3 fetch_images.py (скачает изображения и создаст manifest.js).';
-buildCats(); writeSettings(); sampleInfo(); summary();
+buildCats(); buildBoundsSelector(); writeSettings(); sampleInfo(); summary(); screenStatus(); boundsStatus();
 (function probe() { let missing = 0, done = 0; M.forEach(m => { const t = new Image(); t.onload = () => { ui.available[m.id] = true; fin(); }; t.onerror = () => { ui.available[m.id] = false; missing++; fin(); }; t.src = m.file; });
   function fin() { if (++done === M.length) { $('status').textContent = missing ? `Не найдено файлов: ${missing} из ${M.length}. Запустите: python3 fetch_images.py` : `Изображений: ${M.length}, все файлы на месте.`; sampleInfo(); } } })();
 </script>
