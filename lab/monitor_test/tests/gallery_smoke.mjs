@@ -25,7 +25,14 @@ const newCtx = () => browser.newContext({ viewport: { width: 1920, height: 1080 
 const LSK = 'dronecv66v2.';
 const ls = (page, k) => page.evaluate(k => JSON.parse(localStorage.getItem(k)), LSK + k);
 const visibleText = page => page.evaluate(() => document.body.innerText);
-async function dl(page, sel) { const [d] = await Promise.all([page.waitForEvent('download'), page.click(sel)]); return fs.readFileSync(await d.path(), 'utf8'); }
+async function dl(page, sel) {
+  const section = await page.evaluate(() => ui.section);
+  if (!await page.isVisible(sel)) await page.click('[data-section=results]');
+  const [d] = await Promise.all([page.waitForEvent('download'), page.click(sel)]);
+  const text = fs.readFileSync(await d.path(), 'utf8');
+  if (section !== 'results') await page.click(`[data-section=${section}]`);
+  return text;
+}
 
 const ctx = await newCtx();
 let page = await open(ctx);
@@ -42,6 +49,7 @@ const cnt = {}; cats.forEach(c => cnt[c] = (cnt[c] || 0) + 1);
 ok(smp.ids.length === 20 && JSON.stringify(cnt, Object.keys(PILOT).sort()) === JSON.stringify(PILOT, Object.keys(PILOT).sort()) && new Set(smp.ids).size === 20, 'pilot preset: 20 unique images, 5/5/3/3/2/2 by category');
 ok(/Пилот — 20 фото/.test(await page.textContent('#sampleInfo')) && !(await page.textContent('#sampleInfo')).includes(smp.ids[0]), 'sample info shown without image ids');
 // custom counts
+await page.locator('#advanced').evaluate(e => e.open = true);
 await page.fill('.catn[data-cat=civil_quadcopter]', '2'); for (const c of ['military_uav', 'uav_payload', 'bird', 'aircraft']) await page.fill(`.catn[data-cat=${c}]`, '0');
 await page.fill('.catn[data-cat=negative]', '1'); await page.fill('#seed', '5'); await page.click('#makeSample');
 const custom = await ls(page, 'sample');
@@ -56,7 +64,7 @@ await page.reload(); await page.waitForFunction(() => /Изображений/.t
 ok(JSON.stringify((await ls(page, 'sample')).ids) === JSON.stringify(smp.ids) && /Пилот/.test(await page.textContent('#sampleInfo')), 'sample persists after reload');
 
 // ---- quick run 1x ----
-await page.fill('#phone', 'Xiaomi 17T Pro'); await page.selectOption('#zoom', '1x'); await page.fill('#distance', '120');
+await page.locator('#advanced').evaluate(e => e.open = true); await page.fill('#phone', 'Xiaomi 17T Pro'); await page.selectOption('#zoom', '1x'); await page.fill('#distance', '120');
 await page.click('#start');
 ok(await page.isHidden('#settings') && await page.isHidden('#hud') && await page.isHidden('#answer'), 'clean display: no settings, captions or answers');
 const run1 = await ls(page, 'trial');
@@ -149,13 +157,17 @@ fs.writeFileSync('/tmp/dronecv66_session.json', JSON.stringify(js));
 // Older session results have no maximum-confidence field.
 const old = JSON.parse(JSON.stringify(js)); old.results.forEach(r => {
   for (const key of ['max_confidence_pct', 'drone_width_cm', 'drone_width_source', 'screen_object_width_mm', 'object_angular_width_deg', 'equivalent_distance_m']) delete r[key];
+  delete r.experiment_kind;
 }); delete old.size_summary;
+delete old.trial.settings.experiment_kind;
+old.runs.forEach(r => { if (r.trial?.settings) delete r.trial.settings.experiment_kind; });
 fs.writeFileSync('/tmp/dronecv66_session_old.json', JSON.stringify(old));
 { const c = await newCtx(); const p = await open(c); await p.setInputFiles('#importJson', '/tmp/dronecv66_session_old.json');
   await p.waitForFunction(() => JSON.parse(localStorage.getItem('dronecv66v2.results') || '[]').length === 22);
   const exported = await p.evaluate(() => JSON.parse(sessionJson()));
   ok(exported.results.every(r => r.max_confidence_pct === null), 'old JSON imports and re-exports with explicit null');
   ok(exported.results.every(r => r.drone_width_cm === null && r.screen_object_width_mm === null && r.equivalent_distance_m === null), 'old JSON has no invented physical sizes or distances');
+  ok(await p.evaluate(() => { const oldId = T.run_id; T = { run_id: 'synthetic-switch', settings: { experiment_kind: 'limit' } }; resumeKind('gallery'); return T.run_id === oldId; }), 'legacy trial without a mode marker resumes as gallery after a mode switch');
   await p.evaluate(results => localStorage.setItem('dronecv66v2.results', JSON.stringify(results)), old.results);
   await p.reload();
   ok((await p.evaluate(() => JSON.parse(sessionJson()))).results.every(r => r.max_confidence_pct === null), 'old localStorage results export with null');
@@ -163,7 +175,7 @@ fs.writeFileSync('/tmp/dronecv66_session_old.json', JSON.stringify(old));
   await p.close(); await c.close(); }
 
 // ---- advanced mode: sizes in three units ----
-await page.check('input[name=mode][value=advanced]');
+await page.locator('#advanced').evaluate(e => e.open = true); await page.check('input[name=mode][value=advanced]'); await page.locator('#recordAdvanced').evaluate(e => e.open = true);
 ok(await page.isVisible('fieldset.adv'), 'advanced mode shows extra parameters');
 await page.fill('.catn[data-cat=civil_quadcopter]', '3'); for (const c of ['military_uav', 'uav_payload', 'bird', 'aircraft', 'negative']) await page.fill(`.catn[data-cat=${c}]`, '0');
 await page.fill('#seed', '1'); await page.click('#makeSample');
@@ -220,14 +232,14 @@ ok(await page.inputValue('#recDroneWidth') === '60' && await page.inputValue('#r
 ok(await page.evaluate(() => { const p = document.getElementById('record'); return p.scrollWidth <= p.clientWidth + 1; }), 'physical record fields fit within panel width');
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT + '_range_record.png' });
 await page.keyboard.press('Escape'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('r');
-ok(await page.inputValue('#recDroneWidth') === '' && await page.inputValue('#recScreenWidth') === '', 'no physical dimensions carried to another image');
+ok(await page.inputValue('#recDroneWidth') === '57' && await page.inputValue('#recScreenWidth') === '', 'next image uses explicit default assumption, not previous measured width'); await page.fill('#recDroneWidth', ''); await page.locator('#recDroneWidth').blur();
 await page.keyboard.press('3'); await page.fill('#recCamPx', '16'); await page.click('#recSave');
 await page.keyboard.press('s');
 const physicalJson = JSON.parse(await dl(page, '#exportJson'));
 const group = physicalJson.size_summary.find(g => g.run_id === physicalRun.run_id && g.camera_px_source === 'measured');
 ok(group.checks === 2 && group.correct_detections === 1 && group.detection_rate === 0.5 && group.distance_known_count === 1 && group.equivalent_distance_min_m === 15, 'size summary: 2 tests / 1 TP / 50%, 1 known distance');
 ok(/50.0%/.test(await page.textContent('#summary')) && /15.00/.test(await page.textContent('#summary')), 'size summary rendered');
-if (process.env.SHOT) { await page.locator('#summary').scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT + '_range_summary.png' }); }
+if (process.env.SHOT) { await page.click('[data-section=results]'); await page.locator('#allSummaries').evaluate(e => e.closest('details').open = true); await page.locator('#summary').scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT + '_range_summary.png' }); await page.click('[data-section=gallery]'); }
 const physicalCsv = (await dl(page, '#exportCsv')).trim().split('\n'); const ph = physicalCsv[0].split(',');
 const pr = physicalCsv.slice(1).map(l => Object.fromEntries(l.split(',').map((v, i) => [ph[i], v]))).find(r => r.run_id === physicalRun.run_id && r.step === '0');
 ok(pr.drone_width_cm === '60' && pr.screen_object_width_mm === '60' && pr.equivalent_distance_m === '15', 'CSV contains measured widths and computed distance');

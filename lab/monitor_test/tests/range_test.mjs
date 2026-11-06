@@ -12,12 +12,25 @@ function definition(name) {
   return script.slice(start, end);
 }
 const ctx = vm.createContext({ R: [], RUNS: [], SAMPLE: null, T: null, S: null,
-  window: {}, FORMAT: 'dronecv66-session-2' });
+  window: {}, SCREEN_CAL: null, BOUNDS: {}, EXPERIMENTS: [], LOCAL_IMAGES: {}, REFERENCE_IMAGE: null, DEVICE_PROFILE: null, CAMERA_CAL: null, GALLERY_STATE: null, FORMAT: 'dronecv66-session-2' });
 vm.runInContext(script.match(/const DRONE_CATS = .*?;/)[0] + '\n' +
   script.match(/const COLS = \[[\s\S]*?\];/)[0] + '\n' +
-  ['positive', 'equivalentDistance', 'normalizeRecord', 'sizeSummary', 'csv', 'sessionJson'].map(definition).join('\n'), ctx);
+  ['positive', 'equivalentDistance', 'physicalScale', 'validBounds', 'physicalWidth', 'normalizeRecord', 'sizeSummary', 'median', 'repeatSummary', 'csv', 'sessionJson'].map(definition).join('\n'), ctx);
 const call = (fn, ...args) => ctx[fn](...args);
 assert.equal(call('equivalentDistance', 60, 150, 60), 15);
+assert.equal(call('equivalentDistance', 60, 150, 30), 30);
+assert.equal(call('equivalentDistance', 57, 150, 30), 28.5);
+assert.equal(call('physicalScale', 400, 100), 0.25);
+assert.equal(call('physicalWidth', [100, 50, 400, 200], 1000, 500, 0.4, 0.25), 30); // object, not 1000-px photo
+assert.equal(call('physicalWidth', [100, 50, 400, 200], 1000, 500, 0.2, 0.25), 15); // resize, no new ruler reading
+for (const invalid of [null, undefined, 0, -1, NaN, Infinity, '', '100']) {
+  assert.equal(call('physicalScale', invalid, 100), null);
+  assert.equal(call('physicalScale', 400, invalid), null);
+  assert.equal(call('physicalWidth', [0, 0, 100, 100], 1000, 500, 1, invalid), null);
+}
+assert.equal(call('physicalScale', 1e-300, 1e308), null);
+for (const b of [null, [], [0, 0, 0, 100], [-1, 0, 100, 100], [0, 0, 1001, 100], [0, 0, 100, 501], [0, 0, NaN, 100]])
+  assert.equal(call('physicalWidth', b, 1000, 500, 1, 0.25), null);
 for (const invalid of [null, undefined, 0, -1, NaN, Infinity, '', '60']) {
   for (let i = 0; i < 3; i++) {
     const args = [60, 150, 60]; args[i] = invalid;
@@ -40,6 +53,7 @@ assert.equal(old.equivalent_distance_m, null); // no fallback to approximate bbo
 assert.equal(call('normalizeRecord', { ...base, category: 'bird' }).equivalent_distance_m, null);
 assert.equal(call('normalizeRecord', { ...base, distance_cm: null }).object_angular_width_deg, null);
 assert.equal(call('normalizeRecord', { ...base, detection: 'no_box', max_confidence_pct: 80 }).max_confidence_pct, null);
+assert.equal(call('normalizeRecord', { ...base, screen_width_source: 'screen_calibration', screen_calibration_status: 'stale' }).equivalent_distance_m, null);
 
 ctx.R = [row,
   call('normalizeRecord', { ...base, step: 1, detection: 'no_box', result_class: 'FN', drone_width_cm: null }),
@@ -72,4 +86,17 @@ const csv = call('csv');
 assert.ok(csv.startsWith(fs.readFileSync(new URL('../results_template.csv', import.meta.url), 'utf8').trim() + '\n'));
 assert.ok(csv.includes('"TEST ONLY, width ""A"", B; C\nnot a real measurement"'));
 assert.ok(csv.includes(',60,"TEST ONLY'));
+const repeatBase = { ...base, drone_width_source: 'TEST ONLY', screen_object_width_mm: 30, size_level: 3, size_level_unit: 'screen_cm',
+  reference_status: 'conditional', max_confidence_pct: 80, stability_threshold_pct: 90, stability_min_attempts: 10, object_camera_width_px_measured: 12 };
+const repeated = Array.from({ length: 10 }, (_, i) => call('normalizeRecord', { ...repeatBase, step: i, attempt: i + 1,
+  result_class: i < 9 ? 'TP' : 'FN', detection: i < 9 ? 'box_on_object' : 'no_box', max_confidence_pct: i < 9 ? 80 + i : null }));
+const rs = call('repeatSummary', repeated);
+assert.equal(rs.length, 1);
+assert.equal(rs[0].checks, 10); assert.equal(rs[0].detection_rate, 0.9); assert.equal(rs[0].stability_met, true);
+assert.equal(rs[0].confidence_median_pct, 84); assert.equal(rs[0].confidence_known_count, 9);
+assert.equal(rs[0].equivalent_distance_m, 30); assert.equal(rs[0].reference_status, 'conditional');
+assert.equal(rs[0].camera_width_px_measured_median, 12);
+assert.equal(call('repeatSummary', repeated.slice(0, 1))[0].stability_met, null);
+assert.equal(call('repeatSummary', [...repeated, call('normalizeRecord', { ...repeatBase, app_conf_threshold_pct: 75 })]).length, 2);
+assert.equal(call('repeatSummary', [...repeated, call('normalizeRecord', { ...repeatBase, image_id: 'different' })]).length, 2);
 console.log('range, angle, missing/invalid values, legacy rows, size summary and CSV/JSON: OK');
