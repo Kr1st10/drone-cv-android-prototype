@@ -1,6 +1,15 @@
 # PROJECT_STATE.md
 
-_Обновлено: 2026-11-05. Android 0.5.1, существующая ветка PR #24 `codex/capture-latency-prediction`; в неё объединён main @ `684d780` (PR #23 и #25)._
+_Обновлено: 2026-11-07. Android 0.5.2, ветка `codex/camera-frame-ingress` от main `cb8b0ba`._
+
+## Независимый вход камеры и собственные снимки — 2026-11-07
+
+- Реализованы первые два шага: CameraX RGBA/KEEP_ONLY_LATEST копируется на VisionWorker, LiveFrameCapture закрывает ImageProxy до передачи собственного CameraFrameSnapshot. Все ORT-вызовы фото/камеры и release по-прежнему на общем DetectorWorker. Один выполняющийся и один заменяемый pending snapshot; пул максимум 3 ARGB-массива/16 MiB. Трекинг, grayscale-история, период YOLO и новые зависимости не добавлены; выбор максимального confidence остаётся независимым для отобранных YOLO-снимков.
+- Generation/source и диагностический token фиксируются до копирования. Stop/pause/rebind/error очищают pending; epoch pump не позволяет старой задаче обработать новый кадр раньше закрытия сессии. Пиксели возвращаются после infer/замены/ошибки; заимствованный convert не передаётся между workers. Превью/ViewPort, геометрия, FrameStamp и null-причины задержки сохранены. Дополнительно ограничены возраст и известное ожидание перед ORT.
+- В UI раздельно показаны входные FPS/счётчики и завершения YOLO. Корневая JSON schema 1 дополнена camera_input; signal payload v2 прежний. conversion_ms измеряется на входе, pipeline_ms складывает копирование и ML-работу без межпоточного ожидания; analyzer_to_signal включает ожидание. Python-анализатор проверяет новые счётчики/FPS и поддерживает прежние отчёты.
+- Локально SDK 35/JBR 21 Android Studio (bytecode target 17): assembleDebug, assembleDebugAndroidTest, testDebugUnitTest, lintDebug — успешно. Полный JVM-набор после исправления Stop/start: 143 теста, 141 passed/2 skipped (нет Python parity fixtures). После финальной защиты владения дополнительно 70 camera/diagnostics JVM-тестов — все passed. Python-анализатор: 26 passed. Kotlin serializer → Python проверен; 3 прежних JSON Mi 8 Lite, телефонные v1 и v2 — без ошибок. Lint: 0 ошибок, 44 Warning, 1 Information. Модель в APK проверена: SHA b4867481…f19eb7. Версия APK 0.5.2/7.
+- Независимое review нашло FIFO-проблему до старта pump; она исправлена и покрыта отдельным тестом. Повторное review ресурсов и канонических документов новых ошибок не нашло. Проверены Markdown, 293 локальные ссылки и текстовая санитария; Mermaid перечитан без parser/renderer. Каноническое описание — docs/guides/camera-frame-ingress.md; обновлены AGENTS и затронутые контракты/диаграммы/данные.
+- По указанию пользователя Android device/emulator tests и установка не выполнялись; assembleDebugAndroidTest только компилирует тестовый APK. Аппаратная частота входа, задержки и нагрев новой версии не измерены. Изменения публикуются в feature-ветку без PR: открытие PR существующим workflow автоматически запустило бы Android-эмулятор. Модель и настройки телефона не менялись. Прежние локальные записи сохранены отдельно от коммита.
 
 ## PR #24: задержка и центр текущего кадра без сопровождения — 2026-11-05
 

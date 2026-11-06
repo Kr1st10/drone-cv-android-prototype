@@ -1,6 +1,8 @@
 package ru.university.dronecv.diagnostics
 
 import kotlin.math.ceil
+import ru.university.dronecv.camera.CameraInputEvent
+import ru.university.dronecv.camera.CameraInputStats
 import ru.university.dronecv.camera.TargetSignal
 
 /** Statistics over measured frame durations in milliseconds; p95 is nearest rank. */
@@ -44,6 +46,7 @@ class DiagnosticFrames(private val capacity: Int = 100_000) {
     private var completed = 0L
     private var truncated = 0L
     private var staleDiscarded = 0L
+    private var input = CameraInputStats()
     private val frames = ArrayList<FrameMeasurement>()
 
     fun start(nowNanos: Long): Long = synchronized(lock) {
@@ -54,12 +57,16 @@ class DiagnosticFrames(private val capacity: Int = 100_000) {
         completed = 0
         truncated = 0
         staleDiscarded = 0
+        input = CameraInputStats()
         frames.clear()
         recording = true
         generation
     }
     fun currentToken(): Long? = synchronized(lock) { generation.takeIf { recording } }
     fun received(token: Long) = synchronized(lock) { if (recording && token == generation) received++ }
+    fun input(token: Long, event: CameraInputEvent, copyMs: Double = 0.0) = synchronized(lock) {
+        if (recording && token == generation) input = input.record(event, copyMs)
+    }
     fun discardStale(token: Long) = synchronized(lock) { if (recording && token == generation) staleDiscarded++ }
     fun completed(token: Long, endNanos: Long, conversionMs: Double, preprocessMs: Double,
                   inferenceMs: Double, postprocessMs: Double, pipelineMs: Double, targetSignal: TargetSignal? = null) = synchronized(lock) {
@@ -75,7 +82,8 @@ class DiagnosticFrames(private val capacity: Int = 100_000) {
         if (!recording || token != generation) return@synchronized null
         require(nowNanos >= startNanos)
         recording = false
-        DiagnosticFrameSnapshot(nowNanos - startNanos, received, completed, truncated, interrupted, reason, frames.toList(), staleDiscarded)
+        DiagnosticFrameSnapshot(nowNanos - startNanos, received, completed, truncated, interrupted, reason, frames.toList(), staleDiscarded,
+            input.copy(fps = if (nowNanos > startNanos) input.received * 1_000_000_000.0 / (nowNanos - startNanos) else null))
     }
 }
 
@@ -88,6 +96,7 @@ data class DiagnosticFrameSnapshot(
     val reason: String?,
     val frames: List<FrameMeasurement>,
     val staleFramesDiscarded: Long = 0,
+    val cameraInput: CameraInputStats = CameraInputStats(),
 ) {
     /** Session-wall-time throughput; pauses/stalls are included. Not camera FPS. */
     val processedFps: Double? get() = if (durationNanos > 0) completedFrames * 1_000_000_000.0 / durationNanos else null

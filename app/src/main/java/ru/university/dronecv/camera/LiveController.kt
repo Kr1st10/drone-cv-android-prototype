@@ -38,7 +38,7 @@ interface LiveBackend<Frame> : AutoCloseable {
 data class ThreadConfiguration(val threads: Int = 2, val switching: Boolean = false, val error: String? = null)
 
 /**
- * Synchronous analyzer: CameraX KEEP_ONLY_LATEST owns scheduling; there is no second frame queue.
+ * Native inference stays on [worker]. Camera input offers owned snapshots through a latest-only slot.
  * Main-thread controls only touch short state locks. Native calls and release stay on [worker].
  * Every frame is closed, even when stopped, superseded, or failing. Both results and errors carry
  * a generation, so stop/resume/threshold/rebind cannot publish an obsolete completion.
@@ -70,6 +70,125 @@ class LiveController<Frame : AutoCloseable>(
     private var revision = 0L
     private var source = 0L
     private val completions = ArrayDeque<Long>()
+    private val arrivals = ArrayDeque<Long>()
+    private val mutableInput = MutableStateFlow(CameraInputStats())
+    val input = mutableInput.asStateFlow()
+    private data class Pending<F>(val frame: F, val token: LiveFrameToken, val stamp: FrameStamp,
+                                 val preparationMs: Double, val queuedNs: Long)
+    private var pending: Pending<Frame>? = null
+    private var pumpScheduled = false
+    private var pumpEpoch = 0L
+
+    private fun valid(token: LiveFrameToken): Boolean = !closed && active &&
+        generation == token.generation && source == token.source && mutableState.value.phase != LivePhase.ERROR
+
+    private fun inputEvent(token: LiveFrameToken, event: CameraInputEvent, copyMs: Double = 0.0) {
+        token.diagnosticToken?.let { diagnostics?.input(it, event, copyMs) }
+        if (valid(token)) mutableInput.value = mutableInput.value.record(event, copyMs)
+    }
+
+    /** Called before copying, so a threshold/Stop change during preparation cannot retag an old frame. */
+    fun beginFrame(sourceId: Long, stamp: FrameStamp): LiveFrameToken? = synchronized(lock) {
+        val token = LiveFrameToken(generation, sourceId, diagnostics?.currentToken())
+        if (!valid(token)) return@synchronized null
+        inputEvent(token, CameraInputEvent.RECEIVED)
+        if (!valid(token)) return@synchronized null
+        arrivals.addLast(stamp.analyzerEntryNs)
+        while (arrivals.size > 30) arrivals.removeFirst()
+        val span = stamp.analyzerEntryNs - arrivals.first()
+        mutableInput.value = mutableInput.value.copy(fps = if (arrivals.size > 1 && span > 0)
+            (arrivals.size - 1) * 1_000_000_000.0 / span else null)
+        if (!valid(token)) return@synchronized null
+        if (stamp.ageAt(stamp.analyzerEntryNs)?.let { it > maxAnalyzerAgeMs } == true) {
+            inputEvent(token, CameraInputEvent.STALE)
+            token.diagnosticToken?.let { diagnostics?.discardStale(it) }
+            null
+        } else token
+    }
+
+    fun noFrameBuffer(token: LiveFrameToken) = synchronized(lock) { inputEvent(token, CameraInputEvent.NO_BUFFER) }
+
+    fun captureFailed(token: LiveFrameToken, message: String) = synchronized(lock) {
+        inputEvent(token, CameraInputEvent.ERROR)
+        fail(token.generation, message)
+    }
+
+    /** Takes ownership even on rejection. One current pump and one replaceable pending snapshot exist. */
+    fun offerFrame(frame: Frame, token: LiveFrameToken, stamp: FrameStamp, preparationMs: Double) {
+        var retained = false
+        try {
+            if (!preparationMs.isFinite() || preparationMs < 0) {
+                captureFailed(token, "Некорректное время копирования кадра.")
+                return
+            }
+            val schedule = synchronized(lock) {
+                inputEvent(token, CameraInputEvent.COPIED, preparationMs)
+                if (!valid(token)) {
+                    inputEvent(token, CameraInputEvent.INVALIDATED)
+                    return@synchronized null
+                }
+                val next = Pending(frame, token, stamp, preparationMs, nanoTime())
+                val previous = pending
+                pending = next
+                retained = true
+                if (previous != null) {
+                    try { inputEvent(previous.token, CameraInputEvent.SUPERSEDED) }
+                    finally { previous.frame.close() }
+                }
+                if (pumpScheduled) null else { pumpScheduled = true; pumpEpoch }
+            }
+            if (schedule != null) schedulePump(schedule)
+        } finally {
+            // Allocation/clock failures before storing pending must still return the offered lease.
+            if (!retained) frame.close()
+        }
+    }
+
+    private fun clearPending() {
+        val old = pending
+        pending = null
+        if (old != null) {
+            inputEvent(old.token, CameraInputEvent.INVALIDATED)
+            old.frame.close()
+        }
+    }
+
+    private fun invalidatePending() {
+        pumpEpoch++
+        pumpScheduled = false
+        clearPending()
+    }
+
+    private fun schedulePump(epoch: Long) {
+        try { worker.execute { runPending(epoch) } }
+        catch (_: java.util.concurrent.RejectedExecutionException) {
+            synchronized(lock) {
+                if (epoch != pumpEpoch) return@synchronized
+                val id = pending?.token?.generation
+                pumpScheduled = false
+                clearPending()
+                // A rejected worker cannot perform release; never move native close to the input thread.
+                if (id != null) fail(id, "Worker обработки кадров недоступен.", release = false)
+            }
+        }
+    }
+
+    private fun runPending(epoch: Long) {
+        val next = synchronized(lock) {
+            if (epoch != pumpEpoch) return
+            pending.also { pending = null }
+        }
+        try {
+            if (next != null) analyze(next.frame, next.token.source, next.stamp, next.token,
+                next.preparationMs, next.queuedNs)
+        } finally {
+            val again = synchronized(lock) {
+                if (epoch != pumpEpoch) false
+                else if (pending == null) { pumpScheduled = false; false } else true
+            }
+            if (again) schedulePump(epoch) // yield to close/configuration/photo tasks already queued.
+        }
+    }
 
     fun configure(enabled: Boolean, threshold: Float) = synchronized(lock) {
         require(threshold in 0.01f..1f)
@@ -79,6 +198,10 @@ class LiveController<Frame : AutoCloseable>(
         confidence = threshold
         val configuredGeneration = ++generation
         completions.clear()
+        arrivals.clear()
+        invalidatePending()
+        if (wasActive && !active) worker.execute { backend.close() }
+        mutableInput.value = CameraInputStats()
         mutableSignals.value = null
         if (generation == configuredGeneration && !closed) {
             mutableState.value = LiveState(
@@ -86,7 +209,6 @@ class LiveController<Frame : AutoCloseable>(
                 revision = ++revision,
             )
         }
-        if (wasActive && !active) worker.execute { backend.close() }
     }
 
     /** Apply only after stopping detection and recording; all session work is ordered on the ML worker. */
@@ -126,24 +248,35 @@ class LiveController<Frame : AutoCloseable>(
         ++source
     }
 
-    /** Call only on the worker supplied to CameraX.setAnalyzer. */
-    fun analyze(frame: Frame, sourceId: Long? = null, stamp: FrameStamp? = null) {
+    /** Synchronous ML-worker entry for owned frames; CameraX uses LiveFrameCapture/offerFrame instead. */
+    fun analyze(frame: Frame, sourceId: Long? = null, stamp: FrameStamp? = null) =
+        analyze(frame, sourceId, stamp, null, 0.0, null)
+
+    private fun analyze(frame: Frame, sourceId: Long?, stamp: FrameStamp?, ticket: LiveFrameToken?,
+                        preparationMs: Double, queuedNs: Long?) {
         try {
             val request = synchronized(lock) {
-                if (closed || !active || busy || (sourceId != null && sourceId != source) ||
+                if (closed || !active || busy || (ticket != null && !valid(ticket)) || (sourceId != null && sourceId != source) ||
                     mutableState.value.phase == LivePhase.ERROR) null
                 else { busy = true; generation to confidence }
             } ?: return
-            val token = diagnostics?.currentToken()
+            val token = if (ticket != null) ticket.diagnosticToken else diagnostics?.currentToken()
             try {
                 if (stamp?.ageAt(stamp.analyzerEntryNs)?.let { it > maxAnalyzerAgeMs } == true) {
                     if (token != null) diagnostics?.discardStale(token)
                     return
                 }
-                if (token != null) diagnostics?.received(token)
                 val start = nanoTime()
+                if (queuedNs != null && ((start - queuedNs) / 1_000_000.0 > maxAnalyzerAgeMs ||
+                    (stamp != null && eventTime != null && stamp.ageAt(eventTime())?.let { it > maxAnalyzerAgeMs } == true))) {
+                    synchronized(lock) { if (ticket != null) inputEvent(ticket, CameraInputEvent.STALE) }
+                    if (token != null) diagnostics?.discardStale(token)
+                    return
+                }
+                if (token != null) diagnostics?.received(token)
                 val result = backend.infer(frame, request.second)
                 val end = nanoTime()
+                val processingMs = preparationMs + (end - start) / 1_000_000.0
                 synchronized(lock) {
                     if (!closed && active && generation == request.first) {
                         val selected = selectTarget(result.detections, result.width, result.height)
@@ -159,13 +292,13 @@ class LiveController<Frame : AutoCloseable>(
                         val signal = if (stamp != null && eventTime != null) targetSignal(++frameId, source, stamp,
                             eventTime(), result.width, result.height, selected) else null
                         val next = LiveState(
-                            LivePhase.RUNNING, result, (end - start) / 1_000_000.0, fps,
+                            LivePhase.RUNNING, result, processingMs, fps,
                             previous.completedFrames + 1, revision = ++revision, target = signal,
                         )
                         mutableSignals.value = signal
                         if (token != null && result.conversionMs != null && result.preprocessMs != null && result.postprocessMs != null) {
                             diagnostics?.completed(token, end, result.conversionMs, result.preprocessMs,
-                                result.inferenceMs, result.postprocessMs, (end - start) / 1_000_000.0, signal)
+                                result.inferenceMs, result.postprocessMs, processingMs, signal)
                         }
                         // An unconfined signal subscriber may synchronously stop/reconfigure this controller.
                         if (!closed && active && generation == request.first) mutableState.value = next
@@ -183,14 +316,15 @@ class LiveController<Frame : AutoCloseable>(
         }
     }
 
-    private fun fail(id: Long, message: String) = synchronized(lock) {
+    private fun fail(id: Long, message: String, release: Boolean = true) = synchronized(lock) {
         if (closed || !active || generation != id) return@synchronized
         val failureGeneration = ++generation
+        invalidatePending()
+        if (release) worker.execute { backend.close() }
         mutableSignals.value = null
         if (generation == failureGeneration && !closed && active) {
             mutableState.value = LiveState(LivePhase.ERROR, error = message, revision = ++revision)
         }
-        worker.execute { backend.close() }
     }
 
     /** Clear boxes if the camera stops supplying frames without reporting an error. */
@@ -211,6 +345,7 @@ class LiveController<Frame : AutoCloseable>(
         active = false
         generation++
         source++
+        invalidatePending()
         mutableSignals.value = null
         mutableState.value = LiveState(revision = ++revision)
         worker.execute { backend.close() } // ordered after any in-flight native call; never wait on UI.
