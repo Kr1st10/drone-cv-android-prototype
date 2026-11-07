@@ -1,0 +1,354 @@
+/* Local reference photographs. Missing identity/projection evidence must never produce metres. */
+(function (root) {
+  'use strict';
+  const profiles = [
+    {
+      "id": "skydroid_mx330t",
+      "model": "Skydroid MX330T",
+      "dimensions_mm": [
+        578.5,
+        528.7,
+        80.5
+      ],
+      "propeller_in": 10,
+      "source": "https://manuals.plus/m/cdf383498692198d887fa10755c69ab9184b1a1d70a87d5783d38abe953515f9",
+      "dimension_note": "Габариты с установленными пропеллерами; руководство MX330T, раздел 12.",
+      "photos": [
+        {
+          "id": "skydroid_top",
+          "view": "top",
+          "label": "Сверху — кандидат MX330/MX330T",
+          "file": "reference_assets/skydroid_top.jpg",
+          "width": 416,
+          "height": 416,
+          "bounds_px": [
+            90,
+            117,
+            330,
+            297
+          ],
+          "url": "https://rcdrone.top/cdn/shop/files/Skydroid-MX330T-AI-FPV-Drone-24.webp?v=1743424171&width=416",
+          "source": "https://rcdrone.top/products/skydroid-mx330-mx330t-drone",
+          "sha256": "659839b4f3f303ce8e66663ae1751858bb65aa865ed3e875317ce885e6f93f0a",
+          "model_confirmed": false,
+          "object_complete": true,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "Модификация MX330T не подтверждена общей карточкой. Габариты L/W не размечены на исходнике; положение лопастей отличается от предельного паспортного контура."
+        },
+        {
+          "id": "skydroid_front",
+          "view": "front",
+          "label": "Спереди — MX330T",
+          "file": "reference_assets/skydroid_front.jpg",
+          "width": 1000,
+          "height": 1000,
+          "bounds_px": [
+            0,
+            260,
+            1000,
+            670
+          ],
+          "url": "https://funyat.com/cdn/shop/files/mx330t-drone-thermal-imaging.jpg?v=1758160978&width=1445",
+          "source": "https://funyat.com/products/mx330t-10inch-fpv-drone-dual-light-2k-camera-thermal-imaging-drone-20km-gps-3kg-payload-rtk-ai-tracking-folding-quadcopter",
+          "sha256": "c8649c9ec2518d91df67fc1efec44ff099205297277fe13c73cfc3d787f1a406",
+          "model_confirmed": true,
+          "object_complete": false,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "Фронтальный перспективный ракурс; пропеллеры у краёв файла обрезаны. Верхние L/W нельзя приравнивать к горизонтали снимка."
+        },
+        {
+          "id": "skydroid_oblique_candidate",
+          "view": "oblique_candidate",
+          "label": "Под углом — источник указывает MX330, версия T не подтверждена",
+          "file": "reference_assets/skydroid_oblique_candidate.png",
+          "width": 800,
+          "height": 800,
+          "bounds_px": [
+            25,
+            230,
+            790,
+            570
+          ],
+          "url": "https://ecdn6-nc.globalso.com/upload/p/1618/image_product/2024-08/high-precision-ultra-fast-flying-drones-mx330-4.png",
+          "source": "https://www.edinguas.com/high-precision-ultra-fast-flying-drones-mx330/",
+          "sha256": "1cf0d7f251fc130c672fb1e53770d583bb2207e0372a228d197719a122d4930a",
+          "model_confirmed": false,
+          "object_complete": true,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "На странице источника указана MX330, не подтверждён MX330T. Снимок показан для просмотра, исключён из метрических эталонов; перспектива и размытие винтов."
+        }
+      ]
+    },
+    {
+      "id": "unik_sd_10ufp",
+      "model": "UNIK SD-10UFP",
+      "dimensions_mm": [
+        590,
+        530,
+        200
+      ],
+      "propeller_in": 10,
+      "source": "https://nebodron.com.ua/en/drons/fpv-dron-10-dyujmiv-unik-sd-10ufp-z-s-stjemoyu-iniciaci-ta-djetjektorom-bpla-tinysa-ultra-en",
+      "dimension_note": "W × D × H = 590 × 530 × 200 мм с пропеллерами и антенной; подтверждено индексированным текстом источника. Живая страница HTTP 525; пиксельные оси не установлены.",
+      "photos": [
+        {
+          "id": "unik_near_top",
+          "view": "near_top",
+          "label": "Почти сверху — недоступно",
+          "file": null,
+          "width": null,
+          "height": null,
+          "bounds_px": null,
+          "url": "https://nebodron.com.ua/image/cache/catalog/Drone%20Initiation/7-800x800.jpg",
+          "source": "https://nebodron.com.ua/en/drons/fpv-dron-10-dyujmiv-unik-sd-10ufp-z-s-stjemoyu-iniciaci-ta-djetjektorom-bpla-tinysa-ultra-en",
+          "sha256": null,
+          "model_confirmed": false,
+          "object_complete": false,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "Файл 7: HTTPS 525, HTTP 404; копии в предоставленном ZIP нет. Оси W/D включают антенну, привязка точек и перспектива не проверены."
+        },
+        {
+          "id": "unik_oblique_a",
+          "view": "oblique",
+          "label": "Под углом ¾ (A) — недоступно",
+          "file": null,
+          "width": null,
+          "height": null,
+          "bounds_px": null,
+          "url": "https://nebodron.com.ua/image/cache/catalog/Drone%20Initiation/3-800x800.jpg",
+          "source": "https://nebodron.com.ua/en/drons/fpv-dron-10-dyujmiv-unik-sd-10ufp-z-s-stjemoyu-iniciaci-ta-djetjektorom-bpla-tinysa-ultra-en",
+          "sha256": null,
+          "model_confirmed": false,
+          "object_complete": false,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "Файл 3: HTTPS 525, HTTP 404; копии в предоставленном ZIP нет. Без изображения невозможно проверить модель, перспективу и измерительные точки."
+        },
+        {
+          "id": "unik_oblique_b",
+          "view": "oblique",
+          "label": "Под углом ¾ (B) — недоступно",
+          "file": null,
+          "width": null,
+          "height": null,
+          "bounds_px": null,
+          "url": "https://nebodron.com.ua/image/cache/catalog/Drone%20Initiation/6-800x800.jpg",
+          "source": "https://nebodron.com.ua/en/drons/fpv-dron-10-dyujmiv-unik-sd-10ufp-z-s-stjemoyu-iniciaci-ta-djetjektorom-bpla-tinysa-ultra-en",
+          "sha256": null,
+          "model_confirmed": false,
+          "object_complete": false,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "Файл 6: HTTPS 525, HTTP 404; копии в предоставленном ZIP нет. Без изображения невозможно проверить модель, перспективу и измерительные точки."
+        }
+      ]
+    },
+    {
+      "id": "gedz_10_dji",
+      "model": "GEDZ 10 DJI",
+      "dimensions_mm": [
+        500,
+        419,
+        60
+      ],
+      "propeller_in": 10,
+      "source": "https://gedz.tech/gedz-10-dji",
+      "dimension_note": "Производитель: 500 × 419 × 60 мм с пропеллерами; без них 335 × 251 × 60 мм.",
+      "photos": [
+        {
+          "id": "gedz_top",
+          "view": "top",
+          "label": "Плановый ракурс с оснасткой — верх не подтверждён",
+          "file": "reference_assets/gedz_top.png",
+          "width": 800,
+          "height": 800,
+          "bounds_px": [
+            85,
+            147,
+            722,
+            665
+          ],
+          "url": "https://flasharmy-cdn.fsn1.your-objectstorage.com/image/cache/new-goods/fpvdrone1_4-800x800.png",
+          "source": "https://flasharmy.com.ua/bpla-gedz-10-dji",
+          "sha256": "7e4cd764af0f2bf0bc420a3658462b04e179325f9a4d80c3295e21c41498be44",
+          "model_confirmed": true,
+          "object_complete": true,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "Габариты с пропеллерами 500 × 419 мм подтверждены, но размерных линий к фото нет. Положение лопастей, проекция и соответствие концов оси не установлены; наличие цилиндра само по себе не запрещает ось рамы."
+        },
+        {
+          "id": "gedz_oblique",
+          "view": "oblique",
+          "label": "Под углом ¾ — конфигурация не подтверждена",
+          "file": "reference_assets/gedz_oblique.png",
+          "width": 800,
+          "height": 800,
+          "bounds_px": [
+            0,
+            16,
+            797,
+            595
+          ],
+          "url": "https://flasharmy-cdn.fsn1.your-objectstorage.com/image/cache/new-goods/fpvdrone1_1-800x800.png",
+          "source": "https://flasharmy.com.ua/bpla-gedz-10-dji",
+          "sha256": "ad85555e540da64dcad12f2d9e8f78f7a09991536469ffaef2c7754ba96ade38",
+          "model_confirmed": false,
+          "object_complete": false,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "Карточка GEDZ 10 DJI, но комплектующие/конфигурация отличаются от планового снимка и не верифицированы. Перспектива и обрезка пропеллера у края; метрическая привязка отсутствует."
+        },
+        {
+          "id": "gedz_side",
+          "view": "side",
+          "label": "Профиль с цилиндрической оснасткой",
+          "file": "reference_assets/gedz_side.png",
+          "width": 800,
+          "height": 800,
+          "bounds_px": [
+            0,
+            260,
+            800,
+            590
+          ],
+          "url": "https://flasharmy-cdn.fsn1.your-objectstorage.com/image/cache/new-goods/fpvdrone1_6-800x800.png",
+          "source": "https://flasharmy.com.ua/bpla-gedz-10-dji",
+          "sha256": "50ade8bf44ae4ca0b7f0676abbfee014677268c73618e53a3c9cc8e39462742b",
+          "model_confirmed": true,
+          "object_complete": false,
+          "projection_confirmed": false,
+          "axis": null,
+          "issue": "Профиль с оснасткой; концы пропеллеров обрезаны границами файла. Верхние размеры 500/419 мм не соответствуют видимому отрезку профиля."
+        }
+      ]
+    }
+  ];
+  const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+
+  /**
+   * Measure the annotated object in CSS pixels, then reuse the gallery's mm and range functions.
+   * `render` is the actually loaded image/scale and unclipped-object flag, never a desired CSS size.
+   * `render.photo_id` selects that photo only; omitted IDs select the primary photo, unknown IDs return nulls.
+   * A quantitative photo needs confirmed identity/projection plus axis {from, to, real_cm, source}.
+   * Returns null for unavailable/unverified geometry; no side effects or guessed dimensions.
+   */
+  function measure(profile, render, distanceCm, mmPerCssPx, geometry) {
+    const p = render?.photo_id ? profile?.photos?.find(p => p.id === render.photo_id) : profile?.photos?.[0];
+    const empty = { display_width_cm: null, display_axis_cm: null, equivalent_distance_m: null };
+    if (!p?.file || p.object_complete === false || !render?.visible || render.width !== p.width || render.height !== p.height) return empty;
+    const width = geometry.physicalWidth(p.bounds_px, p.width, p.height, render.scale, mmPerCssPx);
+    const result = { ...empty, display_width_cm: positive(width) ? width / 10 : null };
+    const a = p.axis;
+    if (p.object_complete === false || !p.model_confirmed || !p.projection_confirmed || !a || !positive(a.real_cm) || !a.source ||
+        ![a.from, a.to].every(v => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite) &&
+          v[0] >= p.bounds_px?.[0] && v[0] <= p.bounds_px?.[2] && v[1] >= p.bounds_px?.[1] && v[1] <= p.bounds_px?.[3])) return result;
+    const axisMm = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) * render.scale * mmPerCssPx;
+    if (positive(width) && positive(axisMm)) {
+      result.display_axis_cm = axisMm / 10;
+      result.equivalent_distance_m = geometry.equivalentDistance(a.real_cm, distanceCm, axisMm);
+    }
+    return result;
+  }
+
+  /** Mount only the new tab. Settings use their own storage key; legacy trials/results are untouched. */
+  function mount({ element, load, save, getCalibration, getDistance, geometry }) {
+    const saved = load('reference_tab', {});
+    let selected = profiles.find(p => p.id === saved?.model_id) || profiles[0];
+    let scale = positive(saved?.scale_percent) && saved.scale_percent <= 200 ? saved.scale_percent : 100;
+    let loaded = false;
+    element.innerHTML = `
+      <h3>Эксперимент с эталонными БПЛА</h3>
+      <label>Коптер <select id="referenceDrone"></select></label>
+      <label>Фотография <select id="referencePhotoSelect"></select></label>
+      <p><span id="referenceDimensions"></span> · <span id="referenceSpecSource"></span></p>
+      <p id="referenceView"></p>
+      <div id="referenceViewport"><img id="referenceDisplay" alt=""><p id="referenceMissing" class="hidden">Фотография недоступна.</p></div>
+      <p><label>Масштаб <input id="referenceScale" type="range" min="0.1" max="200" step="0.1"></label>
+      <label><input id="referenceScaleNumber" type="number" min="0.1" max="200" step="any" aria-label="Масштаб фотографии, %"> %</label>
+      <button id="referenceHalf">Уменьшить вдвое</button><button id="referenceDouble">Увеличить вдвое</button></p>
+      <p id="referenceReadout" aria-live="polite"></p><p id="referenceIssue" class="warn"></p>
+      <p class="muted">Лабораторная эквивалентная дальность по угловому размеру. Не измерение дальности обнаружения в полёте.</p>
+      <details><summary>Дополнительно: источник фотографии и геометрия</summary>
+        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. При обрезке объекта расчёт недоступен.</p>
+        <p id="referenceDimensionNote"></p><p id="referenceDiagnostics"></p><p id="referencePhotoSource"></p>
+        <p>Разрешение авторов на использование и публикацию фотографий подтверждено пользователем 2026-11-06. Это не подтверждение проекции.</p>
+      </details>`;
+    const $ = id => element.querySelector('#' + id);
+    const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), image = $('referenceDisplay'), viewport = $('referenceViewport');
+    let photo = selected.photos.find(p => p.id === saved?.photo_id) || selected.photos[0];
+    for (const p of profiles) select.add(new Option(p.model, p.id));
+    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale }); }
+    function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
+    function choosePhoto() {
+      photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
+      const p = photo; loaded = false; image.removeAttribute('src');
+      $('referenceDimensions').textContent = `${selected.dimensions_mm.join(' × ')} мм; пропеллеры ${selected.propeller_in}″`;
+      $('referenceDimensionNote').textContent = selected.dimension_note;
+      link($('referenceSpecSource'), selected.source, 'Источник характеристик');
+      link($('referencePhotoSource'), p.source, 'Страница источника фотографии');
+      $('referenceView').textContent = p.label;
+      image.alt = selected.model + ' — ' + p.label;
+      const expected = p.file && new URL(p.file, document.baseURI).href;
+      image.onload = () => {
+        if (image.currentSrc !== expected || photo.id !== p.id) return;
+        loaded = image.naturalWidth === p.width && image.naturalHeight === p.height; update();
+      };
+      image.onerror = () => { if (photo.id === p.id) { loaded = false; update(); } };
+      if (p.file) image.src = p.file;
+      persist(); update();
+    }
+    function chooseModel(preferredPhoto = null) {
+      selected = profiles.find(p => p.id === select.value) || profiles[0];
+      photoSelect.replaceChildren();
+      for (const p of selected.photos) photoSelect.add(new Option(p.label, p.id));
+      photoSelect.value = selected.photos.some(p => p.id === preferredPhoto) ? preferredPhoto : selected.photos[0].id;
+      choosePhoto();
+    }
+    function update() {
+      const p = photo, cal = getCalibration();
+      $('referenceScale').value = scale;
+      if (document.activeElement !== $('referenceScaleNumber')) $('referenceScaleNumber').value = scale;
+      image.style.width = p.width * scale / 100 + 'px';
+      image.classList.toggle('hidden', !loaded);
+      $('referenceMissing').classList.toggle('hidden', loaded);
+      const r = image.getBoundingClientRect(), v = viewport.getBoundingClientRect(), b = p.bounds_px;
+      const panel = element.closest('.panel'), clip = panel.getBoundingClientRect();
+      const left = Math.max(v.left, 0, clip.left + panel.clientLeft), top = Math.max(v.top, 0, clip.top + panel.clientTop);
+      const right = Math.min(v.right, innerWidth, clip.left + panel.clientLeft + panel.clientWidth);
+      const bottom = Math.min(v.bottom, innerHeight, clip.top + panel.clientTop + panel.clientHeight);
+      const actualScale = p.width ? r.width / p.width : null;
+      const visible = loaded && !!b && r.left + b[0] * actualScale >= left - 0.1 && r.top + b[1] * actualScale >= top - 0.1 &&
+        r.left + b[2] * actualScale <= right + 0.1 && r.top + b[3] * actualScale <= bottom + 0.1;
+      const m = measure(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible },
+        getDistance(), cal?.mm_per_css_px, geometry);
+      const fmt = n => n == null ? 'нет данных' : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+      $('referenceReadout').textContent = `Масштаб: ${scale} %. До экрана: ${fmt(getDistance())} см. Ширина силуэта на экране: ${fmt(m.display_width_cm)} см. Эквивалентная дальность: ${fmt(m.equivalent_distance_m)} м.`;
+      if (m.display_axis_cm != null) $('referenceReadout').textContent += ` Размер расчётной оси: ${fmt(m.display_axis_cm)} см.`;
+      $('referenceIssue').textContent = [p.issue, !loaded ? 'Локальная фотография не загружена.' : !visible ? 'Объект обрезан видимой областью. Уменьшите масштаб или прокрутите к фотографии.' : '',
+        !$('referenceScaleNumber').validity.valid ? 'Некорректный масштаб: применяется последнее допустимое значение.' : '',
+        !cal ? 'Нужна актуальная калибровка экрана.' : '', !positive(getDistance()) ? 'Введите расстояние от камеры до экрана.' : ''].filter(Boolean).join(' ');
+      $('referenceDiagnostics').textContent = `ID: ${selected.id}; ракурс: ${p.view}; границы файла [x1, y1, x2, y2]: ${b ? b.join(', ') : 'нет'}; физическая ось: ${p.axis ? JSON.stringify(p.axis) : 'не подтверждена'}.`;
+      return { model_id: selected.id, photo_id: p.id, view: p.view, scale_percent: scale, screen_distance_cm: getDistance(),
+        display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
+    }
+    function setScale(value) {
+      const n = Number(value);
+      if (!positive(n) || n < 0.1 || n > 200) { $('referenceScaleNumber').setCustomValidity('Введите масштаб от 0,1 до 200 %.'); update(); return; }
+      $('referenceScaleNumber').setCustomValidity(''); scale = n; persist(); update();
+    }
+    select.onchange = () => chooseModel();
+    photoSelect.onchange = choosePhoto;
+    $('referenceScale').oninput = e => setScale(e.target.value);
+    $('referenceScaleNumber').oninput = e => setScale(e.target.value);
+    $('referenceHalf').onclick = () => setScale(Math.max(0.1, scale / 2));
+    $('referenceDouble').onclick = () => setScale(Math.min(200, scale * 2));
+    select.value = selected.id; chooseModel(photo.id);
+    return { update, snapshot: update };
+  }
+  root.DroneReferences = { profiles, measure, mount };
+})(typeof window === 'undefined' ? globalThis : window);
