@@ -13,6 +13,7 @@
 - `camera/CameraPreview.kt` — общий ViewPort Preview/ImageAnalysis, привязка к lifecycle и display rotation.
 - `camera/LiveController.kt` — latest-only очередь собственных снимков, generation/source/pump tokens; `AndroidLiveBackend` читает CameraFrameSnapshot на общем ML-worker.
 - `camera/TargetSignal.kt` — FrameStamp, выбор максимального confidence в текущем кадре и пиксельный центр; внутренний сигнал через StateFlow и диагностический JSON, без сопоставления объектов между кадрами.
+- `tracking/` — экспериментальные LK/TrackingSession и bounded grayscale-история; пока не подключены к камере/сигналу. Контракт владения и дальнейшего подключения — `docs/guides/visual-tracking-core.md`.
 - `detection/DetectorWorker.kt` — единственный process-wide ML-worker для фото и видео; ORT CPU sequential/2 потока без spinning.
 - `detection/ObjectDetector.kt` — контракт детектора (`ObjectDetector`, `Detection`, `NormalizedBox`).
 - `detection/onnx/` — Android-адаптер, проверка файла и общий JVM/Android ORT-движок; `detection/yolo/` — чистые Kotlin pre/postprocessing.

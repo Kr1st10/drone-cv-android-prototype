@@ -7,6 +7,7 @@ lifecycle = "2.8.7"
 composeBom = "2024.12.01"
 camerax = "1.4.1"
 onnxruntime = "1.31.1"
+opencv = "4.12.0"
 coroutines = "1.8.1"
 junit = "4.13.2"
 androidxTestExtJunit = "1.2.1"
@@ -32,6 +33,7 @@ androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycl
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 onnxruntime-jvm = { group = "com.microsoft.onnxruntime", name = "onnxruntime", version.ref = "onnxruntime" }
+opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }

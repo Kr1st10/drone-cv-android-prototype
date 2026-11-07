@@ -14,6 +14,7 @@
 | Compose BOM / Material 3 | 2024.12.01 / версия из BOM |
 | CameraX / lifecycle / activity-compose | 1.4.1 / 2.8.7 / 1.9.3 |
 | ONNX Runtime Android и JVM | 1.31.1 |
+| OpenCV Android (экспериментальное ядро) | 4.12.0; [статус и параметры](../guides/visual-tracking-core.md) |
 | Coroutines / ExifInterface / core-ktx | 1.8.1 / 1.3.7 / 1.15.0 |
 | JUnit / AndroidX test ext / runner | 4.13.2 / 1.2.1 / 1.6.2 |
 | applicationId / versionName / versionCode | `ru.university.dronecv` / `0.5.2` / `7` |

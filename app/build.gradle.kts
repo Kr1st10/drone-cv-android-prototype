@@ -128,6 +128,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.onnxruntime.android)
+    implementation(libs.opencv)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)

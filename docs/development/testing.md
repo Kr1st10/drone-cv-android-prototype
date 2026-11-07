@@ -87,3 +87,7 @@ python3 ml/scripts/analyze_android_sessions.py /absolute/path/to/report.json --o
 LiveFrameCaptureTest использует отдельный заблокированный backend: последующие входы завершают копирование/close, pending заменяется, инференсы остаются последовательными. Проверяются Stop/start до запуска pump и во время infer, порог во время copy, rejected worker, stale очередь и diagnostic tokens. CameraFramePoolTest проверяет лимит 3 массива/16 MiB, смену crop, повторный release и сохранность собственных пикселей. Это JVM-проверки управления ресурсами, не аппаратные показатели камеры.
 
 Новый camera_input читается Python-анализатором вместе со старыми отчётами без этого поля. Для конкретного этапа допускается только локальная сборка/JVM/lint; assembleDebugAndroidTest не запускает Android-тесты. Поведение на телефоне и частота входа требуют отдельного последующего испытания по [контракту](../guides/camera-frame-ingress.md).
+
+## Экспериментальный трекер
+
+GrayFrameTest и TrackingSessionTest проверяют владение пикселями, повороты, bounded историю, период YOLO, выбор той же цели, TTL и отклонение устаревшей коррекции. Fake VisualTracker в JVM проверяет управление, а не optical flow. OpenCvLkInstrumentedTest выполняет настоящий OpenCV LK на перемещаемом текстурном фрагменте и проверяет потерю при исчезновении/непригодной текстуре. Этот Android-тест включается в общий запуск instrumentation CI; его компиляция не доказывает выполнение. Ядро пока не подключено к runtime камеры, см. [границы этапа](../guides/visual-tracking-core.md).

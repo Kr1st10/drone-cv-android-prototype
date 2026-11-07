@@ -4,6 +4,8 @@
 
 ## Детектор и движок
 
+Экспериментальные `tracking/VisualTracker` и `TrackingSession` пока не вызываются из runtime камеры и не меняют TargetSignal v2. Их single-owner API, временные проверки и владение коррекцией описаны отдельно: [ядро визуального трекинга](../guides/visual-tracking-core.md).
+
 Источники: [ObjectDetector](../../app/src/main/java/ru/university/dronecv/detection/ObjectDetector.kt), [OnnxDroneDetector](../../app/src/main/java/ru/university/dronecv/detection/onnx/OnnxDroneDetector.kt), [YoloOnnxEngine](../../app/src/main/java/ru/university/dronecv/detection/onnx/YoloOnnxEngine.kt). Все параметры обязательны, кроме явно указанных значений по умолчанию. Типы результатов раскрыты в [модели данных](data-model.md), точные настройки — в [конфигурации](configuration.md).
 
 | Операция | Вход | Результат, ошибки и побочные эффекты |
