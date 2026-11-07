@@ -81,40 +81,44 @@ Activity-scoped [PhotoViewModel](../../app/src/main/java/ru/university/dronecv/p
 
 ```mermaid
 sequenceDiagram
-    participant UI as CameraScreen / CameraPreview
     participant CX as CameraX
+    participant I as VisionWorker
     participant C as LiveController
+    participant W as DetectorWorker
     participant B as AndroidLiveBackend
-    participant E as YOLO / ORT
-    UI->>CX: bindToLifecycle(Preview + Analysis, общий ViewPort)
-    UI->>C: newSource(), configure(true, threshold)
-    UI->>CX: setAnalyzer(DetectorWorker.executor)
-    CX->>C: analyze(ImageProxy, sourceId) на worker
-    alt Активен, source актуален, не ERROR
-        C->>B: infer(frame, confidence)
-        B->>E: RGBA crop → detectArgbDetailed
-        E-->>B: Результат и стадии времени
-        B-->>C: LiveInference
-        C->>C: Проверить generation, записать диагностику
-        C-->>UI: RUNNING и текущий результат
-    else Callback устарел / обработка запрещена
-        C->>C: Пропустить infer
+    participant UI as Compose
+    CX->>I: ImageProxy, source, FrameStamp
+    I->>C: beginFrame: generation и diagnostic token
+    opt Актуальный вход и есть буфер
+        I->>I: Скопировать raw crop в собственный snapshot
     end
-    C->>CX: ImageProxy.close() в finally
-    UI->>C: configure(false, threshold) при Stop/pause
+    I->>CX: ImageProxy.close() в finally
+    opt Snapshot подготовлен
+        I->>C: offerFrame(snapshot, token)
+        C->>C: Заменить pending и освободить прежний
+        C->>W: Pump с epoch
+        W->>B: infer(snapshot, confidence)
+        B-->>W: LiveInference и стадии
+        W->>C: Проверить generation и опубликовать
+        C-->>UI: RUNNING и результат
+        W->>W: snapshot.close() в finally
+    end
+    UI->>C: configure(false) при Stop/pause
     UI->>CX: clearAnalyzer()
-    C->>B: close() в очереди worker после infer
+    C->>C: Инвалидировать pending и pump epoch
+    C->>W: backend.close() после native call
 ```
 
-Рисунок 5. Синхронный анализ кадра; дополнительной очереди кадров у контроллера нет. Ошибка infer проходит через актуальность generation и освобождение кадра в `finally`, затем модель закрывается на worker.
+Рисунок 5. Вход камеры независим от инференса. Только собственные snapshot пересекают границу исполнителей; ошибка проходит через generation, освобождение снимка и упорядоченный release.
 
-CameraX использует RGBA и `KEEP_ONLY_LATEST`; он управляет ожидающим кадром. [LiveController](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt) принимает кадр синхронно на общем executor и закрывает каждый `ImageProxy`, включая неактуальный/отклонённый. Конвертер выдаёт заимствованный массив; его нельзя сохранять после следующей конвертации.
+CameraX сохраняет RGBA/KEEP_ONLY_LATEST. VisionWorker копирует и закрывает ImageProxy; LiveController держит один pending snapshot, а DetectorWorker сериализует нативную обработку. Конвертер copyInto не сохраняет leased-массив; заимствованный convert не передаётся асинхронно. [Полный контракт](../guides/camera-frame-ingress.md).
 
 Защита результатов имеет разные назначения:
 
 | Механизм | Что предотвращает |
 |---|---|
 | `generation` | Публикацию результата/ошибки до Stop, смены порога или другой invalidation |
+| `pumpEpoch` | Получение новым кадром места старой ML-задачи перед release прежней активации |
 | `source` | Приём callback старой активации analyzer, даже на прежнем binding |
 | `activationEpoch` в Preview | Повторное использование analyzer после pause/resume, слитых до recomposition |
 | `revision` | Удаление нового результата старым таймером UI expiry |
@@ -177,8 +181,8 @@ sequenceDiagram
 
 ## Ошибки и инварианты
 
-После успешного YOLO тот же worker выбирает максимальный confidence текущего кадра и публикует `signals`/`LiveState.target` только при актуальной generation. Кадр без обнаружений публикует NO_TARGET с null-координатами; Configure/Stop/pause/error/rebind и expire очищают текущий сигнал. Синхронный подписчик StateFlow может повторно вызвать управление; проверка generation после публикации не позволяет вернуть прежний результат. Все кадры по-прежнему закрываются в finally контроллера. Захват и выдача координат используют отдельную подтверждённую временную базу, а pipeline сохраняет nanoTime. Дополнительного ImageProxy, native worker или очереди кадров нет. [Путь сигнала и геометрия](../guides/latency-and-prediction.md).
+После YOLO DetectorWorker выбирает максимальный confidence отобранного snapshot и публикует signals/LiveState.target только при актуальной generation. Входные ImageProxy независимо копируются/закрываются на VisionWorker; latest-only очередь снимков и владение описаны в [контракте входа](../guides/camera-frame-ingress.md). Кадр без обнаружений публикует NO_TARGET с null-координатами. Configure/Stop/error/rebind инвалидируют pending и epoch pump; expire очищает UI-сигнал. Синхронное повторное управление подписчиком не должно возвращать старый результат.
 
 `PhotoError` различает доступ, изображение, память, отсутствие/целостность модели и прочую ошибку infer. Пустые детекции — успешный результат EMPTY. В камере recoverable `CameraState` показывает занятость/переподключение, critical ведёт к recovery/error; после ошибки модели рекомендуется Stop/start. Экспорт показывает статус ошибки без фиктивного успешного сохранения. Логи и восстановление описаны в [runbook](../operations/runbook.md).
 
-Не ждите закрытия ORT на UI, не вызывайте `shutdownNow()` общего worker, не передавайте frame другому асинхронному исполнителю и не recycle-ите опубликованный bitmap. Контракт движка допускает синхронный `close()`, ожидающий infer; именно поэтому контроллеры ставят его на worker. Инварианты проверяются [controller/geometry тестами](../development/testing.md), аппаратные свойства — отдельно на телефоне.
+Не ждите закрытия ORT на UI и не вызывайте shutdownNow общих workers. ImageProxy не передаётся другому исполнителю: только собственный snapshot с generation/source/diagnostic token. Заимствованные массивы и опубликованные Bitmap нельзя освобождать до завершения читателя. Infer, смена потоков и close остаются на общем ML-worker; [тестирование](../development/testing.md).

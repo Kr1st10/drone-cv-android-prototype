@@ -1,6 +1,6 @@
 # Изображения, координаты и измерения
 
-Справка для разработчика CV/Android: путь от фото или RGBA-кадра к рамкам. В 0.5.1 после YOLO выбирается самое уверенное обнаружение текущего кадра и публикуется внутренний сигнал; внешнего получателя координат нет.
+Справка для разработчика CV/Android: путь от фото или RGBA-кадра к рамкам. В 0.5.2 после YOLO выбирается самое уверенное обнаружение текущего кадра и публикуется внутренний сигнал; внешнего получателя координат нет.
 
 ## Общий поток
 
@@ -10,9 +10,10 @@ flowchart TD
     D --> B[Upright Bitmap для UI и инференса]
     B --> A[ARGB пиксели]
     C[ImageProxy RGBA и raw cropRect] --> R[Чтение crop с rowStride/pixelStride]
-    R --> A2[Заимствованный ArgbImage]
+    R --> A2[Собственный raw crop ARGB / пул]
     A --> Pre[Поворот и letterbox / RGB float32 NCHW]
-    A2 --> Pre
+    A2 --> Queue[Latest-only snapshot / DetectorWorker]
+    Queue --> Pre
     Pre --> ORT[ORT CPU: сырой выход YOLO]
     ORT --> Post[Порог / NMS / обратный letterbox / clip]
     Post --> Norm[Нормализованные рамки upright изображения]
@@ -45,7 +46,7 @@ flowchart TD
 
 В [YoloOnnxEngine](../../app/src/main/java/ru/university/dronecv/detection/onnx/YoloOnnxEngine.kt) `preprocessMs` охватывает preprocessing, `inferenceMs` — `runModel()`, включая запись/создание входного тензора и чтение выхода, `postprocessMs` — decode/NMS. Фото показывает `inferenceMs`, без декодирования и создания движка.
 
-В [AndroidLiveBackend](../../app/src/main/java/ru/university/dronecv/camera/AndroidLiveBackend.kt) `conversionMs` измеряет RGBA crop → ARGB. [LiveController](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt) измеряет `pipelineMs` вокруг `backend.infer()`: возможны ленивая загрузка модели и служебные расходы. Сумма стадий не обязана равняться pipeline.
+В [AndroidFrameSnapshotter](../../app/src/main/java/ru/university/dronecv/camera/AndroidFrameSnapshotter.kt) conversionMs измеряет подготовку собственного RGBA crop → ARGB на VisionWorker. AndroidLiveBackend выполняет только ML-часть на DetectorWorker. LiveController складывает подготовку snapshot и длительность backend в pipelineMs; ожидание между workers исключено. analyzer_to_signal включает это ожидание. Владение и ограничение очереди — [вход камеры](../guides/camera-frame-ingress.md). Сумма стадий не обязана равняться pipeline из-за служебных расходов.
 
 Интервалы стадий/pipeline вычисляются по `System.nanoTime()`. `started_epoch_ms` задаёт внешнюю дату начала, а не базу длительностей. Ожидание до analyzer, экспозиция и дисплей не входят в pipeline. Отдельная задержка от экспозиции до внутреннего сигнала измеряется по совместимым Camera2/elapsedRealtimeNanos; неизвестная база даёт null. [Определения и границы](../guides/latency-and-prediction.md). Задержка до дисплея/действия внешнего устройства и число пропущенных CameraX кадров не измеряются.
 

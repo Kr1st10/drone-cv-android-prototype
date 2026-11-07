@@ -114,6 +114,30 @@ def analyze_target_signals(d, errors):
             'application_stale_frames_discarded': stale}
 
 
+def analyze_camera_input(d, errors):
+    data = d['camera_input']
+    names = ('received_frames', 'copied_frames', 'superseded_frames', 'no_buffer_frames',
+             'stale_frames', 'invalidated_frames', 'copy_errors')
+    if not isinstance(data, dict) or any(type(data.get(k)) is not int or data[k] < 0 for k in names):
+        raise ValueError('invalid camera_input counters')
+    if data['copied_frames'] > data['received_frames']:
+        errors.append('camera_input: copied exceeds received')
+    if data['superseded_frames'] > data['copied_frames'] or data['invalidated_frames'] > data['copied_frames']:
+        errors.append('camera_input: discarded snapshots exceed copied')
+    for key in ('no_buffer_frames', 'stale_frames', 'copy_errors'):
+        if data[key] > data['received_frames']: errors.append('camera_input: invalid ' + key)
+    mean, maximum = data.get('copy_mean_ms'), data.get('copy_max_ms')
+    if data['copied_frames'] == 0:
+        if mean is not None or maximum is not None: errors.append('camera_input: nonempty copy summary')
+    elif any(type(v) not in (int, float) or not math.isfinite(v) or v < 0 for v in (mean, maximum)):
+        errors.append('camera_input: invalid copy timing')
+    elif maximum < mean:
+        errors.append('camera_input: copy mean exceeds max')
+    fps = data['received_frames'] * 1000 / d['duration_ms'] if d['duration_ms'] > 0 else None
+    if not equal(fps, data.get('fps_session')): errors.append('camera_input: input FPS mismatch')
+    return dict(data, fps_session=fps)
+
+
 def analyze(d, filename='', digest=''):
     errors, warnings = [], []
     if d.get('schema_version') != 1:
@@ -177,6 +201,7 @@ def analyze(d, filename='', digest=''):
     if 'build_type' in d: result['build_type'] = d['build_type']
     if 'warmup' in d: result['warmup'] = d['warmup']
     if 'target_signal_schema_version' in d: result['target_signals'] = analyze_target_signals(d, errors)
+    if 'camera_input' in d: result['camera_input'] = analyze_camera_input(d, errors)
     return result
 
 

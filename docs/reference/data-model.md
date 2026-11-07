@@ -1,6 +1,6 @@
 # Данные в памяти и экспорт
 
-Справочник для разработчика и потребителя диагностических файлов. Применяется к Android `0.5.1` на основе `acb3e9e` и отдельно к галерее 6.6. Реляционной БД, таблиц, ключей, индексов, транзакций и миграций нет; ER-диаграмма — `N/A`.
+Справочник для разработчика и потребителя диагностических файлов. Применяется к Android `0.5.2` на основе `acb3e9e` и отдельно к галерее 6.6. Реляционной БД, таблиц, ключей, индексов, транзакций и миграций нет; ER-диаграмма — `N/A`.
 
 ## Обнаружения и изображения
 
@@ -40,7 +40,7 @@
 | `model` | object | Конфигурация из таблицы ниже |
 | `duration_ms` | number, ms | Длительность сессии по монотонным часам |
 | `interrupted`, `reason` | boolean, string/null | Прерванная сессия и причина; штатный Stop записи может иметь null reason |
-| `analyzer_callbacks_accepted` | integer | Принятые для работы callbacks во время записи |
+| `analyzer_callbacks_accepted` | integer | Отобранные для ML-работы снимки во время записи; не все входные callback |
 | `completed_frames`, `unstored_frames` | integer | Актуальные успешные результаты; из них не сохранённые из-за capacity |
 | `accepted_callbacks_not_completed` | integer | accepted минус completed, не полное число потерянных камерой кадров |
 | `processed_fps_session` | number/null, кадр/с | completed / duration, при нулевой длительности null |
@@ -61,11 +61,29 @@
 
 В памяти `FrameMeasurement`/`ResourceSample` содержат `offsetNanos`, а `DiagnosticFrameSnapshot` — `durationNanos`, все типа `Long` в наносекундах; JSON преобразует эти поля в мс. Длительности стадий (`conversionMs` и другие) уже хранятся как `Double` в миллисекундах. Лимит установлен для кадрового ряда; отдельного capacity для списка resource samples нет. Подробные границы длительностей и разные определения FPS — [потоки данных](../architecture/data-flow.md#границы-измерений).
 
+## Вход камеры в 0.5.2
+
+Корневая schema 1 и payload сигнала v2 сохраняются. Добавлен camera_input; старые отчёты без него анализируются как прежде.
+
+| Поле camera_input | Тип / смысл |
+|---|---|
+| received_frames | integer, принятые callback текущего входа во время записи; старый/inactive source не считается |
+| copied_frames | integer, подготовленные и переданные в offer снимки |
+| superseded_frames | integer, pending-снимки, заменённые более свежим |
+| no_buffer_frames | integer, пропуски из-за слота/бюджета пула |
+| stale_frames | integer, слишком старые входы или ожидание перед ORT |
+| invalidated_frames | integer, собственные снимки, освобождённые при invalidation/неактуальном token |
+| copy_errors | integer, ошибки подготовки или закрытия исходного кадра |
+| copy_mean_ms, copy_max_ms | number/null, время подготовки по всем copied_frames, null без копий |
+| fps_session | number/null, received_frames / длительность записи; null при нулевой длительности |
+
+Счётчики отражают события в пределах diagnostic token, не полный баланс незавершённой работы после Stop. analyzer_callbacks_accepted и completed_frames относятся к отобранной ML-работе; они не равны received_frames. Pipeline — подготовка плюс ML, очередь между workers в него не входит, но входит в analyzer_to_signal. UI input.fps использует окно до 30 входов, экспорт fps_session — всю длительность сессии. Подробнее — [владение кадрами](../guides/camera-frame-ingress.md).
+
 ## Сигнал текущего кадра: payload v2 в 0.5.1
 
 Внешний формат диагностики остаётся `schema_version=1`; версия вложенного сигнала — `target_signal_schema_version=2`. Поля прежней диагностики сохранены. `frames[].target_signal` — object/null, в памяти это `FrameMeasurement.targetSignal` и `LiveState.target`. Сигналы усекаются вместе с кадровым рядом.
 
-`application_stale_frames_discarded: integer` считает пропуски приложения до ORT из-за подтверждённого возраста больше 250 мс, отдельно от accepted callbacks и неизвестных drops CameraX. `timing_summary_ms` дополнен сводками `capture_to_signal`, `capture_to_analyzer`, `analyzer_to_signal`; каждая включает только ненулевые метрики сохранённых сигналов. Во всех сводках `p50` — явный псевдоним `median`; прежние `median` и `p95_nearest_rank` сохранены.
+`application_stale_frames_discarded: integer` считает пропуски приложения до ORT из-за подтверждённого возраста или ожидания в очереди больше 250 мс, отдельно от accepted callbacks и неизвестных drops CameraX. `timing_summary_ms` дополнен сводками `capture_to_signal`, `capture_to_analyzer`, `analyzer_to_signal`; каждая включает только ненулевые метрики сохранённых сигналов. Во всех сводках `p50` — явный псевдоним `median`; прежние `median` и `p95_nearest_rank` сохранены.
 
 | Поля `target_signal` | Типы и смысл |
 |---|---|

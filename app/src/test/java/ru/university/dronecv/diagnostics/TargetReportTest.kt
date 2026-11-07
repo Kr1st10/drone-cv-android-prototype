@@ -13,6 +13,11 @@ class TargetReportTest {
         listOf(signal, unknown).forEachIndexed { i, s ->
             store.received(token); store.completed(token, (i + 1) * 1_000_000L, 1.0, 2.0, 3.0, 4.0, 11.0, s)
         }
+        repeat(3) {
+            store.input(token, CameraInputEvent.RECEIVED)
+            store.input(token, CameraInputEvent.COPIED, 1.0)
+        }
+        store.input(token, CameraInputEvent.SUPERSEDED)
         store.discardStale(token)
         val report = DiagnosticReport(0, "synthetic-test", "test", 29, "0.5.1", "model", "hash", .5f,
             store.stop(token, 1_000_000_000, false, null)!!, emptyList())
@@ -25,6 +30,10 @@ class TargetReportTest {
         assertTrue(json.contains("\"p50\":150.0"))
         assertTrue(json.contains("\"available_fraction\":0.5"))
         assertFalse(json.contains("target_id")); assertFalse(json.contains("prediction"))
+        assertTrue(json.contains("\"received_frames\":3"))
+        assertTrue(json.contains("\"superseded_frames\":1"))
+        assertTrue(json.contains("\"copy_mean_ms\":1.0"))
+        assertTrue(json.contains("\"fps_session\":3.0"))
         println("TARGET_REPORT_FIXTURE=$json")
     }
 }

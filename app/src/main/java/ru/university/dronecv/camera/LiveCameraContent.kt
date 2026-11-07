@@ -1,7 +1,6 @@
 package ru.university.dronecv.camera
 
 import android.graphics.Paint
-import androidx.camera.core.ImageProxy
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -44,7 +43,7 @@ import ru.university.dronecv.diagnostics.DiagnosticPanel
 
 @Composable
 internal fun LiveCameraContent(
-    controller: LiveController<ImageProxy>,
+    controller: LiveController<CameraFrameSnapshot>,
     threadState: ThreadConfiguration,
     probe: CameraProbeState,
     diagnostics: DiagnosticViewModel,
@@ -99,9 +98,10 @@ private fun LiveControls(
     state: LiveState, running: Boolean, confidence: Float,
     onRunningChange: (Boolean) -> Unit, onConfidenceChange: (Float) -> Unit,
     issue: String?, diagnostics: DiagnosticViewModel, threadState: ThreadConfiguration,
-    onThreadsChange: (Int) -> Boolean, probe: CameraProbeState, controller: LiveController<ImageProxy>, modifier: Modifier,
+    onThreadsChange: (Int) -> Boolean, probe: CameraProbeState, controller: LiveController<CameraFrameSnapshot>, modifier: Modifier,
 ) {
     val diagnosticUi by diagnostics.ui.collectAsStateWithLifecycle()
+    val input by controller.input.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     Column(modifier.background(MaterialTheme.colorScheme.surface).verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Button(onClick = { onRunningChange(!running) }, enabled = !threadState.switching, modifier = Modifier.fillMaxWidth()) {
@@ -126,6 +126,9 @@ private fun LiveControls(
         Text("Обработка: $fps FPS · ORT: $inference мс\nОбработка кадра: $pipeline мс · кадров: ${state.completedFrames}",
             modifier = Modifier.testTag(if (state.result != null) "live-frame-ready" else "live-frame-waiting"),
             style = MaterialTheme.typography.bodySmall)
+        Text("Вход: ${input.fps?.let(::format) ?: "—"} FPS · кадров: ${input.received}\n" +
+            "Заменено: ${input.superseded} · без буфера: ${input.noBuffer}",
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("camera-input-stats"))
         state.result?.let {
             Text("YOLO11s · CPU / ${threadState.threads} потока · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
         }

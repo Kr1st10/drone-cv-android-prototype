@@ -10,7 +10,6 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.ImageProxy
 import androidx.camera.core.CameraState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -56,7 +55,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
     val diagnostics: DiagnosticViewModel = viewModel()
     val cameraProbe = remember { CameraProbeState() }
     var running by rememberSaveable { mutableStateOf(false) }
-    val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor,
+    val controller = remember { LiveController<CameraFrameSnapshot>(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor,
         diagnostics.frames, initialThreads, eventTime = android.os.SystemClock::elapsedRealtimeNanos) }
     DisposableEffect(controller) { onDispose { diagnostics.stop(true, "Camera screen disposed"); controller.close() } }
     val liveState by controller.state.collectAsStateWithLifecycle()
