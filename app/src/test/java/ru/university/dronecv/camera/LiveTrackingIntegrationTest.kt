@@ -193,6 +193,30 @@ class LiveTrackingIntegrationTest {
         assertEquals(LivePhase.RUNNING, f.controller.state.value.phase)
     }
 
+    @Test fun `expiry uses confirmation deadline and an old revision cannot clear a newer track`() {
+        val f = Fixture()
+        f.start()
+        f.acquire()
+        assertEquals(f.now + 250_000_000L, f.controller.state.value.tracking!!.displayUntilNs)
+        for (ms in 100L..900L step 50) f.frame(ms)
+        f.frame(940)
+        val previous = f.controller.state.value
+        // The initial YOLO capture was 5 ms before the first analyzer entry.
+        assertEquals(1_995_000_000L, previous.tracking!!.displayUntilNs)
+        f.frame(950)
+        val latest = f.controller.state.value
+        assertEquals(previous.tracking!!.displayUntilNs, latest.tracking!!.displayUntilNs)
+        f.now = latest.tracking!!.displayUntilNs
+        f.controller.expire(previous.revision)
+        assertSame(latest.tracking, f.controller.state.value.tracking)
+        f.controller.expire(latest.revision)
+        assertNull(f.controller.state.value.tracking)
+        assertNotNull(f.controller.state.value.result)
+        f.controller.close()
+        f.ml.drain()
+        f.vision.drain()
+    }
+
     @Test fun `expired confirmation cannot publish coordinates after slow LK update`() {
         val f = Fixture()
         f.start()

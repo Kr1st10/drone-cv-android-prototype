@@ -93,7 +93,7 @@ fun inspectUniformInput(modelFile: File): Int =
 | `expire(revision: Long)` | Ревизия → `Unit` | Очищает tracking и trackingFps только при совпадении ревизии; в ветви без LK очищает result/FPS/pipeline |
 | `close()` | Нет → `Unit` | Идемпотентно инвалидирует generation/source, сбрасывает state и ставит release в очередь |
 | `state` / `threadConfiguration` | Нет → StateFlow | `LiveState` / `ThreadConfiguration`; не публикуют старый infer/error |
-| `state.value.tracking` | `TrackingSignal?` | Последняя публикация LK по кадру, либо null после invalidation/expiry. Содержит состояние, времена и координаты при сопровождении. |
+| `state.value.tracking` | `TrackingSignal?` | Последняя публикация LK по кадру, либо null после invalidation/expiry. Содержит состояние, времена, координаты при сопровождении и `displayUntilNs`: локальный дедлайн видимости по elapsedRealtimeNanos, без поля в JSON. |
 | `signals` | `StateFlow<TargetSignal?>` | Исторический сигнал v2 в ветви без LiveTracking. В рабочей камере координаты читаются из state. |
 | `LiveBackend.infer(frame, confidence)` | Frame/Float → `LiveInference` | Блокирующий, не должен удерживать frame после возврата; его закрывает контроллер |
 | `LiveBackend.changeThreads(threads)` / `close()` | Int / нет → Unit | На том же worker; default changeThreads бросает `UnsupportedOperationException` |

@@ -294,8 +294,11 @@ class LiveController<Frame : AutoCloseable>(
         synchronized(lock) {
             if (!valid(token)) return@synchronized
             val now = checkNotNull(eventTime)()
+            val silenceDeadline = now + MAX_TRACKING_SILENCE_NS
+            val displayUntil = if (observation.estimate == null) silenceDeadline else
+                minOf(silenceDeadline, live.session.confirmationDeadlineNs(observation) ?: now)
             if (observation.estimate != null &&
-                (!live.session.confirmationIsCurrent(observation, now) ||
+                (displayUntil <= now ||
                     now - observation.stamp.analyzerEntryNs > maxAnalyzerAgeMs * 1e6 ||
                     observation.stamp.ageAt(now)?.let { it > maxAnalyzerAgeMs } == true)) {
                 mutableState.value = mutableState.value.copy(tracking = null, trackingFps = null, revision = ++revision)
@@ -303,7 +306,7 @@ class LiveController<Frame : AutoCloseable>(
             }
             val end = nanoTime()
             val signal = TrackingSignal(observation, kind, geometry.cropWidth, geometry.cropHeight, now,
-                extraMs + (end - start) / 1e6, geometry.width, geometry.height)
+                extraMs + (end - start) / 1e6, geometry.width, geometry.height, displayUntil)
             val fps = live.fps(signal)
             mutableState.value = mutableState.value.copy(tracking = signal, trackingFps = fps, revision = ++revision)
             token.diagnosticToken?.let { diagnostics?.tracking(it, end, signal) }

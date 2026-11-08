@@ -238,8 +238,8 @@ class TrackingSession(
         if (accepts(request)) reason = "replay_rejected"
     }
 
-    internal fun confirmationIsCurrent(observation: TrackingObservation, nowElapsedNs: Long): Boolean =
-        observation.lastYoloStamp?.let { !confirmationExpired(it, nowElapsedNs, confirmationTtlNs) } == true
+    internal fun confirmationDeadlineNs(observation: TrackingObservation): Long? =
+        observation.lastYoloStamp?.let { confirmationDeadlineNs(it, confirmationTtlNs) }
 
     /** Also call after ORT/replay failure, executor rejection or cancellation. */
     fun finish(request: YoloRequest) {

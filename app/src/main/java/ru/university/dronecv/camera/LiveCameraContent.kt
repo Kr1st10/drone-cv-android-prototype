@@ -55,11 +55,13 @@ internal fun LiveCameraContent(
     onCameraIssue: (Int?) -> Unit,
 ) {
     val state by controller.state.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
-    // A camera that silently stalls must not leave boxes on screen indefinitely.
-    LaunchedEffect(state.revision) {
-        if (state.tracking != null) {
-            delay(250)
-            controller.expire(state.revision)
+    val observation = state.tracking
+    val observationRevision = state.revision
+    LaunchedEffect(observationRevision) {
+        if (observation != null) {
+            val remainingNs = (observation.displayUntilNs - android.os.SystemClock.elapsedRealtimeNanos()).coerceAtLeast(0L)
+            delay((remainingNs + 999_999L) / 1_000_000L)
+            controller.expire(observationRevision)
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {

@@ -3,6 +3,8 @@ package ru.university.dronecv.camera
 import ru.university.dronecv.tracking.TrackingObservation
 import ru.university.dronecv.tracking.TrackBox
 
+internal const val MAX_TRACKING_SILENCE_NS = 250_000_000L
+
 enum class TrackingSampleKind { FRAME, CORRECTION }
 
 /** Internal publication on a real upright frame. A correction can revise the same frame without counting it again. */
@@ -15,6 +17,8 @@ data class TrackingSignal(
     val workMs: Double,
     val trackingWidth: Int = width,
     val trackingHeight: Int = height,
+    /** Monotonic UI deadline; this is not a duration or a measurement in the report. */
+    val displayUntilNs: Long = dispatchNs + MAX_TRACKING_SILENCE_NS,
 ) {
     init {
         require(trackingWidth in 1..width && trackingHeight in 1..height && workMs.isFinite() && workMs >= 0)

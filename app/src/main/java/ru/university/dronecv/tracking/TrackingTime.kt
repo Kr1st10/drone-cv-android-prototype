@@ -16,6 +16,11 @@ internal fun invalidGap(previous: GrayFrame, next: GrayFrame): Boolean {
     return captureGap <= 0 || captureGap > MAX_TRACK_GAP_NS
 }
 
-internal fun confirmationExpired(stamp: FrameStamp, nowEntryNs: Long, ttlNs: Long): Boolean =
-    nowEntryNs - stamp.analyzerEntryNs >= ttlNs ||
-        stamp.ageAt(nowEntryNs)?.let { it >= ttlNs / 1_000_000.0 } == true
+internal fun confirmationDeadlineNs(stamp: FrameStamp, ttlNs: Long): Long {
+    val start = if (stamp.timingIssue(stamp.analyzerEntryNs) == null) checkNotNull(stamp.captureNs)
+        else stamp.analyzerEntryNs
+    return start + ttlNs
+}
+
+internal fun confirmationExpired(stamp: FrameStamp, nowElapsedNs: Long, ttlNs: Long): Boolean =
+    nowElapsedNs >= confirmationDeadlineNs(stamp, ttlNs)
