@@ -56,6 +56,9 @@ def test_independent_angular_oracle():
         expectations.append((real_cm, distance_cm, display_cm, expected_m))
 
     # Fixed hand-worked reference answers; no JavaScript function constructs the expected results.
+    add(43, 150, 4.3, 15)
+    add(43, 150, 2.15, 30)
+    add(43, 300, 4.3, 30)
     add(57.85, 150, 5.785, 15)
     add(57.85, 150, 2.8925, 30)
     add(57.85, 300, 5.785, 30)
@@ -79,8 +82,6 @@ def test_approximate_production_images_independent_units():
         ('skydroid_mx330t', 'skydroid_top', 416, 416, 1, 150, 6, 13.2175),
         ('skydroid_mx330t', 'skydroid_top', 416, 416, 0.5, 150, 3, 26.435),
         ('skydroid_mx330t', 'skydroid_top', 416, 416, 1, 300, 6, 26.435),
-        ('gedz_10_dji', 'gedz_side', 800, 800, 1, 150, 20, 3.75),
-        ('skydroid_mx330t', 'skydroid_front', 1000, 1000, 1, 150, 25, 3.1722),
     ]
     inputs = [{'model_id': model, 'render': {'photo_id': photo, 'width': w, 'height': h,
         'scale': scale, 'visible': True}, 'distance_cm': dist, 'mm_per_css_px': 0.25}
@@ -101,3 +102,18 @@ def test_approximate_production_images_independent_units():
     assert measured['assumed_extent_mm'] == pytest.approx(782.908628129758)
     assert measured['display_width_cm'] == pytest.approx(19.125)
     assert measured['equivalent_distance_m'] == pytest.approx(6.14045982846869)
+
+
+def test_unconfirmed_motor_segment_screen_length():
+    # Independently calculate the visible diagonal with Decimal sqrt, not production Math.hypot.
+    from decimal import Decimal, getcontext
+    getcontext().prec = 40
+    pixels = Decimal(34042).sqrt()  # (281-140)^2 + (266-147)^2
+    cases = [{'render': {'width': 416, 'height': 416, 'scale': scale, 'visible': True},
+        'mm_per_css_px': 0.25} for scale in [1, 0.5, 2]]
+    measured = json.loads(subprocess.run(['node', str(ROOT / 'tests/reference_test.mjs'), '--segment-oracle'],
+        input=json.dumps(cases), capture_output=True, text=True, check=True, timeout=30).stdout)
+    for value, scale in zip(measured, [1, 0.5, 2], strict=True):
+        assert value == pytest.approx(float(pixels * Decimal(str(scale)) / 4), rel=1e-13)
+    assert measured[1] * 2 == measured[0]
+    # A numerical check of lengths is not evidence that this picture represents a physical 430mm diagonal.

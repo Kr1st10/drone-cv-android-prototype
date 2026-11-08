@@ -17,6 +17,15 @@
       "photos": [
         {
           "id": "skydroid_top",
+          "review_segment": {
+            "label": "Центры противоположных моторов — кандидат, не подтверждённая физическая ось",
+            "from": [140, 147],
+            "to": [281, 266],
+            "nominal_real_mm": 430,
+            "source": "https://manuals.plus/m/cdf383498692198d887fa10755c69ab9184b1a1d70a87d5783d38abe953515f9",
+            "status": "unconfirmed",
+            "issue": "430 мм указаны для MX330T, но точная рама на общей иллюстрации MX330/MX330T не установлена. Ракурс выглядит плановым; независимого подтверждения проекции нет. Номинал не используется в расчёте дальности."
+          },
           "view": "top",
           "label": "Сверху — кандидат MX330/MX330T",
           "file": "reference_assets/skydroid_top.jpg",
@@ -182,7 +191,7 @@
           "object_complete": true,
           "projection_confirmed": false,
           "axis": null,
-          "issue": "Габариты с пропеллерами 500 × 419 мм подтверждены, но размерных линий к фото нет. Положение лопастей, проекция и соответствие концов оси не установлены; наличие цилиндра само по себе не запрещает ось рамы."
+          "issue": "Габариты с пропеллерами 500 × 419 мм подтверждены, но размерных линий к фото нет. 335 × 251 мм без винтов — общий габарит, не расстояние между моторами; его концы на этом изображении не установлены, центр рамы перекрыт оснасткой. Положение лопастей, проекция и соответствие концов оси не установлены; наличие цилиндра само по себе не запрещает ось рамы."
         },
         {
           "id": "gedz_oblique",
@@ -226,7 +235,7 @@
           "object_complete": false,
           "projection_confirmed": false,
           "axis": null,
-          "issue": "Профиль с оснасткой; концы пропеллеров обрезаны границами файла. Верхние размеры 500/419 мм не соответствуют видимому отрезку профиля."
+          "issue": "Профиль с оснасткой; концы пропеллеров обрезаны границами файла. Верхние размеры 500/419 мм не соответствуют видимому отрезку профиля. Габарит 335 мм без винтов не привязан к видимым концам рамы; межмоторное расстояние не дано."
         }
       ]
     }
@@ -278,10 +287,21 @@
       assumption = '¾: условный угол 45°, W·cos(45°) + L·sin(45°).';
     }
     if (!positive(extent)) return { ...empty, display_width_cm: widthMm / 10 };
-    if (p.object_complete === false) assumption += ' Исходник обрезан: видимая часть условно приравнена полному габариту; оценка может быть завышена.';
+    if (p.object_complete === false) return { ...empty, display_width_cm: widthMm / 10,
+      assumption: 'Исходник обрезан. Видимая часть не приравнивается полному габариту: дальность недоступна без физически обоснованного отрезка.' };
     if (!p.model_confirmed) assumption += ' Точная модель/комплектация изображения не подтверждена.';
     return { ...empty, display_width_cm: widthMm / 10, assumed_extent_mm: extent,
       equivalent_distance_m: geometry.equivalentDistance(extent / 10, distanceCm, widthMm), assumption };
+  }
+
+  function reviewSegmentLength(photo, render, mmPerCssPx) {
+    const a = photo?.review_segment;
+    if (!a || !photo.file || !render?.visible || render.width !== photo.width || render.height !== photo.height ||
+        !positive(render.scale) || !positive(mmPerCssPx) ||
+        ![a.from, a.to].every(v => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite) &&
+          v[0] >= 0 && v[0] <= photo.width && v[1] >= 0 && v[1] <= photo.height)) return null;
+    const length = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) * render.scale * mmPerCssPx;
+    return positive(length) ? length : null;
   }
 
   /** Mount only the new tab. Settings use their own storage key; legacy trials/results are untouched. */
@@ -298,14 +318,15 @@
       <label>Расчёт <select id="referenceRangeMode"><option value="approximate">Приближённая оценка</option><option value="strict">Строгий: подтверждённая ось</option></select></label>
       <p><span id="referenceDimensions"></span> · <span id="referenceSpecSource"></span></p>
       <p id="referenceView"></p>
-      <div id="referenceViewport"><img id="referenceDisplay" alt=""><p id="referenceMissing" class="hidden">Фотография недоступна.</p></div>
+      <div id="referenceViewport"><img id="referenceDisplay" alt=""><svg id="referenceSegmentOverlay" aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none"></svg><p id="referenceMissing" class="hidden">Фотография недоступна.</p></div>
       <p><label>Масштаб <input id="referenceScale" type="range" min="0.1" max="200" step="0.1"></label>
       <label><input id="referenceScaleNumber" type="number" min="0.1" max="200" step="any" aria-label="Масштаб фотографии, %"> %</label>
       <button id="referenceHalf">Уменьшить вдвое</button><button id="referenceDouble">Увеличить вдвое</button></p>
-      <p id="referenceReadout" aria-live="polite"></p><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
+      <p id="referenceReadout" aria-live="polite"></p>
+      <details id="referenceSegmentReview" class="hidden"><summary>Проверяемая моторная диагональ — не подтверждена</summary><label><input id="referenceSegmentToggle" type="checkbox"> Показать проверяемый отрезок A–B (не подтверждён)</label><p id="referenceSegmentReadout"></p></details><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
       <p class="muted">Лабораторная эквивалентная дальность по угловому размеру. Не измерение дальности обнаружения в полёте.</p>
       <details><summary>Дополнительно: источник фотографии и геометрия</summary>
-        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. При обрезке объекта окном расчёт недоступен. Для обрезанного исходника приближённый режим использует только видимую часть с предупреждением.</p>
+        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. При обрезке объекта окном расчёт недоступен. Обрезанный силуэт не приравнивается полному габариту. Для него нужен отдельный достоверный отрезок.</p>
         <p id="referenceDimensionNote"></p><p id="referenceDiagnostics"></p><p id="referencePhotoSource"></p>
         <p>Разрешение авторов на использование и публикацию фотографий подтверждено пользователем 2026-11-06. Это не подтверждение проекции.</p>
       </details>`;
@@ -359,6 +380,30 @@
       const m = (mode === 'strict' ? measure : estimate)(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible },
         getDistance(), cal?.mm_per_css_px, geometry);
       const fmt = n => n == null ? 'нет данных' : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+      const candidate = p.review_segment, overlay = $('referenceSegmentOverlay');
+      const segmentMm = reviewSegmentLength(p, { width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible }, cal?.mm_per_css_px);
+      $('referenceSegmentReview').classList.toggle('hidden', !candidate);
+      overlay.replaceChildren();
+      overlay.classList.toggle('hidden', !candidate || !loaded || !$('referenceSegmentToggle').checked);
+      if (candidate) {
+        overlay.setAttribute('viewBox', `0 0 ${p.width} ${p.height}`);
+        overlay.style.width = r.width + 'px'; overlay.style.height = r.height + 'px';
+        const svg = (tag, attrs) => {
+          const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+          for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+          overlay.append(node); return node;
+        };
+        svg('line', { x1: candidate.from[0], y1: candidate.from[1], x2: candidate.to[0], y2: candidate.to[1],
+          stroke: '#b00060', 'stroke-width': 1.5, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke' });
+        for (const [i, point] of [candidate.from, candidate.to].entries()) {
+          svg('circle', { cx: point[0], cy: point[1], r: 3, fill: '#fff', stroke: '#b00060' });
+          svg('text', { x: point[0] + 6, y: point[1] - 6, fill: '#b00060', 'font-size': 14 }).textContent = i ? 'B' : 'A';
+        }
+        $('referenceSegmentReadout').textContent = `${candidate.label}. A=(${candidate.from.join(', ')}), B=(${candidate.to.join(', ')}) px оригинала ${p.width}×${p.height}. ` +
+          `Длина A–B на экране: ${fmt(segmentMm == null ? null : segmentMm / 10)} см. ${candidate.issue} ` +
+          'Для ручной проверки включите A–B и измерьте линейкой расстояние между центрами меток. Программное значение не заменяет физический замер линейкой.';
+      }
+
       const range = m.equivalent_distance_m == null ? 'нет данных' :
         `${mode === 'approximate' ? '≈ ' : ''}${m.equivalent_distance_m.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} м`;
       $('referenceAssumption').textContent = mode === 'approximate' ?
@@ -371,6 +416,7 @@
         !cal ? 'Нужна актуальная калибровка экрана.' : '', !positive(getDistance()) ? 'Введите расстояние от камеры до экрана.' : ''].filter(Boolean).join(' ');
       $('referenceDiagnostics').textContent = `ID: ${selected.id}; ракурс: ${p.view}; границы файла [x1, y1, x2, y2]: ${b ? b.join(', ') : 'нет'}; физическая ось: ${p.axis ? JSON.stringify(p.axis) : 'не подтверждена'}.`;
       return { model_id: selected.id, photo_id: p.id, view: p.view, scale_percent: scale, screen_distance_cm: getDistance(),
+        review_segment_display_mm: segmentMm,
         range_mode: mode, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
     }
@@ -379,6 +425,7 @@
       if (!positive(n) || n < 0.1 || n > 200) { $('referenceScaleNumber').setCustomValidity('Введите масштаб от 0,1 до 200 %.'); update(); return; }
       $('referenceScaleNumber').setCustomValidity(''); scale = n; persist(); update();
     }
+    $('referenceSegmentToggle').onchange = update;
     $('referenceRangeMode').onchange = e => { mode = e.target.value === 'strict' ? 'strict' : 'approximate'; persist(); update(); };
     select.onchange = () => chooseModel();
     photoSelect.onchange = choosePhoto;
@@ -389,5 +436,5 @@
     select.value = selected.id; chooseModel(photo.id);
     return { update, snapshot: update };
   }
-  root.DroneReferences = { profiles, measure, estimate, mount };
+  root.DroneReferences = { profiles, measure, estimate, reviewSegmentLength, mount };
 })(typeof window === 'undefined' ? globalThis : window);

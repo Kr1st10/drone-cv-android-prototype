@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const ctx = vm.createContext({});
 vm.runInContext(fs.readFileSync(new URL('../reference_drones.js', import.meta.url), 'utf8'), ctx);
-const { profiles, measure, estimate } = ctx.DroneReferences;
+const { profiles, measure, estimate, reviewSegmentLength } = ctx.DroneReferences;
 const html = fs.readFileSync(new URL('../gallery.html', import.meta.url), 'utf8');
 const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 for (const name of ['positive', 'equivalentDistance', 'validBounds', 'physicalWidth']) {
@@ -12,6 +12,11 @@ for (const name of ['positive', 'equivalentDistance', 'validBounds', 'physicalWi
   vm.runInContext(script.slice(start, end), ctx);
 }
 const geometry = { physicalWidth: ctx.physicalWidth, equivalentDistance: ctx.equivalentDistance };
+if (process.argv.includes('--segment-oracle')) {
+  const cases = JSON.parse(fs.readFileSync(0, 'utf8'));
+  console.log(JSON.stringify(cases.map(c => reviewSegmentLength(profiles[0].photos[0], c.render, c.mm_per_css_px))));
+  process.exit(0);
+}
 if (process.argv.includes('--estimate-oracle')) {
   const cases = JSON.parse(fs.readFileSync(0, 'utf8'));
   console.log(JSON.stringify(cases.map(c => estimate(profiles.find(p => p.id === c.model_id), c.render, c.distance_cm, c.mm_per_css_px, geometry))));
@@ -68,6 +73,13 @@ for (const profile of profiles) for (const p of profile.photos) {
   const r = { photo_id: p.id, width: p.width, height: p.height, scale: 1, visible: true };
   const e = estimate(profile, r, 150, 0.25, geometry);
   if (!p.file) { assert.equal(e.equivalent_distance_m, null); continue; }
+  if (p.object_complete === false) {
+    assert.equal(e.equivalent_distance_m, null);
+    assert.equal(e.assumed_extent_mm, null);
+    assert.match(e.assumption, /не приравнивается полному габариту/);
+    assert.ok(e.display_width_cm > 0);
+    continue;
+  }
   assert.ok(e.equivalent_distance_m > 0);
   assert.ok(e.assumption);
   assert.equal(e.display_width_cm, (p.bounds_px[2] - p.bounds_px[0]) * 0.25 / 10);
@@ -82,4 +94,16 @@ for (const profile of profiles) for (const p of profile.photos) {
     assert.equal(estimate(profile, { ...r, ...patch }, 150, 0.25, geometry).equivalent_distance_m, null);
   }
 }
-console.log('Six local image estimates, silhouette widths, half/double scale, distance and strict isolation: OK');
+console.log('Local geometry: three estimates, three cropped-image refusals, scale, distance and strict isolation: OK');
+
+const candidate = profiles[0].photos[0];
+assert.equal(candidate.review_segment.status, 'unconfirmed');
+assert.equal(candidate.axis, null); // visible motor points do not prove a 430mm axis
+const candidateRender = { width: 416, height: 416, scale: 1, visible: true };
+const lengthMm = reviewSegmentLength(candidate, candidateRender, 0.25);
+assert.ok(Math.abs(lengthMm - 46.12618562248684) < 1e-9);
+assert.equal(reviewSegmentLength(candidate, { ...candidateRender, scale: 0.5 }, 0.25), lengthMm / 2);
+for (const patch of [{ visible: false }, { width: 800 }, { height: 800 }, { scale: 0 }]) {
+  assert.equal(reviewSegmentLength(candidate, { ...candidateRender, ...patch }, 0.25), null);
+}
+for (const k of [null, -1, 0, NaN, Infinity]) assert.equal(reviewSegmentLength(candidate, candidateRender, k), null);

@@ -38,6 +38,23 @@ assert.equal(await page.inputValue('#referenceRangeMode'), 'approximate');
 await page.fill('#referenceScaleNumber', '50');
 assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 26.435) < 1e-9);
 assert.match(await page.textContent('#referenceReadout'), /≈ 26,44 м/);
+assert.match(await page.textContent('#referenceSegmentReadout'), /Номинал не используется/);
+assert.ok(Math.abs((await snapshot()).review_segment_display_mm - 23.06309281124342) < 1e-9);
+await page.locator('#referenceSegmentReview').evaluate(e => e.open = true);
+await page.check('#referenceSegmentToggle');
+await page.locator('#settings').evaluate(e => e.scrollTop = 0);
+const drawn = await page.locator('#referenceSegmentOverlay line').evaluate(line => {
+  const transform = line.getScreenCTM();
+  const a = new DOMPoint(Number(line.getAttribute('x1')), Number(line.getAttribute('y1'))).matrixTransform(transform);
+  const b = new DOMPoint(Number(line.getAttribute('x2')), Number(line.getAttribute('y2'))).matrixTransform(transform);
+  return Math.hypot(b.x - a.x, b.y - a.y);
+});
+assert.ok(Math.abs(drawn * 0.25 - (await snapshot()).review_segment_display_mm) < 1e-9);
+if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT + '_candidate_motor_segment.png' });
+await page.uncheck('#referenceSegmentToggle');
+await page.locator('#referenceSegmentReview').evaluate(e => e.open = false);
+await page.locator('#settings').evaluate(e => e.scrollTop = 0);
+
 assert.match(await page.textContent('#referenceAssumption'), /не точная дальность/);
 await page.click('#referenceHalf');
 assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 52.87) < 1e-9);
@@ -50,9 +67,14 @@ for (const id of ['skydroid_mx330t', 'gedz_10_dji', 'unik_sd_10ufp']) {
   for (const photo of photos) {
     await page.selectOption('#referencePhotoSelect', photo);
     if (id === 'unik_sd_10ufp') { assert.equal((await snapshot()).equivalent_distance_m, null); continue; }
-    await page.waitForFunction(() => document.getElementById('referenceDisplay').complete && document.getElementById('referenceDisplay').naturalWidth > 0);
-    assert.ok((await snapshot()).equivalent_distance_m > 0, photo);
-    assert.match(await page.textContent('#referenceReadout'), /≈ \d+,\d{2} м/);
+    await page.waitForFunction(() => { const im = document.getElementById('referenceDisplay'); return im.complete && im.naturalWidth > 0 && !im.classList.contains('hidden'); });
+    if (['skydroid_front', 'gedz_oblique', 'gedz_side'].includes(photo)) {
+      assert.equal((await snapshot()).equivalent_distance_m, null, photo);
+      assert.match(await page.textContent('#referenceAssumption'), /не приравнивается полному габариту/);
+    } else {
+      assert.ok((await snapshot()).equivalent_distance_m > 0, photo + ': ' + JSON.stringify(await snapshot()) + ' ' + await page.textContent('#referenceIssue'));
+      assert.match(await page.textContent('#referenceReadout'), /≈ \d+,\d{2} м/);
+    }
   }
 }
 await page.selectOption('#referenceDrone', 'skydroid_mx330t');
@@ -124,7 +146,7 @@ assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 30) < 0.004);
 await page.click('#screenCalibBtn'); await page.fill('#screenLineCm', '10'); await page.click('#applyScreenCalib'); await page.keyboard.press('Escape');
 assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 60) < 0.008);
 // A target clipped by the scroll panel is not fully displayed even if its own viewport is inside the window.
-await page.locator('#referenceSection details').evaluate(e => e.open = true);
+await page.locator('#referenceSection details:not(#referenceSegmentReview)').evaluate(e => e.open = true);
 const clipped = await page.evaluate(() => {
   const panel = document.getElementById('settings'), image = document.getElementById('referenceDisplay');
   panel.style.maxHeight = '500px'; // ensure enough scroll range without invalidating the calibrated window
@@ -134,7 +156,7 @@ const clipped = await page.evaluate(() => {
 });
 assert.ok(clipped); assert.equal((await snapshot()).equivalent_distance_m, null);
 await page.locator('#settings').evaluate(e => { e.style.maxHeight = ''; e.scrollTop = 0; });
-await page.locator('#referenceSection details').evaluate(e => e.open = false);
+await page.locator('#referenceSection details:not(#referenceSegmentReview)').evaluate(e => e.open = false);
 assert.ok((await snapshot()).equivalent_distance_m > 0);
 await page.fill('#distance', ''); assert.equal((await snapshot()).equivalent_distance_m, null);
 await page.fill('#distance', '150');
