@@ -155,9 +155,16 @@ assert.equal(api.parseAndroid({ ...report, frames: [report.frames[0], { target_s
 assert.throws(() => api.parseAndroid({ frames: [] }), TypeError);
 assert.throws(() => api.parseAndroid({ schema_version: 1 }), TypeError);
 assert.equal(api.parseAndroid({ ...report, model: { confidence: NaN }, frames: [] }).metadata.confidence_pct, null);
-const tracking = api.parseAndroid({ ...report, frames: [{ target_signal: null, detection_count: 1 }],
+const tracking = api.parseAndroid({ ...report, frames: [{ target_signal: null, detection_count: 2 }, { target_signal: null, detection_count: 0 },
+    { target_signal: null, detection_count: -1 }],
   tracking: { schema_version: 1, samples: [{ kind: 'frame', status: 'tracking' }] } });
 assert.ok(tracking.warnings.some(warning => warning.includes('LK')));
+assert.equal(tracking.candidate_count, 1);
+assert.equal(tracking.no_target_count, 1);
+assert.equal(tracking.unknown_signal_count, 1);
+assert.equal(tracking.metadata.analysis_frame_w, null);
+assert.equal(tracking.frames[0].confidence_pct, null);
+assert.equal(tracking.frames[0].center, null);
 const absent = api.parseAndroid({ ...report, frames: [{ target_signal: null }, {}, null] });
 assert.equal(absent.unknown_signal_count, 3);
 assert.equal(absent.metadata.analysis_frame_w, null);

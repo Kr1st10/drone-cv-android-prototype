@@ -203,7 +203,7 @@
     const model = object(report.model) ? report.model : {}, warnings = [];
     if (object(report.tracking)) warnings.push('Раздел сопровождения LK не участвует в подсчёте обнаружений YOLO.');
     const framePairs = new Set();
-    let candidates = 0, noTarget = 0, unknown = 0;
+    let candidates = 0, noTarget = 0, unknown = 0, countOnly = 0;
     const frames = report.frames.map((row, index) => {
       const raw = object(row) ? row : {}, s = object(raw.target_signal) ? raw.target_signal : null;
       const version = s?.schema_version ?? report.target_signal_schema_version;
@@ -212,11 +212,15 @@
       const width = pixelSpace && integer(s.width) && s.width > 0 ? s.width : null;
       const height = pixelSpace && integer(s.height) && s.height > 0 ? s.height : null;
       if (width && height) framePairs.add(JSON.stringify([width, height]));
-      const detected = knownVersion && (s.status === 'detected' || version === 1 && s.status === 'observed');
-      const missing = knownVersion && (s.status === 'no_target' || version === 1 && s.status === 'lost');
+      const count = s === null && integer(raw.detection_count) && raw.detection_count >= 0 ? raw.detection_count : null;
+      if (count !== null) countOnly++;
+      const detected = count !== null ? count > 0 :
+        knownVersion && (s.status === 'detected' || version === 1 && s.status === 'observed');
+      const missing = count !== null ? count === 0 :
+        knownVersion && (s.status === 'no_target' || version === 1 && s.status === 'lost');
       const status = detected ? 'detected' : missing ? 'no_target' : 'unknown';
       if (detected) candidates++; else if (missing) noTarget++; else unknown++;
-      const confidence = detected && finite(s.confidence) !== null && s.confidence >= 0 && s.confidence <= 1 ? s.confidence * 100 : null;
+      const confidence = detected && s !== null && finite(s.confidence) !== null && s.confidence >= 0 && s.confidence <= 1 ? s.confidence * 100 : null;
       const rawCenter = s?.center ?? (version === 1 ? s?.observed : null);
       const center = object(rawCenter) && finite(rawCenter.x) !== null && finite(rawCenter.y) !== null && width && height &&
         rawCenter.x >= 0 && rawCenter.x <= width - 1 && rawCenter.y >= 0 && rawCenter.y <= height - 1 ? { x: rawCenter.x, y: rawCenter.y } : null;
@@ -229,7 +233,8 @@
     if (framePairs.size > 1) warnings.push('В файле несколько размеров кадра; единственный размер анализа не подставлен.');
     if (unknown) warnings.push(`Неизвестен сигнал детектора для кадров: ${unknown}.`);
     if (!frames.length) warnings.push('В файле нет сохранённых кадров.');
-    warnings.push('Экспорт содержит центр цели и размеры кадра, но не bounding box объекта. Ширина/высота коптера не измерены.');
+    if (countOnly) warnings.push(`Кадров с числом кандидатов YOLO без координат и размера анализа: ${countOnly}.`);
+    warnings.push('Размеры эталонного коптера не измерены. Импорт не использует рамку LK как результат YOLO.');
     warnings.push('Наличие сигнала detected не доказывает правильное обнаружение эталона. TP/FP требует разметки или ручного подтверждения.');
     warnings.push('Последовательные кадры одного файла не считаются независимыми испытаниями.');
     const confidence = finite(model.confidence);
