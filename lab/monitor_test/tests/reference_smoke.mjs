@@ -34,6 +34,31 @@ await page.waitForFunction(() => document.getElementById('referenceDisplay').nat
 assert.equal((await snapshot()).equivalent_distance_m, null);
 await page.click('#screenCalibBtn'); await page.fill('#screenLineCm', '10'); await page.click('#applyScreenCalib'); await page.keyboard.press('Escape');
 assert.equal((await session()).screen_calibration.mm_per_css_px, 0.25);
+assert.equal(await page.inputValue('#referenceRangeMode'), 'approximate');
+await page.fill('#referenceScaleNumber', '50');
+assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 26.435) < 1e-9);
+assert.match(await page.textContent('#referenceReadout'), /≈ 26,44 м/);
+assert.match(await page.textContent('#referenceAssumption'), /не точная дальность/);
+await page.click('#referenceHalf');
+assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 52.87) < 1e-9);
+await page.fill('#distance', '300');
+assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 105.74) < 1e-9);
+await page.fill('#distance', '150');
+for (const id of ['skydroid_mx330t', 'gedz_10_dji', 'unik_sd_10ufp']) {
+  await page.selectOption('#referenceDrone', id);
+  const photos = await page.locator('#referencePhotoSelect option').evaluateAll(ns => ns.map(n => n.value));
+  for (const photo of photos) {
+    await page.selectOption('#referencePhotoSelect', photo);
+    if (id === 'unik_sd_10ufp') { assert.equal((await snapshot()).equivalent_distance_m, null); continue; }
+    await page.waitForFunction(() => document.getElementById('referenceDisplay').complete && document.getElementById('referenceDisplay').naturalWidth > 0);
+    assert.ok((await snapshot()).equivalent_distance_m > 0, photo);
+    assert.match(await page.textContent('#referenceReadout'), /≈ \d+,\d{2} м/);
+  }
+}
+await page.selectOption('#referenceDrone', 'skydroid_mx330t');
+await page.waitForFunction(() => document.getElementById('referenceDisplay').naturalWidth === 416);
+await page.selectOption('#referenceRangeMode', 'strict');
+assert.equal((await snapshot()).equivalent_distance_m, null);
 await page.fill('#referenceScaleNumber', '50');
 const width50 = (await snapshot()).display_width_cm; assert.ok(Math.abs(width50 - 3) < 1e-9);
 await page.fill('#referenceScaleNumber', '25'); assert.equal((await snapshot()).display_width_cm, width50 / 2);
@@ -154,6 +179,7 @@ const cal = (await session()).screen_calibration;
 await page.reload(); await nav('reference');
 assert.equal(await page.inputValue('#distance'), '150'); assert.equal(await page.inputValue('#referenceDrone'), 'gedz_10_dji');
 assert.equal(await page.inputValue('#referencePhotoSelect'), 'gedz_side');
+assert.equal(await page.inputValue('#referenceRangeMode'), 'strict');
 assert.equal(await page.inputValue('#referenceScaleNumber'), '50');
 await page.click('#confirmSavedScreen'); assert.equal((await session()).screen_calibration.id, cal.id);
 // Both annotated strokes and contrast labels are within the narrow viewport. No detector is involved.

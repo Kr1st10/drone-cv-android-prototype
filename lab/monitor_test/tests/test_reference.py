@@ -71,3 +71,33 @@ def test_independent_angular_oracle():
         assert angular_m == pytest.approx(expected, rel=1e-13)
         assert measured['equivalent_distance_m'] == pytest.approx(expected, rel=1e-13)
         assert measured['display_axis_cm'] == pytest.approx(display, rel=1e-13)
+
+
+def test_approximate_production_images_independent_units():
+    # Fixed numerical answers: silhouette width 240px / 800px, not full-file margins.
+    cases = [
+        ('skydroid_mx330t', 'skydroid_top', 416, 416, 1, 150, 6, 13.2175),
+        ('skydroid_mx330t', 'skydroid_top', 416, 416, 0.5, 150, 3, 26.435),
+        ('skydroid_mx330t', 'skydroid_top', 416, 416, 1, 300, 6, 26.435),
+        ('gedz_10_dji', 'gedz_side', 800, 800, 1, 150, 20, 3.75),
+        ('skydroid_mx330t', 'skydroid_front', 1000, 1000, 1, 150, 25, 3.1722),
+    ]
+    inputs = [{'model_id': model, 'render': {'photo_id': photo, 'width': w, 'height': h,
+        'scale': scale, 'visible': True}, 'distance_cm': dist, 'mm_per_css_px': 0.25}
+        for model, photo, w, h, scale, dist, display, expected in cases]
+    result = subprocess.run(['node', str(ROOT / 'tests/reference_test.mjs'), '--estimate-oracle'],
+        input=json.dumps(inputs), capture_output=True, text=True, check=True, timeout=30)
+    for measured, case in zip(json.loads(result.stdout), cases, strict=True):
+        *_, dist, display, expected = case
+        assert measured['display_width_cm'] == pytest.approx(display)
+        assert measured['equivalent_distance_m'] == pytest.approx(expected)
+        half_angle = math.atan2(display / 2, dist)
+        angular_m = (measured['assumed_extent_mm'] / 2000) / math.tan(half_angle)
+        assert angular_m == pytest.approx(expected)
+    # 3/4 uses a declared 45-degree assumption with W=528.7 and L=578.5 mm.
+    inputs[0]['render'].update(photo_id='skydroid_oblique_candidate', width=800, height=800)
+    measured = json.loads(subprocess.run(['node', str(ROOT / 'tests/reference_test.mjs'), '--estimate-oracle'],
+        input=json.dumps(inputs[:1]), capture_output=True, text=True, check=True, timeout=30).stdout)[0]
+    assert measured['assumed_extent_mm'] == pytest.approx(782.908628129758)
+    assert measured['display_width_cm'] == pytest.approx(19.125)
+    assert measured['equivalent_distance_m'] == pytest.approx(6.14045982846869)

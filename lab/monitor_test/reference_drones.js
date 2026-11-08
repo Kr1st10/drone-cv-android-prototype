@@ -1,9 +1,10 @@
-/* Local reference photographs. Missing identity/projection evidence must never produce metres. */
+/* Local reference images. Strict geometry and explicitly assumed range estimates stay separate. */
 (function (root) {
   'use strict';
   const profiles = [
     {
       "id": "skydroid_mx330t",
+      "estimate_dimensions_mm": { "length": 578.5, "width": 528.7 },
       "model": "Skydroid MX330T",
       "dimensions_mm": [
         578.5,
@@ -84,6 +85,7 @@
     },
     {
       "id": "unik_sd_10ufp",
+      "estimate_dimensions_mm": { "length": 530, "width": 590 },
       "model": "UNIK SD-10UFP",
       "dimensions_mm": [
         590,
@@ -149,6 +151,7 @@
     },
     {
       "id": "gedz_10_dji",
+      "estimate_dimensions_mm": { "length": 500, "width": 419 },
       "model": "GEDZ 10 DJI",
       "dimensions_mm": [
         500,
@@ -255,26 +258,54 @@
     return result;
   }
 
+  /** Horizontal visible silhouette + assumed physical extent; never a verified photo axis. */
+  function estimate(profile, render, distanceCm, mmPerCssPx, geometry) {
+    const p = render?.photo_id ? profile?.photos?.find(p => p.id === render.photo_id) : profile?.photos?.[0];
+    const empty = { display_width_cm: null, display_axis_cm: null, equivalent_distance_m: null,
+      assumed_extent_mm: null, assumption: null };
+    if (!p?.file || !render?.visible || render.width !== p.width || render.height !== p.height) return empty;
+    const widthMm = geometry.physicalWidth(p.bounds_px, p.width, p.height, render.scale, mmPerCssPx);
+    if (!positive(widthMm)) return empty;
+    const d = profile.estimate_dimensions_mm;
+    let extent, assumption;
+    if (p.view === 'front' || p.view === 'top' || p.view === 'near_top') {
+      extent = d?.width;
+      assumption = p.view === 'front' ? 'Спереди: поперечный габарит W.' : 'Сверху: горизонталь силуэта принята за поперечную паспортную ось W.';
+    } else if (p.view === 'side') {
+      extent = d?.length; assumption = 'Сбоку: продольный габарит L.';
+    } else if (p.view === 'oblique' || p.view === 'oblique_candidate') {
+      extent = positive(d?.width) && positive(d?.length) ? (d.width + d.length) / Math.SQRT2 : null;
+      assumption = '¾: условный угол 45°, W·cos(45°) + L·sin(45°).';
+    }
+    if (!positive(extent)) return { ...empty, display_width_cm: widthMm / 10 };
+    if (p.object_complete === false) assumption += ' Исходник обрезан: видимая часть условно приравнена полному габариту; оценка может быть завышена.';
+    if (!p.model_confirmed) assumption += ' Точная модель/комплектация изображения не подтверждена.';
+    return { ...empty, display_width_cm: widthMm / 10, assumed_extent_mm: extent,
+      equivalent_distance_m: geometry.equivalentDistance(extent / 10, distanceCm, widthMm), assumption };
+  }
+
   /** Mount only the new tab. Settings use their own storage key; legacy trials/results are untouched. */
   function mount({ element, load, save, getCalibration, getDistance, geometry }) {
     const saved = load('reference_tab', {});
     let selected = profiles.find(p => p.id === saved?.model_id) || profiles[0];
     let scale = positive(saved?.scale_percent) && saved.scale_percent <= 200 ? saved.scale_percent : 100;
     let loaded = false;
+    let mode = saved?.range_mode === 'strict' ? 'strict' : 'approximate';
     element.innerHTML = `
       <h3>Эксперимент с эталонными БПЛА</h3>
       <label>Коптер <select id="referenceDrone"></select></label>
       <label>Фотография <select id="referencePhotoSelect"></select></label>
+      <label>Расчёт <select id="referenceRangeMode"><option value="approximate">Приближённая оценка</option><option value="strict">Строгий: подтверждённая ось</option></select></label>
       <p><span id="referenceDimensions"></span> · <span id="referenceSpecSource"></span></p>
       <p id="referenceView"></p>
       <div id="referenceViewport"><img id="referenceDisplay" alt=""><p id="referenceMissing" class="hidden">Фотография недоступна.</p></div>
       <p><label>Масштаб <input id="referenceScale" type="range" min="0.1" max="200" step="0.1"></label>
       <label><input id="referenceScaleNumber" type="number" min="0.1" max="200" step="any" aria-label="Масштаб фотографии, %"> %</label>
       <button id="referenceHalf">Уменьшить вдвое</button><button id="referenceDouble">Увеличить вдвое</button></p>
-      <p id="referenceReadout" aria-live="polite"></p><p id="referenceIssue" class="warn"></p>
+      <p id="referenceReadout" aria-live="polite"></p><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
       <p class="muted">Лабораторная эквивалентная дальность по угловому размеру. Не измерение дальности обнаружения в полёте.</p>
       <details><summary>Дополнительно: источник фотографии и геометрия</summary>
-        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. При обрезке объекта расчёт недоступен.</p>
+        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. При обрезке объекта окном расчёт недоступен. Для обрезанного исходника приближённый режим использует только видимую часть с предупреждением.</p>
         <p id="referenceDimensionNote"></p><p id="referenceDiagnostics"></p><p id="referencePhotoSource"></p>
         <p>Разрешение авторов на использование и публикацию фотографий подтверждено пользователем 2026-11-06. Это не подтверждение проекции.</p>
       </details>`;
@@ -282,7 +313,7 @@
     const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), image = $('referenceDisplay'), viewport = $('referenceViewport');
     let photo = selected.photos.find(p => p.id === saved?.photo_id) || selected.photos[0];
     for (const p of profiles) select.add(new Option(p.model, p.id));
-    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale }); }
+    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode }); }
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
     function choosePhoto() {
       photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
@@ -311,6 +342,7 @@
     }
     function update() {
       const p = photo, cal = getCalibration();
+      $('referenceRangeMode').value = mode;
       $('referenceScale').value = scale;
       if (document.activeElement !== $('referenceScaleNumber')) $('referenceScaleNumber').value = scale;
       image.style.width = p.width * scale / 100 + 'px';
@@ -324,16 +356,22 @@
       const actualScale = p.width ? r.width / p.width : null;
       const visible = loaded && !!b && r.left + b[0] * actualScale >= left - 0.1 && r.top + b[1] * actualScale >= top - 0.1 &&
         r.left + b[2] * actualScale <= right + 0.1 && r.top + b[3] * actualScale <= bottom + 0.1;
-      const m = measure(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible },
+      const m = (mode === 'strict' ? measure : estimate)(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible },
         getDistance(), cal?.mm_per_css_px, geometry);
       const fmt = n => n == null ? 'нет данных' : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
-      $('referenceReadout').textContent = `Масштаб: ${scale} %. До экрана: ${fmt(getDistance())} см. Ширина силуэта на экране: ${fmt(m.display_width_cm)} см. Эквивалентная дальность: ${fmt(m.equivalent_distance_m)} м.`;
+      const range = m.equivalent_distance_m == null ? 'нет данных' :
+        `${mode === 'approximate' ? '≈ ' : ''}${m.equivalent_distance_m.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} м`;
+      $('referenceAssumption').textContent = mode === 'approximate' ?
+        `Приближённая оценка, не точная дальность и не подтверждённая геометрия. ${m.assumption || 'Для оценки нужны доступное изображение и ширина видимого коптера.'}${positive(m.assumed_extent_mm) ? ` Принятый габарит: ${fmt(m.assumed_extent_mm)} мм.` : ''}` :
+        'Строгий режим: метры доступны только для подтверждённой физической оси и проекции.';
+      $('referenceReadout').textContent = `Масштаб: ${scale} %. До экрана: ${fmt(getDistance())} см. Ширина силуэта на экране: ${fmt(m.display_width_cm)} см. Эквивалентная дальность: ${range}.`;
       if (m.display_axis_cm != null) $('referenceReadout').textContent += ` Размер расчётной оси: ${fmt(m.display_axis_cm)} см.`;
       $('referenceIssue').textContent = [p.issue, !loaded ? 'Локальная фотография не загружена.' : !visible ? 'Объект обрезан видимой областью. Уменьшите масштаб или прокрутите к фотографии.' : '',
         !$('referenceScaleNumber').validity.valid ? 'Некорректный масштаб: применяется последнее допустимое значение.' : '',
         !cal ? 'Нужна актуальная калибровка экрана.' : '', !positive(getDistance()) ? 'Введите расстояние от камеры до экрана.' : ''].filter(Boolean).join(' ');
       $('referenceDiagnostics').textContent = `ID: ${selected.id}; ракурс: ${p.view}; границы файла [x1, y1, x2, y2]: ${b ? b.join(', ') : 'нет'}; физическая ось: ${p.axis ? JSON.stringify(p.axis) : 'не подтверждена'}.`;
       return { model_id: selected.id, photo_id: p.id, view: p.view, scale_percent: scale, screen_distance_cm: getDistance(),
+        range_mode: mode, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
     }
     function setScale(value) {
@@ -341,6 +379,7 @@
       if (!positive(n) || n < 0.1 || n > 200) { $('referenceScaleNumber').setCustomValidity('Введите масштаб от 0,1 до 200 %.'); update(); return; }
       $('referenceScaleNumber').setCustomValidity(''); scale = n; persist(); update();
     }
+    $('referenceRangeMode').onchange = e => { mode = e.target.value === 'strict' ? 'strict' : 'approximate'; persist(); update(); };
     select.onchange = () => chooseModel();
     photoSelect.onchange = choosePhoto;
     $('referenceScale').oninput = e => setScale(e.target.value);
@@ -350,5 +389,5 @@
     select.value = selected.id; chooseModel(photo.id);
     return { update, snapshot: update };
   }
-  root.DroneReferences = { profiles, measure, mount };
+  root.DroneReferences = { profiles, measure, estimate, mount };
 })(typeof window === 'undefined' ? globalThis : window);
