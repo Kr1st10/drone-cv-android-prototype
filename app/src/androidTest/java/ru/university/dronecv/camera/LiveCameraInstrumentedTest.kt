@@ -67,13 +67,17 @@ class LiveCameraInstrumentedTest {
         // Ordered after any native call and release. No sleeping and no fabricated FPS assertion.
         compose.waitForIdle() // Apply disposal before queueing the worker barrier.
         DetectorWorker.executor.submit {}.get(90, TimeUnit.SECONDS)
+        VisionWorker.executor.submit {}.get(90, TimeUnit.SECONDS)
         compose.waitForIdle()
     }
 
     @Test fun cameraRunsRealModelAndStopClearsLateResults() {
         openAndStart()
         compose.onNodeWithTag("live-frame-ready").assertExists()
-        compose.onNodeWithTag("capture-to-signal").assertExists()
+        // LK can publish a search observation without a box; YOLO completion does not imply a fresh signal.
+        compose.waitUntil(30_000) {
+            compose.onAllNodesWithTag("capture-to-signal").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithContentDescription("Порог уверенности детектора")
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0.8f) }
         compose.onNodeWithText("Confidence: 80%").assertExists()

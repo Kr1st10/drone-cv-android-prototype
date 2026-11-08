@@ -98,3 +98,44 @@ def test_thread_cli_excludes_interrupted_and_aggregates_complete(tmp_path):
     report=json.loads(out.read_text())
     assert result.returncode != 0 and report['excluded_sessions']==[str(tmp_path/'interrupted.json')]
     assert report['thread_groups']['2']['sessions']==1
+
+
+def input_sample():
+    d = sample()
+    d['camera_input'] = dict(received_frames=60, copied_frames=59, superseded_frames=38,
+        no_buffer_frames=1, stale_frames=0, invalidated_frames=0, copy_errors=0,
+        copy_mean_ms=.7, copy_max_ms=1.2, fps_session=60.)
+    return d
+
+
+def test_input_rate_is_distinct_from_inference_rate():
+    r = a.analyze(input_sample())
+    assert not r['errors']
+    assert r['camera_input']['fps_session'] == 60. and r['fps'] == 20.
+
+
+def test_input_old_reports_remain_unchanged():
+    assert 'camera_input' not in a.analyze(sample())
+
+
+def test_input_counts_and_rate_are_validated():
+    d = input_sample(); d['camera_input']['superseded_frames'] = 61
+    d['camera_input']['fps_session'] = 1
+    errors = a.analyze(d)['errors']
+    assert any('discarded' in e for e in errors) and any('input FPS' in e for e in errors)
+    d['camera_input']['received_frames'] = True
+    with pytest.raises(ValueError): a.analyze(d)
+
+
+def test_input_copy_summary_handles_empty_and_invalid_values():
+    d = input_sample(); d['camera_input'].update(copied_frames=0, superseded_frames=0, copy_mean_ms=None, copy_max_ms=None)
+    assert not a.analyze(d)['errors']
+    d['camera_input'].update(copied_frames=1, copy_mean_ms=2., copy_max_ms=1.)
+    assert any('mean exceeds' in e for e in a.analyze(d)['errors'])
+
+
+def test_input_zero_duration_requires_null_fps():
+    d = sample(0); d.update(duration_ms=0., processed_fps_session=None, resources=[], pss_first_to_last_sample_delta_kb=None)
+    d['camera_input'] = dict(received_frames=0, copied_frames=0, superseded_frames=0, no_buffer_frames=0,
+        stale_frames=0, invalidated_frames=0, copy_errors=0, copy_mean_ms=None, copy_max_ms=None, fps_session=None)
+    assert not a.analyze(d)['errors']

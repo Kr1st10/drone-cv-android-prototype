@@ -1,10 +1,10 @@
 # Архитектура приложения
 
-Описание для разработчика и рецензента Android-приложения `0.5.1`, развивающего базу `acb3e9e`. Планы ВКР не считаются реализованными возможностями.
+Описание для разработчика и рецензента Android-приложения `0.5.2`, развивающего базу `acb3e9e`. Планы ВКР не считаются реализованными возможностями.
 
 ## Контекст и границы
 
-Оператор выбирает фото либо наблюдает заднюю камеру. Приложение выполняет локальный инференс одного класса `drone`, рисует рамки и позволяет исследовать время обработки и камеры. Единственная Activity использует Jetpack Compose; Gradle-модуль один — `:app`. DI-контейнера, сетевого сервиса и отдельных слоёв repository/use-case нет.
+Оператор выбирает фото либо наблюдает заднюю камеру. Приложение выполняет локальный инференс одного класса `drone`, сопровождает выбранную цель по изображениям и позволяет измерять задержку и частоту обновлений. Единственная Activity использует Jetpack Compose; Gradle-модуль один — `:app`. DI-контейнера, сетевого сервиса и отдельных слоёв repository/use-case нет.
 
 ```mermaid
 flowchart LR
@@ -17,8 +17,9 @@ flowchart LR
     subgraph App[Процесс ru.university.dronecv]
         UI[MainActivity / DroneApp / Compose]
         Photo[PhotoViewModel / PhotoController]
-        Live[CameraPreview / LiveController]
-        Worker[DetectorWorker: последовательное исполнение]
+        Live[CameraPreview / VisionWorker / LiveController]
+        Track[TrackingSession / OpenCV LK]
+        Worker[DetectorWorker: ORT и replay]
         Engine[Android backend / YoloOnnxEngine / ORT CPU]
         Diag[DiagnosticViewModel / измерения]
         Model[assets и проверенная копия ONNX]
@@ -26,6 +27,8 @@ flowchart LR
         UI --> Live
         Photo --> Worker
         Live --> Worker
+        Live --> Track
+        Track --> Live
         Worker --> Engine
         Model --> Engine
         Live --> Diag
@@ -45,7 +48,7 @@ flowchart LR
 | Вход и режимы | [MainActivity](../../app/src/main/java/ru/university/dronecv/MainActivity.kt), [DroneApp](../../app/src/main/java/ru/university/dronecv/DroneApp.kt) | Edge-to-edge, тема, вкладки, сохранение порога и числа потоков через `rememberSaveable` |
 | Фото | [PhotoViewModel](../../app/src/main/java/ru/university/dronecv/photo/PhotoViewModel.kt), [PhotoController](../../app/src/main/java/ru/university/dronecv/photo/PhotoController.kt), [AndroidPhotoBackend](../../app/src/main/java/ru/university/dronecv/photo/AndroidPhotoBackend.kt) | Activity-владение, decode/EXIF, очередь команд и отбрасывание устаревших ответов |
 | Камера и разрешение | [CameraScreen](../../app/src/main/java/ru/university/dronecv/camera/CameraScreen.kt), [CameraPreview](../../app/src/main/java/ru/university/dronecv/camera/CameraPreview.kt) | Разрешение, lifecycle, общий ViewPort, bind/unbind Preview и ImageAnalysis, ошибки камеры |
-| Анализ кадров | [LiveController](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt), [AndroidLiveBackend](../../app/src/main/java/ru/university/dronecv/camera/AndroidLiveBackend.kt) | Синхронный analyzer, закрытие кадров, нормализованные результаты и измерения |
+| Анализ кадров | [LiveController](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt), [AndroidLiveBackend](../../app/src/main/java/ru/university/dronecv/camera/AndroidLiveBackend.kt) | Быстрое копирование/закрытие входа, latest-only собственные снимки, нормализованные результаты и измерения |
 | Общий исполнитель | [DetectorWorker](../../app/src/main/java/ru/university/dronecv/detection/DetectorWorker.kt) | Один executor/dispatcher на процесс; нативный инференс фото/камеры не выполняется параллельно |
 | Детектор | [OnnxDroneDetector](../../app/src/main/java/ru/university/dronecv/detection/onnx/OnnxDroneDetector.kt), [YoloOnnxEngine](../../app/src/main/java/ru/university/dronecv/detection/onnx/YoloOnnxEngine.kt) | Android-адаптер, общий JVM/Android ORT-движок, валидация тензоров, сессия |
 | Чистые алгоритмы | [detection/yolo](../../app/src/main/java/ru/university/dronecv/detection/yolo) | Поворот, letterbox, RGB-тензор, декодирование и NMS без Android SDK |

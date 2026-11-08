@@ -49,18 +49,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import ru.university.dronecv.detection.DetectorWorker
 
 class CameraUnavailableException : Exception("No back camera available")
 class CameraStateException(val code: Int) : Exception("Camera error, code=$code")
 
 /** Back camera only. Preview and analysis share a FILL_CENTER ViewPort, hence the same visible FOV.
- * No blocking work on main; CameraX keeps at most the latest pending frame on the shared ML worker.
+ * Input copies on VisionWorker; the controller hands owned snapshots to the shared ML worker.
  */
 @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
 @Composable
 internal fun CameraPreview(
-    controller: LiveController<ImageProxy>,
+    controller: LiveController<CameraFrameSnapshot>,
     enabled: Boolean,
     confidence: Float,
     probe: CameraProbeState,
@@ -71,6 +70,10 @@ internal fun CameraPreview(
 ) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
+    val capture = remember(controller) {
+        val snapshotter = AndroidFrameSnapshotter()
+        LiveFrameCapture<ImageProxy, CameraFrameSnapshot>(controller, snapshotter::copy)
+    }
     val currentOnError by rememberUpdatedState(onError)
     val currentOnIssue by rememberUpdatedState(onRecoverableIssue)
     val currentOnInterruption by rememberUpdatedState(onInterruption)
@@ -275,14 +278,14 @@ internal fun CameraPreview(
             val source = controller.newSource()
             val timebase = boundTimebase
             controller.configure(true, currentConfidence)
-            analysis.setAnalyzer(DetectorWorker.executor) { frame ->
+            analysis.setAnalyzer(VisionWorker.executor) { frame ->
                 var handedOff = false
                 try {
                     val entryNs = SystemClock.elapsedRealtimeNanos()
                     val captureNs = try { frame.imageInfo.timestamp } catch (_: Exception) { null }
                     val stamp = FrameStamp(captureNs, timebase, entryNs)
                     handedOff = true
-                    controller.analyze(frame, source, stamp)
+                    capture.analyze(frame, source, stamp)
                 } finally {
                     // Metadata/allocation failures before transfer must not retain an ImageProxy.
                     if (!handedOff) frame.close()

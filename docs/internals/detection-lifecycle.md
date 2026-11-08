@@ -81,40 +81,32 @@ Activity-scoped [PhotoViewModel](../../app/src/main/java/ru/university/dronecv/p
 
 ```mermaid
 sequenceDiagram
-    participant UI as CameraScreen / CameraPreview
-    participant CX as CameraX
-    participant C as LiveController
-    participant B as AndroidLiveBackend
-    participant E as YOLO / ORT
-    UI->>CX: bindToLifecycle(Preview + Analysis, общий ViewPort)
-    UI->>C: newSource(), configure(true, threshold)
-    UI->>CX: setAnalyzer(DetectorWorker.executor)
-    CX->>C: analyze(ImageProxy, sourceId) на worker
-    alt Активен, source актуален, не ERROR
-        C->>B: infer(frame, confidence)
-        B->>E: RGBA crop → detectArgbDetailed
-        E-->>B: Результат и стадии времени
-        B-->>C: LiveInference
-        C->>C: Проверить generation, записать диагностику
-        C-->>UI: RUNNING и текущий результат
-    else Callback устарел / обработка запрещена
-        C->>C: Пропустить infer
+    participant C as CameraX
+    participant V as VisionWorker
+    participant M as DetectorWorker
+    participant U as Compose
+    C->>V: ImageProxy, source, FrameStamp
+    V->>V: Token, копирование, ImageProxy.close
+    V->>V: Grayscale, обновление LK
+    V-->>U: Наблюдение при актуальном token
+    opt Пора проверить YOLO, свободен слот камеры
+        V->>M: Один собственный snapshot
+        M->>M: ORT и snapshot.close
+        M-->>V: Результат исходного кадра
+        V->>M: План коррекции по истории
+        M-->>V: Replay отдельным трекером
+        V-->>U: Коррекция, если ещё актуальна
     end
-    C->>CX: ImageProxy.close() в finally
-    UI->>C: configure(false, threshold) при Stop/pause
-    UI->>CX: clearAnalyzer()
-    C->>B: close() в очереди worker после infer
 ```
 
-Рисунок 5. Синхронный анализ кадра; дополнительной очереди кадров у контроллера нет. Ошибка infer проходит через актуальность generation и освобождение кадра в `finally`, затем модель закрывается на worker.
-
-CameraX использует RGBA и `KEEP_ONLY_LATEST`; он управляет ожидающим кадром. [LiveController](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt) принимает кадр синхронно на общем executor и закрывает каждый `ImageProxy`, включая неактуальный/отклонённый. Конвертер выдаёт заимствованный массив; его нельзя сохранять после следующей конвертации.
+Рисунок 5. VisionWorker закрывает ImageProxy до LK и передачи собственного снимка. Все вызовы ORT идут последовательно. Результаты и ошибки проверяются по generation/source; [контракт входа](../guides/camera-frame-ingress.md) и [коррекция](../guides/visual-tracking-core.md).
 
 Защита результатов имеет разные назначения:
 
 | Механизм | Что предотвращает |
 |---|---|
 | `generation` | Публикацию результата/ошибки до Stop, смены порога или другой invalidation |
+| `pumpEpoch` | Получение новым кадром места старой ML-задачи перед release прежней активации |
 | `source` | Приём callback старой активации analyzer, даже на прежнем binding |
 | `activationEpoch` в Preview | Повторное использование analyzer после pause/resume, слитых до recomposition |
 | `revision` | Удаление нового результата старым таймером UI expiry |
@@ -124,7 +116,7 @@ CameraX использует RGBA и `KEEP_ONLY_LATEST`; он управляет
 stateDiagram-v2
     [*] --> STOPPED
     STOPPED --> STARTING: configure(true)
-    STARTING --> RUNNING: актуальный успешный кадр
+    STARTING --> RUNNING: успешный YOLO актуального поколения
     STARTING --> ERROR: актуальная ошибка
     RUNNING --> RUNNING: следующий кадр / expire
     RUNNING --> STARTING: новый threshold при active
@@ -136,7 +128,7 @@ stateDiagram-v2
     STOPPED --> STOPPED: close
 ```
 
-Рисунок 6. `LivePhase`. `ERROR` блокирует новые infer до повторной активации. Смена порога при активной детекции также переводит контроллер в STARTING. `expire(revision)` очищает рамки и текущие времена без смены RUNNING; UI вызывает его через 1500 мс без нового результата. `close()` из любой фазы публикует STOPPED, запрещает дальнейшую работу и ставит освобождение backend в очередь.
+Рисунок 6. `LivePhase`. `ERROR` блокирует новые infer до повторной активации. Смена порога при активной детекции также переводит контроллер в STARTING. `expire(revision)` очищает наблюдение LK без смены RUNNING; UI вызывает его по ближайшему сроку: 250 мс без публикации или TTL подтверждения YOLO. Таймер захватывает ревизию при запуске. Сводка последних вызовов YOLO остаётся видимой. `close()` из любой фазы публикует STOPPED, запрещает дальнейшую работу и ставит освобождение backend в очередь.
 
 Stop снимает analyzer и сохраняет превью. Pause/пропажа streaming/resize/display rotation инвалидируют результат сразу; новая активация получает новый source. Возврат из фона/ротация восстанавливают включённый режим, а после смены вкладки запуск ручной. Панель управления имеет размер относительно окна, прокручивается внутри и не меняет ViewPort при появлении статистики. UI результата собирает StateFlow на `Dispatchers.Main.immediate`.
 
@@ -163,7 +155,8 @@ sequenceDiagram
     VM->>F: start(nanoTime), новый token
     VM->>OS: Опрос PSS / thermal / battery, примерно каждые 5 с
     C->>F: currentToken(), received(token)
-    C->>F: completed(token, времена) для актуального кадра
+    C->>F: completed(token запроса, времена YOLO)
+    C->>F: tracking(token кадра публикации, наблюдение LK)
     U->>VM: stop() / событие прерывания
     VM->>F: stop(token), снимок
     VM->>VM: Сохранить последний report, посчитать сводки в фоне
@@ -177,8 +170,8 @@ sequenceDiagram
 
 ## Ошибки и инварианты
 
-После успешного YOLO тот же worker выбирает максимальный confidence текущего кадра и публикует `signals`/`LiveState.target` только при актуальной generation. Кадр без обнаружений публикует NO_TARGET с null-координатами; Configure/Stop/pause/error/rebind и expire очищают текущий сигнал. Синхронный подписчик StateFlow может повторно вызвать управление; проверка generation после публикации не позволяет вернуть прежний результат. Все кадры по-прежнему закрываются в finally контроллера. Захват и выдача координат используют отдельную подтверждённую временную базу, а pipeline сохраняет nanoTime. Дополнительного ImageProxy, native worker или очереди кадров нет. [Путь сигнала и геометрия](../guides/latency-and-prediction.md).
+VisionWorker публикует `LiveState.tracking` при актуальном generation/source. Stop, порог, фон и rebind очищают результат, а queued reset закрывает трекер. Запоздавший replay освобождает свой экземпляр, если коррекция устарела. UI expiry убирает наблюдение при остановке поступления кадров. Правила выбора и потери цели — [трекинг камеры](../guides/visual-tracking-core.md).
 
 `PhotoError` различает доступ, изображение, память, отсутствие/целостность модели и прочую ошибку infer. Пустые детекции — успешный результат EMPTY. В камере recoverable `CameraState` показывает занятость/переподключение, critical ведёт к recovery/error; после ошибки модели рекомендуется Stop/start. Экспорт показывает статус ошибки без фиктивного успешного сохранения. Логи и восстановление описаны в [runbook](../operations/runbook.md).
 
-Не ждите закрытия ORT на UI, не вызывайте `shutdownNow()` общего worker, не передавайте frame другому асинхронному исполнителю и не recycle-ите опубликованный bitmap. Контракт движка допускает синхронный `close()`, ожидающий infer; именно поэтому контроллеры ставят его на worker. Инварианты проверяются [controller/geometry тестами](../development/testing.md), аппаратные свойства — отдельно на телефоне.
+Не ждите закрытия ORT на UI и не вызывайте shutdownNow общих workers. ImageProxy не передаётся другому исполнителю: только собственный snapshot с generation/source/diagnostic token. Заимствованные массивы и опубликованные Bitmap нельзя освобождать до завершения читателя. Infer, смена потоков и close остаются на общем ML-worker; [тестирование](../development/testing.md).

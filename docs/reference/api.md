@@ -4,6 +4,8 @@
 
 ## Детектор и движок
 
+`tracking/VisualTracker` и `TrackingSession` обслуживают камеру. Их API, временные проверки и владение коррекцией описаны в руководстве: [ядро визуального трекинга](../guides/visual-tracking-core.md).
+
 Источники: [ObjectDetector](../../app/src/main/java/ru/university/dronecv/detection/ObjectDetector.kt), [OnnxDroneDetector](../../app/src/main/java/ru/university/dronecv/detection/onnx/OnnxDroneDetector.kt), [YoloOnnxEngine](../../app/src/main/java/ru/university/dronecv/detection/onnx/YoloOnnxEngine.kt). Все параметры обязательны, кроме явно указанных значений по умолчанию. Типы результатов раскрыты в [модели данных](data-model.md), точные настройки — в [конфигурации](configuration.md).
 
 | Операция | Вход | Результат, ошибки и побочные эффекты |
@@ -76,23 +78,27 @@ fun inspectUniformInput(modelFile: File): Int =
 
 ## Камера: управление и backend
 
-Источник: [LiveController.kt](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt). Constructor получает `LiveBackend<Frame>`, `Executor`, optional `DiagnosticFrames?=null`, `initialThreads=2`, `eventTime: (() -> Long)?=null`, `maxAnalyzerAgeMs=250.0`, `nanoTime=System::nanoTime`; `Frame : AutoCloseable`. Поток analyzer должен быть тем же worker, на котором закрывается backend. `CameraScreen` явно передаёт elapsedRealtimeNanos для сигнала; при отсутствии eventTime сигналы отключены, чтобы не смешать базы часов. Для сигнала нужен также FrameStamp при анализе. Pipeline продолжает использовать nanoTime.
+Источник: [LiveController.kt](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt). Constructor получает `LiveBackend<Frame>`, `Executor`, optional `DiagnosticFrames?=null`, `initialThreads=2`, `eventTime: (() -> Long)?=null`, `maxAnalyzerAgeMs=250.0`, `tracking: LiveTracking<Frame>?=null`, `nanoTime=System::nanoTime`; `Frame : AutoCloseable`. Android использует CameraFrameSnapshot. LiveFrameCapture вызывается на VisionWorker, копирует и закрывает ImageProxy до offerFrame. Все backend-операции сериализованы DetectorWorker. CameraScreen передаёт LiveTracking и elapsedRealtimeNanos; для этой ветви eventTime обязателен. [Владение и очередь](../guides/camera-frame-ingress.md).
 
 | Операция | Вход → результат | Условия, ошибки, эффекты |
 |---|---|---|
 | `configure(enabled: Boolean, threshold: Float)` | Настройки → `Unit` | Threshold `0.01..1.0`, иначе `IllegalArgumentException`; инвалидирует результат, при выключении ставит backend.close на worker; после close игнорируется |
 | `updateThreshold(threshold)` | Float → `Unit` | То же при текущем active |
 | `newSource()` | Нет → Long token | Выключает текущую активацию и увеличивает source; затем вызывающий активирует analyzer |
-| `analyze(frame, sourceId: Long?=null, stamp: FrameStamp?=null)` | Frame/token/метки времени → `Unit` | Синхронно на worker, принимает только актуальный источник; известный возраст >maxAnalyzerAgeMs отбрасывается до ORT. `finally` всегда закрывает frame. Ошибки infer/OOM превращаются в ERROR при актуальной generation; ошибка самого frame.close может выйти наружу |
+| `beginFrame(sourceId, stamp)` | Метаданные → LiveFrameToken? | Принимает только активную generation/source; до копирования проверяет возраст, token фиксирует диагностическую сессию |
+| `offerFrame(frame, token, stamp, preparationMs)` | Собственный snapshot → Unit | Принимает владение даже при отказе; в режиме LK наблюдает кадр и при необходимости резервирует снимок для ORT; без LiveTracking заменяет pending; preparationMs finite, >=0 |
+| `input` | Нет → `StateFlow<CameraInputStats>` | Окно входных FPS, счётчики копий/пропусков; не FPS сенсора и не новые координаты |
+| `analyze(frame, sourceId: Long?=null, stamp: FrameStamp?=null)` | Frame/token/метки времени → `Unit` | Синхронный ML-worker entry для собственных кадров; CameraX использует LiveFrameCapture/offerFrame. Принимает только актуальный источник; известный возраст >maxAnalyzerAgeMs отбрасывается до ORT. `finally` всегда закрывает frame. Ошибки infer/OOM превращаются в ERROR при актуальной generation; ошибка самого frame.close может выйти наружу |
 | `requestThreads(threads: Int)` | 1/2/4 → Boolean | Неверный Int → `IllegalArgumentException`; false при запрещённой смене/закрытии; true — запрос принят. Результат и ошибка асинхронно в StateFlow |
-| `expire(revision: Long)` | Ревизия → `Unit` | Удаляет result/FPS/pipeline только при совпадении текущей ревизии |
+| `expire(revision: Long)` | Ревизия → `Unit` | Очищает tracking и trackingFps только при совпадении ревизии; в ветви без LK очищает result/FPS/pipeline |
 | `close()` | Нет → `Unit` | Идемпотентно инвалидирует generation/source, сбрасывает state и ставит release в очередь |
 | `state` / `threadConfiguration` | Нет → StateFlow | `LiveState` / `ThreadConfiguration`; не публикуют старый infer/error |
-| `signals` | Нет → `StateFlow<TargetSignal?>` | Последний внутренний сигнал текущего кадра; conflated, null при invalidation/expiry. Содержит статус, пиксель/центр выбранного обнаружения, confidence и времена. Не подтверждает получение внешним устройством |
+| `state.value.tracking` | `TrackingSignal?` | Последняя публикация LK по кадру, либо null после invalidation/expiry. Содержит состояние, времена, координаты при сопровождении и `displayUntilNs`: локальный дедлайн видимости по elapsedRealtimeNanos, без поля в JSON. |
+| `signals` | `StateFlow<TargetSignal?>` | Исторический сигнал v2 в ветви без LiveTracking. В рабочей камере координаты читаются из state. |
 | `LiveBackend.infer(frame, confidence)` | Frame/Float → `LiveInference` | Блокирующий, не должен удерживать frame после возврата; его закрывает контроллер |
 | `LiveBackend.changeThreads(threads)` / `close()` | Int / нет → Unit | На том же worker; default changeThreads бросает `UnsupportedOperationException` |
 
-`AndroidLiveBackend(Context, initialThreads=2)` использует ImageProxy, конвертер и внутренний `ThreadSessionManager`. `DetectorWorker.executor/dispatcher` доступны всему процессу; их не закрывает экран. Неверно настроенный/закрытый внешний Executor не является поддерживаемым способом отмены работы контроллера.
+`AndroidLiveBackend(Context, initialThreads=2)` получает CameraFrameSnapshot, не читает ImageProxy и использует ThreadSessionManager. DetectorWorker.executor/dispatcher доступны всему процессу, VisionWorker.executor обслуживает вход; экран не закрывает эти исполнители. Закрытый внешний Executor не является поддерживаемым способом отмены native-работы.
 
 ## Диагностика и UI
 
@@ -134,7 +140,7 @@ python ml/scripts/drone_detector.py /absolute/path/to/photo.jpg --conf 0.25 --io
 
 CLI принимает обязательные `images` (один/несколько путей), `--model` (путь, default `ml/weights/yolo11s-drone-640.onnx`), `--conf`/`--iou` (float, defaults выше) и необязательный `--save-dir` (путь, default None). Печатает по JSON-объекту на изображение: image, width, height, detections с полями dataclass; при save-dir пишет размеченные изображения. Парсер принимает float без отдельной проверки диапазона, поэтому используйте пороги `[0,1]`; не переносите сюда гарантию require из Kotlin.
 
-Операционные CLI: `install_android_model.py [--onnx PATH]` описан в [запуске](../getting-started.md#подготовить-модель); `verify_apk_model.py APK` проверяет ZIP asset и завершается ошибкой при отсутствии/неверном SHA/сжатии; `analyze_android_sessions.py INPUT [INPUT ...] --output PATH [--compare-threads]` описан в [тестировании](../development/testing.md#python-и-галерея). Gallery CLI и JSON-контракт — [README](../../lab/monitor_test/README.md) и [протокол](../../lab/monitor_test/PROTOCOL.md#технический-формат-json). Исследовательские CLI отдельных этапов имеют собственные инструкции из [карты кода](../development/codebase.md#ml-и-лабораторные-инструменты); единого стабильного API они не образуют.
+Операционные CLI: `install_android_model.py [--onnx PATH]` описан в [запуске](../getting-started.md#подготовить-модель); `verify_apk_model.py APK` проверяет ZIP asset и завершается ошибкой при отсутствии/неверном SHA/сжатии; `analyze_android_sessions.py INPUT [INPUT ...] --output PATH [--compare-threads]` описан в [тестировании](../development/testing.md#python-и-галерея). Gallery CLI и JSON-контракт — [README](../../lab/monitor_test/README.md) и [протокол](../../lab/monitor_test/PROTOCOL.md#формат-json-и-совместимость). Исследовательские CLI отдельных этапов имеют собственные инструкции из [карты кода](../development/codebase.md#ml-и-лабораторные-инструменты); единого стабильного API они не образуют.
 
 ## Категории ошибок и пробелы KDoc
 
