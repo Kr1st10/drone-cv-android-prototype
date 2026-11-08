@@ -201,6 +201,7 @@
     if (!object(report) || report.schema_version !== 1 || !Array.isArray(report.frames))
       throw new TypeError('Нужен диагностический JSON Android schema_version=1 с массивом frames.');
     const model = object(report.model) ? report.model : {}, warnings = [];
+    if (object(report.tracking)) warnings.push('Раздел сопровождения LK не участвует в подсчёте обнаружений YOLO.');
     const framePairs = new Set();
     let candidates = 0, noTarget = 0, unknown = 0;
     const frames = report.frames.map((row, index) => {

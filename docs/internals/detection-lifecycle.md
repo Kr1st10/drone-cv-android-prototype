@@ -81,37 +81,25 @@ Activity-scoped [PhotoViewModel](../../app/src/main/java/ru/university/dronecv/p
 
 ```mermaid
 sequenceDiagram
-    participant CX as CameraX
-    participant I as VisionWorker
-    participant C as LiveController
-    participant W as DetectorWorker
-    participant B as AndroidLiveBackend
-    participant UI as Compose
-    CX->>I: ImageProxy, source, FrameStamp
-    I->>C: beginFrame: generation и diagnostic token
-    opt Актуальный вход и есть буфер
-        I->>I: Скопировать raw crop в собственный snapshot
+    participant C as CameraX
+    participant V as VisionWorker
+    participant M as DetectorWorker
+    participant U as Compose
+    C->>V: ImageProxy, source, FrameStamp
+    V->>V: Token, копирование, ImageProxy.close
+    V->>V: Grayscale, обновление LK
+    V-->>U: Наблюдение при актуальном token
+    opt Пора проверить YOLO, свободен слот камеры
+        V->>M: Один собственный snapshot
+        M->>M: ORT и snapshot.close
+        M-->>V: Результат исходного кадра
+        V->>M: План коррекции по истории
+        M-->>V: Replay отдельным трекером
+        V-->>U: Коррекция, если ещё актуальна
     end
-    I->>CX: ImageProxy.close() в finally
-    opt Snapshot подготовлен
-        I->>C: offerFrame(snapshot, token)
-        C->>C: Заменить pending и освободить прежний
-        C->>W: Pump с epoch
-        W->>B: infer(snapshot, confidence)
-        B-->>W: LiveInference и стадии
-        W->>C: Проверить generation и опубликовать
-        C-->>UI: RUNNING и результат
-        W->>W: snapshot.close() в finally
-    end
-    UI->>C: configure(false) при Stop/pause
-    UI->>CX: clearAnalyzer()
-    C->>C: Инвалидировать pending и pump epoch
-    C->>W: backend.close() после native call
 ```
 
-Рисунок 5. Вход камеры независим от инференса. Только собственные snapshot пересекают границу исполнителей; ошибка проходит через generation, освобождение снимка и упорядоченный release.
-
-CameraX сохраняет RGBA/KEEP_ONLY_LATEST. VisionWorker копирует и закрывает ImageProxy; LiveController держит один pending snapshot, а DetectorWorker сериализует нативную обработку. Конвертер copyInto не сохраняет leased-массив; заимствованный convert не передаётся асинхронно. [Полный контракт](../guides/camera-frame-ingress.md).
+Рисунок 5. VisionWorker закрывает ImageProxy до LK и передачи собственного снимка. Все вызовы ORT идут последовательно. Результаты и ошибки проверяются по generation/source; [контракт входа](../guides/camera-frame-ingress.md) и [коррекция](../guides/visual-tracking-core.md).
 
 Защита результатов имеет разные назначения:
 
@@ -128,7 +116,7 @@ CameraX сохраняет RGBA/KEEP_ONLY_LATEST. VisionWorker копирует 
 stateDiagram-v2
     [*] --> STOPPED
     STOPPED --> STARTING: configure(true)
-    STARTING --> RUNNING: актуальный успешный кадр
+    STARTING --> RUNNING: успешный YOLO актуального поколения
     STARTING --> ERROR: актуальная ошибка
     RUNNING --> RUNNING: следующий кадр / expire
     RUNNING --> STARTING: новый threshold при active
@@ -140,7 +128,7 @@ stateDiagram-v2
     STOPPED --> STOPPED: close
 ```
 
-Рисунок 6. `LivePhase`. `ERROR` блокирует новые infer до повторной активации. Смена порога при активной детекции также переводит контроллер в STARTING. `expire(revision)` очищает рамки и текущие времена без смены RUNNING; UI вызывает его через 1500 мс без нового результата. `close()` из любой фазы публикует STOPPED, запрещает дальнейшую работу и ставит освобождение backend в очередь.
+Рисунок 6. `LivePhase`. `ERROR` блокирует новые infer до повторной активации. Смена порога при активной детекции также переводит контроллер в STARTING. `expire(revision)` очищает наблюдение LK без смены RUNNING; UI вызывает его примерно через 250 мс без новой публикации. Сводка последних вызовов YOLO остаётся видимой. `close()` из любой фазы публикует STOPPED, запрещает дальнейшую работу и ставит освобождение backend в очередь.
 
 Stop снимает analyzer и сохраняет превью. Pause/пропажа streaming/resize/display rotation инвалидируют результат сразу; новая активация получает новый source. Возврат из фона/ротация восстанавливают включённый режим, а после смены вкладки запуск ручной. Панель управления имеет размер относительно окна, прокручивается внутри и не меняет ViewPort при появлении статистики. UI результата собирает StateFlow на `Dispatchers.Main.immediate`.
 
@@ -167,7 +155,8 @@ sequenceDiagram
     VM->>F: start(nanoTime), новый token
     VM->>OS: Опрос PSS / thermal / battery, примерно каждые 5 с
     C->>F: currentToken(), received(token)
-    C->>F: completed(token, времена) для актуального кадра
+    C->>F: completed(token запроса, времена YOLO)
+    C->>F: tracking(token кадра публикации, наблюдение LK)
     U->>VM: stop() / событие прерывания
     VM->>F: stop(token), снимок
     VM->>VM: Сохранить последний report, посчитать сводки в фоне
@@ -181,7 +170,7 @@ sequenceDiagram
 
 ## Ошибки и инварианты
 
-После YOLO DetectorWorker выбирает максимальный confidence отобранного snapshot и публикует signals/LiveState.target только при актуальной generation. Входные ImageProxy независимо копируются/закрываются на VisionWorker; latest-only очередь снимков и владение описаны в [контракте входа](../guides/camera-frame-ingress.md). Кадр без обнаружений публикует NO_TARGET с null-координатами. Configure/Stop/error/rebind инвалидируют pending и epoch pump; expire очищает UI-сигнал. Синхронное повторное управление подписчиком не должно возвращать старый результат.
+VisionWorker публикует `LiveState.tracking` при актуальном generation/source. Stop, порог, фон и rebind очищают результат, а queued reset закрывает трекер. Запоздавший replay освобождает свой экземпляр, если коррекция устарела. UI expiry убирает наблюдение при остановке поступления кадров. Правила выбора и потери цели — [трекинг камеры](../guides/visual-tracking-core.md).
 
 `PhotoError` различает доступ, изображение, память, отсутствие/целостность модели и прочую ошибку infer. Пустые детекции — успешный результат EMPTY. В камере recoverable `CameraState` показывает занятость/переподключение, critical ведёт к recovery/error; после ошибки модели рекомендуется Stop/start. Экспорт показывает статус ошибки без фиктивного успешного сохранения. Логи и восстановление описаны в [runbook](../operations/runbook.md).
 

@@ -14,7 +14,7 @@
 | Compose BOM / Material 3 | 2024.12.01 / версия из BOM |
 | CameraX / lifecycle / activity-compose | 1.4.1 / 2.8.7 / 1.9.3 |
 | ONNX Runtime Android и JVM | 1.31.1 |
-| OpenCV Android (экспериментальное ядро) | 4.12.0; [статус и параметры](../guides/visual-tracking-core.md) |
+| OpenCV Android (LK) | 4.12.0; [статус и параметры](../guides/visual-tracking-core.md) |
 | Coroutines / ExifInterface / core-ktx | 1.8.1 / 1.3.7 / 1.15.0 |
 | JUnit / AndroidX test ext / runner | 4.13.2 / 1.2.1 / 1.6.2 |
 | applicationId / versionName / versionCode | `ru.university.dronecv` / `0.5.2` / `7` |
@@ -79,7 +79,7 @@
 | `PhotoDecodeSize.maxSide` | Int; `2048` px | `>0`, например 2048 | Ограничение декодирования, не размер входа YOLO |
 | Анализ камеры | `640×480`, nearest lower then higher | Положительный размер, итог зависит от CameraX | Меняет доступные детали и стоимость конвертации |
 | `DiagnosticFrames.capacity` | Int; `100000` | `>0` | Далее растёт `unstoredFrames`, сводки только по сохранённым кадрам |
-| Период ресурсов / expiry UI | `5000` / `1500` мс | Фиксированные интервалы coroutine | Частота измерений / скрытие устаревших рамок |
+| Период ресурсов / expiry UI | `5000` / `250` мс | Фиксированные интервалы coroutine | Частота измерений / скрытие устаревших рамок |
 
 Порог LiveController.maxAnalyzerAgeMs=250.0 (Double, finite, >=0) ограничивает подтверждённый возраст на входе, текущий возраст перед ORT и известное ожидание в очереди приложения. UNKNOWN не позволяет считать capture age, но ожидание очереди проверяется по nanoTime. CameraFramePool.maxBytes=16 MiB (Long, >0), максимум 3 ARGB-массива; нехватка слота/бюджета приводит к пропуску, без расширения лимита. Параметры заданы в коде и требуют сборки при изменении. [Контракт владения](../guides/camera-frame-ingress.md).
 

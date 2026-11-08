@@ -138,6 +138,119 @@ def analyze_camera_input(d, errors):
     return dict(data, fps_session=fps)
 
 
+def analyze_tracking(d, errors):
+    """LK publications are separate from detector frames; a correction is not a new input image."""
+    t = d['tracking']
+    if t['schema_version'] != 1:
+        raise ValueError('unsupported tracking schema_version')
+    names = ('observed_frames', 'track_updates', 'corrections', 'loss_events', 'unstored_samples')
+    if any(type(t.get(k)) is not int or t[k] < 0 for k in names):
+        raise ValueError('invalid tracking counters')
+    rows = t['samples']
+    if not isinstance(rows, list) or len(rows) > 10_000:
+        raise ValueError('invalid tracking samples')
+    work, capture, entry, processing, correction_work = [], [], [], [], []
+    frames, corrections, losses, previous, previous_offset = 0, 0, 0, None, -1
+    seen = set()
+    for row in rows:
+        offset = row['offset_ms']
+        if not (previous_offset <= offset <= d['duration_ms'] and offset >= 0):
+            errors.append('tracking: invalid offset')
+        previous_offset = offset
+        key = tuple(row[k] for k in ('generation', 'source_id', 'sequence'))
+        if any(type(x) is not int or x < 0 for x in key) or key[2] < 1:
+            raise ValueError('invalid tracking frame key')
+        state, box, quality, point, pixel = (row[k] for k in ('status', 'box', 'quality', 'center', 'pixel'))
+        tracked = state == 'tracking'
+        if state not in ('tracking', 'searching', 'lost') or any(
+                (row[k] is not None) != tracked for k in ('track_id', 'box', 'quality', 'center', 'pixel')):
+            errors.append('tracking: status/coordinates mismatch')
+        w, h = row['width'], row['height']
+        if any(type(x) is not int or x < 1 for x in (w, h)) or row['coordinate_space'] != 'upright_crop_pixels':
+            raise ValueError('invalid tracking coordinate space')
+        tw, th = row['tracking_width'], row['tracking_height']
+        if type(tw) is not int or type(th) is not int or not (1 <= tw <= w and 1 <= th <= h):
+            raise ValueError('invalid LK grid dimensions')
+        if tracked and all(x is not None for x in (box, quality, point, pixel)):
+            if not (0 <= box['left'] < box['right'] <= w and 0 <= box['top'] < box['bottom'] <= h):
+                errors.append('tracking: box outside image')
+            for axis, start, end, size in (('x', 'left', 'right', w), ('y', 'top', 'bottom', h)):
+                center = min(size-1, (box[start] + box[end]) / 2)
+                if not equal(point[axis], center) or pixel[axis] != math.floor(center):
+                    errors.append('tracking: invalid center/pixel')
+            if not (1 <= quality['points'] <= quality['initial_points'] and
+                    equal(quality['retained_fraction'], quality['points']/quality['initial_points']) and
+                    -1 <= quality['correlation'] <= 1 and 0 <= quality['median_fb_error_px'] < math.inf):
+                errors.append('tracking: invalid quality')
+        dispatch = row['signal_dispatch_ns']
+        capture_ms, entry_ms, processing_ms, issue = tracking_times(row['frame'], dispatch)
+        for name, value in (('capture_to_signal_ms', capture_ms), ('capture_to_analyzer_ms', entry_ms),
+                            ('analyzer_to_signal_ms', processing_ms)):
+            if not equal(row[name], value): errors.append('tracking: mismatch ' + name)
+        if row['timing_issue'] != issue: errors.append('tracking: timing issue mismatch')
+        anchor, confidence = row['last_yolo_frame'], row['last_yolo_confidence']
+        age = tracking_times(anchor, dispatch)[0] if anchor is not None else None
+        if not equal(row['confirmation_age_ms'], age) or (anchor is None) != (confidence is None):
+            errors.append('tracking: invalid confirmation')
+        if confidence is not None and not 0 <= confidence <= 1:
+            errors.append('tracking: invalid YOLO confidence')
+        if row['classification'] not in ('none', 'confirmed', 'missed', 'expired'):
+            errors.append('tracking: invalid classification')
+        if row['kind'] == 'frame':
+            if key in seen: errors.append('tracking: duplicate frame')
+            seen.add(key)
+            frames += 1
+            if state == 'lost' and previous is not None and previous[0] == key[:2] and previous[1]:
+                losses += 1
+            if tracked:
+                work.append(row['work_ms'])
+                if capture_ms is not None: capture.append(capture_ms)
+                if entry_ms is not None: entry.append(entry_ms)
+                if processing_ms is not None: processing.append(processing_ms)
+            else:
+                summary([row['work_ms']])
+        elif row['kind'] == 'correction' and tracked:
+            corrections += 1
+            correction_work.append(row['work_ms'])
+        else:
+            errors.append('tracking: invalid sample kind')
+        previous = (key[:2], tracked)
+    if t['observed_frames'] + t['corrections'] != len(rows) + t['unstored_samples']:
+        errors.append('tracking: inconsistent sample counts')
+    for name, stored in (('observed_frames', frames), ('track_updates', len(work)),
+                         ('corrections', corrections), ('loss_events', losses)):
+        if not stored <= t[name] <= stored + t['unstored_samples']:
+            errors.append('tracking: inconsistent ' + name)
+    if t['track_updates'] > t['observed_frames'] or t['loss_events'] > t['observed_frames']:
+        errors.append('tracking: more updates/losses than observations')
+    if t['stored_updates'] != len(work) or t['updates_with_capture_timing'] != len(capture):
+        errors.append('tracking: invalid timing coverage')
+    fps = t['track_updates'] * 1000 / d['duration_ms'] if d['duration_ms'] > 0 else None
+    if not equal(fps, t['updates_fps_session']): errors.append('tracking: FPS mismatch')
+    timings = {name: summary(values) for name, values in (
+        ('update_work', work), ('update_capture_to_signal', capture), ('update_capture_to_analyzer', entry),
+        ('update_analyzer_to_signal', processing), ('correction_work', correction_work))}
+    for name, calculated in timings.items():
+        check_summary(calculated, t['timing_summary_ms'].get(name), 'tracking: ' + name, errors)
+    return {**{k: t[k] for k in names}, 'updates_fps_session': fps, 'stored_updates': len(work),
+            'updates_with_capture_timing': len(capture), 'timing_summary_ms': timings}
+
+
+def tracking_times(frame, dispatch):
+    capture, entry = frame['capture_ns'], frame['analyzer_entry_ns']
+    base = frame['timestamp_source']
+    if base not in ('elapsed_realtime', 'unknown') or not all(type(x) is int and x >= 0 for x in (entry, dispatch)) or (
+            capture is not None and type(capture) is not int):
+        raise ValueError('invalid tracking timestamps')
+    issue = ('unsynchronized_camera_clock' if base == 'unknown' else
+             'missing_capture_timestamp' if capture is None or capture <= 0 else
+             'capture_after_analyzer' if capture > entry else
+             'non_monotonic_dispatch_clock' if dispatch < entry else None)
+    return ((dispatch-capture)/1e6 if issue is None else None,
+            (entry-capture)/1e6 if issue is None else None,
+            (dispatch-entry)/1e6 if dispatch >= entry else None, issue)
+
+
 def analyze(d, filename='', digest=''):
     errors, warnings = [], []
     if d.get('schema_version') != 1:
@@ -202,6 +315,11 @@ def analyze(d, filename='', digest=''):
     if 'warmup' in d: result['warmup'] = d['warmup']
     if 'target_signal_schema_version' in d: result['target_signals'] = analyze_target_signals(d, errors)
     if 'camera_input' in d: result['camera_input'] = analyze_camera_input(d, errors)
+    if 'tracking' in d: result['tracking'] = analyze_tracking(d, errors)
+    counts = [f['detection_count'] for f in frames if 'detection_count' in f]
+    if counts:
+        if any(type(x) is not int or x < 0 for x in counts): raise ValueError('invalid YOLO detection_count')
+        result['yolo_candidates'] = {'stored_frames_with_counts': len(counts), 'frames_with_candidates': sum(x > 0 for x in counts)}
     return result
 
 

@@ -20,7 +20,7 @@
 | `PhotoInference` | `detections: List<Detection>`, `inferenceMs: Double` | Время ORT с копированием тензоров |
 | [PhotoState<Image>](../../app/src/main/java/ru/university/dronecv/photo/PhotoController.kt) | `phase: PhotoPhase=IDLE`, `image: Image?=null`, `result: PhotoInference?=null`, `error: PhotoError?=null` | `canRecognize=image!=null && phase!=RUNNING`; инварианты переходов обеспечивает controller, а не constructor data class |
 | [LiveInference](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt) | `detections`, `width,height: Int`, `inferenceMs: Double`, optional `conversionMs,preprocessMs,postprocessMs: Double?` | Размеры upright crop; для записи диагностики нужны все стадии |
-| `LiveState` | `phase=STOPPED`, `result?`, `pipelineMs?,fps?: Double?`, `completedFrames: Long=0`, `error: String?`, `revision: Long=0` | Ревизия монотонная; сброс текущей активации обнуляет счётчик; expiry снимает result/FPS/pipeline |
+| `LiveState` | `phase=STOPPED`, `result?`, `pipelineMs?,fps?: Double?`, `completedFrames: Long=0`, `error: String?`, `revision: Long=0`, `tracking: TrackingSignal?`, `trackingFps: Double?`, историческое `target: TargetSignal?` | Ревизия монотонная; сброс обнуляет счётчик. Expiry убирает наблюдение и частоту LK, сохраняя сводку YOLO. В ветви без LK очищает result/FPS/pipeline |
 | `ThreadConfiguration` | `threads: Int=2`, `switching: Boolean=false`, `error: String?` | UI отражает принятую конфигурацию, не обещание успешности запроса |
 | [DiagnosticUi](../../app/src/main/java/ru/university/dronecv/diagnostics/DiagnosticViewModel.kt) | recording, report?, exportStatus?, pipeline?/ort? summaries, elapsedSeconds | Отчёт в Activity ViewModel до нового start/уничтожения процесса |
 
@@ -78,6 +78,23 @@
 | fps_session | number/null, received_frames / длительность записи; null при нулевой длительности |
 
 Счётчики отражают события в пределах diagnostic token, не полный баланс незавершённой работы после Stop. analyzer_callbacks_accepted и completed_frames относятся к отобранной ML-работе; они не равны received_frames. Pipeline — подготовка плюс ML, очередь между workers в него не входит, но входит в analyzer_to_signal. UI input.fps использует окно до 30 входов, экспорт fps_session — всю длительность сессии. Подробнее — [владение кадрами](../guides/camera-frame-ingress.md).
+
+## Наблюдения LK
+
+Корневой отчёт сохраняет `schema_version=1`. В режиме сопровождения `frames[]` хранит завершения YOLO, длительности и `detection_count` — число рамок модели. `target_signal` в этих строках равен null: позиция камеры публикуется отдельно в `LiveState.tracking`. Сводки v2 не подменяются задержкой LK. Для анализа используйте раздел `tracking`, если в сессии были публикации.
+
+| Поля `tracking` версии 1 | Смысл |
+|---|---|
+| `observed_frames`, `track_updates` | Публикации по новым кадрам; второе число включает только кадры с координатами. |
+| `corrections`, `loss_events` | Успешные коррекции и переходы от рамки к `lost` в том же поколении и источнике. Stop/expiry без кадра не считаются потерей. |
+| `updates_fps_session` | `track_updates` на секунду длительности всей записи; null при нулевой длительности. |
+| `samples`, `unstored_samples` | Первые 10 000 публикаций и число не сохранённых. Счётчики относятся ко всей записи. |
+| `stored_updates`, `updates_with_capture_timing` | Знаменатель и числитель для доступности задержки от экспозиции среди сохранённых кадров с координатами. |
+| `timing_summary_ms` | `update_work`, `update_capture_to_signal`, `update_capture_to_analyzer`, `update_analyzer_to_signal` по сохранённым кадрам с координатами; `correction_work` отдельно. p50 равен median, p95 доступен от 20 значений. |
+
+`samples[]`: `kind` равен `frame` или `correction`. Коррекция может повторить ключ (`generation`, `source_id`, `sequence`) кадра и относится к записи, активной при входе этого кадра. `status` — `searching`, `tracking` или `lost`. При `tracking` есть локальный `track_id`, `box`, `center`, `pixel` и `quality`; иначе эти поля null. `width/height` и координаты относятся к полному upright crop. `tracking_width/height` и `median_fb_error_px` относятся к сетке LK.
+
+`classification`, `last_yolo_confidence`, `last_yolo_frame` и `confirmation_age_ms` описывают последнее подтверждение отдельно от `quality`. Метки наблюдения находятся в `frame`, конец интервала — `signal_dispatch_ns`. `work_ms` измеряет grayscale и LK для кадра; для коррекции — работу replay и commit. Оно не включает копирование ImageProxy или ожидание между исполнителями. При несовместимых часах метрики от экспозиции null, с `timing_issue`. [Границы интервалов](../guides/latency-and-prediction.md).
 
 ## Сигнал текущего кадра: payload v2 в 0.5.1
 

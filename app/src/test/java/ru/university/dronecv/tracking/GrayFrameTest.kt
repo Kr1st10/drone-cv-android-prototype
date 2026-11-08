@@ -57,6 +57,15 @@ class GrayFrameTest {
         assertNull(history.latest)
     }
 
+    @Test fun `large camera crop is scaled with its upright source dimensions retained`() {
+        val large = ArgbImage(1920, 1080, IntArray(1920 * 1080) { 0xff808080.toInt() })
+        val gray = GrayFrame.fromArgb(key, stamp, large, 90)
+        assertEquals(1080, gray.cropWidth)
+        assertEquals(1920, gray.cropHeight)
+        assertTrue(gray.byteSize <= 640 * 480)
+        assertEquals(128, gray[gray.width - 1, gray.height - 1])
+    }
+
     @Test fun `oversized or invalid frames fail before retention`() {
         assertThrows(IllegalArgumentException::class.java) {
             GrayFrame.copyOf(key, stamp, 1025, 1024, ByteArray(1025 * 1024))

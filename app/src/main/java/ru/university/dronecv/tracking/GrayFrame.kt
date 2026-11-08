@@ -4,6 +4,7 @@ import ru.university.dronecv.camera.FrameStamp
 import ru.university.dronecv.detection.yolo.ArgbImage
 import ru.university.dronecv.detection.yolo.Rotation
 import kotlin.math.min
+import kotlin.math.sqrt
 
 data class FrameKey(val generation: Long, val source: Long, val sequence: Long) {
     init { require(sequence > 0) }
@@ -16,7 +17,12 @@ class GrayFrame private constructor(
     val width: Int,
     val height: Int,
     private val pixels: ByteArray,
+    val cropWidth: Int = width,
+    val cropHeight: Int = height,
 ) {
+    internal fun sameGeometry(other: GrayFrame) =
+        width == other.width && height == other.height && cropWidth == other.cropWidth && cropHeight == other.cropHeight
+
     val byteSize: Int get() = pixels.size
     operator fun get(x: Int, y: Int): Int = pixels[y * width + x].toInt() and 255
     fun copyPixels(): ByteArray = pixels.copyOf()
@@ -43,19 +49,27 @@ class GrayFrame private constructor(
 
         fun fromArgb(key: FrameKey, stamp: FrameStamp, image: ArgbImage, rotationDegrees: Int): GrayFrame {
             require(stamp.analyzerEntryNs >= 0)
-            require(image.width.toLong() * image.height <= MAX_BYTES)
             require(rotationDegrees in setOf(0, 90, 180, 270))
             val rotation = Rotation.of(rotationDegrees)
-            val w = rotation.rotatedWidth(image.width, image.height)
-            val h = rotation.rotatedHeight(image.width, image.height)
+            val cropWidth = rotation.rotatedWidth(image.width, image.height)
+            val cropHeight = rotation.rotatedHeight(image.width, image.height)
+            val area = cropWidth.toLong() * cropHeight
+            // Leave enough history for delayed YOLO even when CameraX falls back to a large crop.
+            val scale = if (area > MAX_BYTES) sqrt((640.0 * 480) / area) else 1.0
+            val h = (cropHeight * scale).toInt().coerceIn(1, MAX_BYTES)
+            val w = (cropWidth * scale).toInt().coerceIn(1, MAX_BYTES / h)
             val index = rotation.indexer(image.width, image.height)
             val gray = ByteArray(w * h)
-            for (y in 0 until h) for (x in 0 until w) {
-                val argb = image.pixels[index[0] + x * index[1] + y * index[2]]
-                gray[y * w + x] = ((77 * ((argb ushr 16) and 255) +
-                    150 * ((argb ushr 8) and 255) + 29 * (argb and 255) + 128) ushr 8).toByte()
+            val column = IntArray(w) { x -> ((x + .5) * cropWidth / w).toInt() * index[1] }
+            for (y in 0 until h) {
+                val row = index[0] + ((y + .5) * cropHeight / h).toInt() * index[2]
+                for (x in 0 until w) {
+                    val argb = image.pixels[row + column[x]]
+                    gray[y * w + x] = ((77 * ((argb ushr 16) and 255) +
+                        150 * ((argb ushr 8) and 255) + 29 * (argb and 255) + 128) ushr 8).toByte()
+                }
             }
-            return GrayFrame(key, stamp, w, h, gray)
+            return GrayFrame(key, stamp, w, h, gray, cropWidth, cropHeight)
         }
     }
 }

@@ -1,6 +1,5 @@
 package ru.university.dronecv.camera
 
-import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -23,14 +22,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -38,6 +35,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import ru.university.dronecv.tracking.ClassConfirmation
+import ru.university.dronecv.tracking.VisualPhase
 import ru.university.dronecv.diagnostics.DiagnosticViewModel
 import ru.university.dronecv.diagnostics.DiagnosticPanel
 
@@ -58,8 +57,8 @@ internal fun LiveCameraContent(
     val state by controller.state.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     // A camera that silently stalls must not leave boxes on screen indefinitely.
     LaunchedEffect(state.revision) {
-        if (state.result != null) {
-            delay(1500)
+        if (state.tracking != null) {
+            delay(250)
             controller.expire(state.revision)
         }
     }
@@ -112,38 +111,50 @@ private fun LiveControls(
             modifier = Modifier.semantics { contentDescription = "Порог уверенности детектора" })
         Text(issue ?: when {
             !running -> "Детекция остановлена"
-            state.phase == LivePhase.ERROR -> "Ошибка модели: ${state.error}. Остановите и запустите снова."
+            state.phase == LivePhase.ERROR -> "Ошибка обработки: ${state.error}. Остановите и запустите снова."
             state.phase == LivePhase.STARTING -> "Подготовка YOLO11s…"
             state.phase == LivePhase.STOPPED -> "Ожидание камеры…"
-            state.result == null -> "Ожидание свежего кадра…"
-            state.result.detections.isEmpty() -> "На обработанном кадре дроны не обнаружены"
-            else -> "Обнаружений: ${state.result.detections.size}"
+            state.tracking?.observation?.phase == VisualPhase.TRACKING -> "Сопровождение цели"
+            state.tracking?.observation?.phase == VisualPhase.LOST -> "Цель потеряна · повторный поиск"
+            state.tracking == null -> "Ожидание свежего кадра…"
+            else -> "Поиск цели"
         }, color = if (state.phase == LivePhase.ERROR) MaterialTheme.colorScheme.error
             else MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
         val fps = state.fps?.let { format(it) } ?: "—"
         val inference = state.result?.inferenceMs?.let { format(it) } ?: "—"
         val pipeline = state.pipelineMs?.let { format(it) } ?: "—"
-        Text("Обработка: $fps FPS · ORT: $inference мс\nОбработка кадра: $pipeline мс · кадров: ${state.completedFrames}",
+        Text("YOLO: $fps FPS · ORT: $inference мс\nОбработка YOLO: $pipeline мс · кадров: ${state.completedFrames}",
             modifier = Modifier.testTag(if (state.result != null) "live-frame-ready" else "live-frame-waiting"),
             style = MaterialTheme.typography.bodySmall)
         Text("Вход: ${input.fps?.let(::format) ?: "—"} FPS · кадров: ${input.received}\n" +
             "Заменено: ${input.superseded} · без буфера: ${input.noBuffer}",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("camera-input-stats"))
         state.result?.let {
-            Text("YOLO11s · CPU / ${threadState.threads} потока · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
+            Text("Последний YOLO: ${it.detections.size} кандидатов · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
         }
-        state.target?.let { signal ->
+        state.tracking?.let { signal ->
             val latency = signal.captureToSignalMs?.let { "${format(it)} мс" } ?: when (signal.timingIssue) {
                 "missing_capture_timestamp" -> "неизвестно: нет метки экспозиции"
                 "capture_after_analyzer" -> "неизвестно: метка экспозиции позже входа"
                 "non_monotonic_dispatch_clock" -> "неизвестно: нарушен порядок часов приложения"
                 else -> "неизвестно: часы камеры не сопоставлены"
             }
-            Text("Экспозиция → сигнал: $latency", style = MaterialTheme.typography.bodySmall,
+            val signalLabel = if (signal.kind == TrackingSampleKind.CORRECTION) "коррекция LK" else "наблюдение LK"
+            Text("Экспозиция → $signalLabel: $latency", style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.testTag("capture-to-signal"))
             signal.center?.let { point ->
-                Text("Цель: пиксель (${point.x.toInt()}, ${point.y.toInt()}) · ${signal.width}×${signal.height} · confidence ${format(checkNotNull(signal.confidence) * 100.0)}%",
+                val observation = signal.observation
+                val quality = checkNotNull(observation.estimate).quality
+                Text("Цель: (${point.x.toInt()}, ${point.y.toInt()}) · ${signal.width}×${signal.height} px",
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("target-coordinates"))
+                Text("LK: ${state.trackingFps?.let(::format) ?: "—"} обновл./с · ${quality.points}/${quality.initialPoints} точек · NCC ${format(quality.correlation)}",
+                    style = MaterialTheme.typography.bodySmall)
+                val score = observation.lastYoloConfidence?.let { "${format(it * 100.0)}%" } ?: "—"
+                val age = signal.confirmationAgeMs?.let { "${format(it)} мс" } ?: "неизвестен"
+                Text("Подтверждение YOLO: $score · возраст $age", style = MaterialTheme.typography.bodySmall)
+                if (observation.classification == ClassConfirmation.MISSED) {
+                    Text("Последняя проверка не подтвердила цель", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         Text("Потоки ORT: ${threadState.threads}" + if (threadState.switching) " · загрузка…" else "", style = MaterialTheme.typography.bodySmall)
@@ -190,28 +201,16 @@ private fun LiveControls(
 
 @Composable
 private fun LiveOverlay(state: LiveState, modifier: Modifier) {
-    val paint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = android.graphics.Typeface.DEFAULT_BOLD } }
-    Canvas(modifier.semantics { contentDescription = "Рамки обнаружений камеры" }) {
-        val result = state.result ?: return@Canvas
-        paint.textSize = 14.dp.toPx()
-        val stroke = 2.dp.toPx()
-        result.detections.forEach { detection ->
-            val box = CameraGeometry.map(detection.box, size.width, size.height)
-            drawRect(Color.Green, Offset(box[0], box[1]), Size(box[2] - box[0], box[3] - box[1]),
-                style = Stroke(stroke))
-            val text = "${detection.label} ${(detection.confidence * 100).toInt()}%"
-            val textWidth = paint.measureText(text) + 8.dp.toPx()
-            val labelHeight = 20.dp.toPx()
-            val x = box[0].coerceIn(0f, (size.width - textWidth).coerceAtLeast(0f))
-            val y = (box[1] - labelHeight).coerceAtLeast(0f)
-            drawRect(Color.Black.copy(alpha = 0.8f), Offset(x, y), Size(textWidth, labelHeight))
-            paint.color = android.graphics.Color.GREEN
-            drawContext.canvas.nativeCanvas.drawText(text, x + 4.dp.toPx(), y + 15.dp.toPx(), paint)
-        }
-        state.target?.let { signal ->
-            fun screen(p: PixelPoint) = Offset((p.x / signal.width * size.width).toFloat(), (p.y / signal.height * size.height).toFloat())
-            signal.center?.let { drawCircle(Color.Yellow, 4.dp.toPx(), screen(it)) }
-        }
+    Canvas(modifier.semantics { contentDescription = "Рамка сопровождаемой цели" }) {
+        val signal = state.tracking ?: return@Canvas
+        val box = signal.box ?: return@Canvas
+        fun screen(x: Double, y: Double) = Offset((x / signal.width * size.width).toFloat(),
+            (y / signal.height * size.height).toFloat())
+        val topLeft = screen(box.left, box.top)
+        val bottomRight = screen(box.right, box.bottom)
+        drawRect(Color.Green, topLeft, Size(bottomRight.x - topLeft.x, bottomRight.y - topLeft.y),
+            style = Stroke(2.dp.toPx()))
+        signal.center?.let { drawCircle(Color.Yellow, 4.dp.toPx(), screen(it.x, it.y)) }
     }
 }
 

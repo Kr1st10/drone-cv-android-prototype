@@ -69,7 +69,7 @@ class OpenCvLkTracker : VisualTracker {
         val oldFrame = this.frame ?: return null
         val oldBox = box ?: return null
         if (frame.key.generation != oldFrame.key.generation || frame.key.source != oldFrame.key.source ||
-            frame.key.sequence <= oldFrame.key.sequence || frame.width != oldFrame.width || frame.height != oldFrame.height ||
+            frame.key.sequence <= oldFrame.key.sequence || !frame.sameGeometry(oldFrame) ||
             invalidGap(oldFrame, frame) ||
             frame.stamp.ageAt(frame.stamp.analyzerEntryNs)?.let { it > MAX_FRAME_AGE_MS } == true) {
             close(); return null

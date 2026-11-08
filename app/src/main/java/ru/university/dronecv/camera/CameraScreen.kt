@@ -47,6 +47,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.university.dronecv.diagnostics.DiagnosticViewModel
 import ru.university.dronecv.R
 import ru.university.dronecv.detection.DetectorWorker
+import ru.university.dronecv.tracking.GrayFrame
+import ru.university.dronecv.tracking.OpenCvLkTracker
+import ru.university.dronecv.tracking.TrackingSession
 
 /** Главный экран: запрос разрешения, видеопревью и обработка ошибок камеры. */
 @Composable
@@ -55,8 +58,13 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
     val diagnostics: DiagnosticViewModel = viewModel()
     val cameraProbe = remember { CameraProbeState() }
     var running by rememberSaveable { mutableStateOf(false) }
-    val controller = remember { LiveController<CameraFrameSnapshot>(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor,
-        diagnostics.frames, initialThreads, eventTime = android.os.SystemClock::elapsedRealtimeNanos) }
+    val controller = remember {
+        val tracking = LiveTracking<CameraFrameSnapshot>(VisionWorker.executor, TrackingSession(::OpenCvLkTracker)) { frame, key, stamp ->
+            GrayFrame.fromArgb(key, stamp, frame.image, frame.rotationDegrees)
+        }
+        LiveController(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads,
+            eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking)
+    }
     DisposableEffect(controller) { onDispose { diagnostics.stop(true, "Camera screen disposed"); controller.close() } }
     val liveState by controller.state.collectAsStateWithLifecycle()
     val threadState by controller.threadConfiguration.collectAsStateWithLifecycle()

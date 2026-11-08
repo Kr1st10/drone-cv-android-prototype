@@ -78,8 +78,8 @@ class ReplayedCorrection internal constructor(
 }
 
 /**
- * Single vision-owner state machine, not wired into CameraScreen yet. No method calls ORT.
- * Requests require the shared DetectorWorker to be idle; only replay uses a separate tracker instance.
+ * State machine confined to the vision executor. No method calls ORT.
+ * The caller keeps one detector request in flight through completion of replay.
  */
 class TrackingSession(
     private val factory: () -> VisualTracker,
@@ -136,8 +136,7 @@ class TrackingSession(
             history.clear()
             return observation(frame)
         }
-        if (previous != null && (previous.width != frame.width || previous.height != frame.height ||
-                invalidGap(previous, frame))) {
+        if (previous != null && (!previous.sameGeometry(frame) || invalidGap(previous, frame))) {
             lose("frame_gap_or_geometry")
             history.clear()
         }
@@ -234,6 +233,13 @@ class TrackingSession(
             throw e
         } finally { correction.close() }
     }
+
+    internal fun rejectCorrection(request: YoloRequest) {
+        if (accepts(request)) reason = "replay_rejected"
+    }
+
+    internal fun confirmationIsCurrent(observation: TrackingObservation, nowElapsedNs: Long): Boolean =
+        observation.lastYoloStamp?.let { !confirmationExpired(it, nowElapsedNs, confirmationTtlNs) } == true
 
     /** Also call after ORT/replay failure, executor rejection or cancellation. */
     fun finish(request: YoloRequest) {
