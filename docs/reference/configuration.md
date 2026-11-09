@@ -16,7 +16,8 @@
 | ONNX Runtime Android и JVM | 1.31.1 |
 | OpenCV Android (LK) | 4.12.0; [статус и параметры](../guides/visual-tracking-core.md) |
 | Coroutines / ExifInterface / core-ktx | 1.8.1 / 1.3.7 / 1.15.0 |
-| JUnit / AndroidX test ext / runner | 4.13.2 / 1.2.1 / 1.6.2 |
+| JUnit / AndroidX test ext / runner (прямые зависимости) | 4.13.2 / 1.2.1 / 1.6.2 |
+| Espresso Core / Compose test host | 3.7.0 только для AndroidTest / ui-test-manifest из Compose BOM только для debug |
 | applicationId / versionName / versionCode | `ru.university.dronecv` / `0.5.2` / `7` |
 | ABI в APK | `arm64-v8a`, `x86_64` |
 

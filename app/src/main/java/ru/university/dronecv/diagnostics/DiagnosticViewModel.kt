@@ -33,6 +33,13 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     private var report: DiagnosticReport? = null
     private val mutableUi = MutableStateFlow(DiagnosticUi())
     val ui = mutableUi.asStateFlow()
+    private val exporter = DiagnosticExporter<Uri>(lock, viewModelScope, Dispatchers.IO,
+        currentReport = { report },
+        status = { mutableUi.value = mutableUi.value.copy(exportStatus = it) },
+        write = { saved, uri ->
+            val stream = app.contentResolver.openOutputStream(uri) ?: error("Не удалось открыть файл")
+            stream.bufferedWriter(Charsets.UTF_8).use { it.write(saved.toJson()) }
+        })
 
     fun start(confidence: Float, threads: Int = 2, warmupCompletedFrames: Long = 0) = synchronized(lock) {
         if (token != null) return@synchronized
@@ -72,16 +79,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
         }
     }
     fun export(uri: Uri) {
-        val saved = synchronized(lock) { report } ?: return
-        mutableUi.value = mutableUi.value.copy(exportStatus = "Сохранение…")
-        viewModelScope.launch(Dispatchers.IO) {
-            val status = try {
-                val stream = app.contentResolver.openOutputStream(uri) ?: error("Не удалось открыть файл")
-                stream.bufferedWriter(Charsets.UTF_8).use { it.write(saved.toJson()) }
-                "Отчёт сохранён"
-            } catch (e: Exception) { "Ошибка экспорта: ${e.message ?: e.javaClass.simpleName}" }
-            mutableUi.value = mutableUi.value.copy(exportStatus = status)
-        }
+        exporter.export(uri)
     }
     private fun sampleResources(start: Long): ResourceSample {
         val now = System.nanoTime()
