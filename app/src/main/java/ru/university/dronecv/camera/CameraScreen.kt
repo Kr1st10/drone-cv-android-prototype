@@ -56,7 +56,7 @@ import ru.university.dronecv.tracking.TrackingSession
 fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int) -> Unit, onConfidenceChange: (Float) -> Unit) {
     val context = LocalContext.current
     val diagnostics: DiagnosticViewModel = viewModel()
-    val cameraProbe = remember { CameraProbeState() }
+    val cameraProbe = rememberCameraProbeState()
     var running by rememberSaveable { mutableStateOf(false) }
     val controller = remember {
         val tracking = LiveTracking<CameraFrameSnapshot>(VisionWorker.executor, TrackingSession(::OpenCvLkTracker)) { frame, key, stamp ->

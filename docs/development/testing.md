@@ -18,6 +18,7 @@ python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
 | [photo JVM tests](../../app/src/test/java/ru/university/dronecv/photo) | Состояния/очередь/устаревшие ошибки, close и Fit/decode размеры | Поддельный backend тестирует управление ресурсами, не подменяет реальные CV-результаты приложения |
 | [camera JVM tests](../../app/src/test/java/ru/university/dronecv/camera) | Stride/crop/каналы, mapping, generation/source/expiry/FPS, смена потоков | Без физического сенсора; не доказывают реальное совмещение Preview/Analysis |
 | [diagnostics JVM tests](../../app/src/test/java/ru/university/dronecv/diagnostics) | Статистика, token/capacity, export metadata и invalidation | Не измеряют OEM thermal/PSS и длительную стабильность |
+| `DiagnosticExporterTest`, `LiveTrackingConcurrencyTest` | Поздний экспорт, порядок статусов, конкурентные Stop/start и смена контроллера с удержанием кадра | Управляемые записи и backend; без физических устройств |
 | `assembleDebugAndroidTest` | Компиляция [device tests](../../app/src/androidTest/java/ru/university/dronecv) | Не выполняет ни одного теста на устройстве |
 | `lintDebug` | Статический Android lint | Не заменяет запуск UI/инференса |
 
@@ -32,7 +33,7 @@ adb devices
 ./gradlew --no-daemon connectedDebugAndroidTest
 ```
 
-Ожидайте успешный Gradle result и отчёт `app/build/reports/androidTests/connected/debug/index.html`; проверьте failures и skipped. [LiveCameraInstrumentedTest](../../app/src/androidTest/java/ru/university/dronecv/camera/LiveCameraInstrumentedTest.kt) проверяет реальный CameraX→ORT→UI, Stop/restart, потоки, zoom request, фон/ротацию/вкладки. Также есть decoder/EXIF, ORT, JSON и inventory tests. Camera tests используют assumptions при отсутствии hardware; сам зелёный итог без просмотра skipped не доказывает их выполнение.
+Ожидайте успешный Gradle result и отчёт `app/build/reports/androidTests/connected/debug/index.html`; проверьте failures и skipped. [LiveCameraInstrumentedTest](../../app/src/androidTest/java/ru/university/dronecv/camera/LiveCameraInstrumentedTest.kt) проверяет реальный CameraX→ORT→UI, Stop/restart, потоки, zoom request, фон/ротацию/вкладки. CameraProbeRestorationTest проверяет сохранение запроса и очистку runtime через Compose StateRestorationTester. Для изолированного Compose-теста debug APK включает `ui-test-manifest`. В AndroidTest закреплён Espresso Core 3.7.0: на проверенном образе Android 16 прежний вызов `InputManager.getInstance` останавливал Compose-тесты до assertions ([примечания AndroidX](https://developer.android.com/jetpack/androidx/releases/test#espresso-3.7.0)). Также есть decoder/EXIF, ORT, JSON и inventory tests. Camera tests используют assumptions при отсутствии hardware; сам зелёный итог без просмотра skipped не доказывает их выполнение.
 
 Повороты эмулятора не доказывают оптику, полевую точность, нагрев и длительную работу Xiaomi. Ручные протоколы: [PHOTO_QA](../PHOTO_QA.md), [LIVE_QA](../LIVE_QA.md), [CAMERA_QA](../CAMERA_QA.md), [PERFORMANCE_QA](../PERFORMANCE_QA.md), [потоки ORT](../ORT_THREAD_BENCHMARK.md).
 
