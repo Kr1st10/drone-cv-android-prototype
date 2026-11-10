@@ -103,7 +103,9 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front none -memory 2048
-          script: bash scripts/run-device-tests.sh
+          script: |
+            bash scripts/configure-ci-emulator.sh
+            bash scripts/run-device-tests.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -111,3 +113,4 @@ jobs:
           path: |
             instrumentation.txt
             instrumentation-logcat.txt
+            emulator-environment.txt

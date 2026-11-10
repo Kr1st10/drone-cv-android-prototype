@@ -2,6 +2,12 @@
 
 _Обновлено: 2026-11-10. Подготовлена диагностика эксперимента 1×/5× на базе main @ f9e7101; физическая камера Xiaomi не проверена._
 
+## PR #31: разбор и исправление Android CI — 2026-11-10
+
+- В run `42822687148` два ORT-теста (`loadsModelAndRunsInference`, `rotationGivesSameResultAsPreRotatedBitmap`) падают с OOM при выделении ~3.7 MB; пять LiveCamera-тестов (`diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable`, `zoomRequestKeepsCameraRunningAndCanReturnToOne`, `cameraRunsRealModelAndStopClearsLateResults`, `threadSwitchStopsBeforeRecreatingAndCameraRunsAgain`, `backgroundRecreationAndBothLandscapeDirectionsResumeInference`) истекают в первом `openAndStart/awaitResult` до последующих сценариев. В каждом camera-интервале logcat содержит вход ImageAnalysis и OOM при попытке выделения ~4.9 MB; ошибок binding камеры не найдено. Независимая регрессия камеры этими тайм-аутами не установлена.
+- Лог ART показывает обычный app growth limit 16 MiB; emulator boot сообщает максимальный heap 512m при RAM 2048 MiB. [Штатный Android 10 preset телефона с 2 GiB](https://android.googlesource.com/platform/frameworks/native/+/android10-release/build/phone-xhdpi-2048-dalvik-heap.mk) задаёт 192m growth / 512m maximum. Добавлен CI-only скрипт с проверками GitHub Actions, emulator/API 29 и исходных heap-свойств, заменой только известного 16m growth limit на 192m и restart Android до тестов. До/после записываются в `emulator-environment.txt`; неизвестная конфигурация завершает шаг ошибкой. RAM, тайм-ауты и тесты не увеличены/не отключены; APK и функции приложения не менялись.
+- Локально `bash -n` обоих CI-скриптов и `git diff --check` прошли. Проверка на настоящем эмуляторе выполняется повторным CI в том же PR; результат будет указан в описании PR после прогона.
+
 ## Подготовка Android-камеры к эксперименту 5× — 2026-11-10
 
 - В `main` уже есть 1×/5×: `zoomRequest` проверяет диапазон CameraX, `setZoomRatio(5f)` запрашивает общий zoom логической задней камеры. Preview и ImageAnalysis привязаны вместе; ошибка binding/zoom возвращает к 1× с предупреждением. Существующий прямой запрос physical ID сохранён. Открытых PR на момент проверки нет; создана отдельная ветка `codex/xiaomi-5x-camera` от `f9e7101`.
