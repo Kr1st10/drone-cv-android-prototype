@@ -159,6 +159,7 @@ internal fun CameraPreview(
             cameraBlocked = false
             probe.loading = true
             probe.actualZoom = null
+            probe.captureZoom = null
             probe.activePhysicalId = null
             val selectedPhysical = probe.physicalId
             val selectionEpoch = probe.selectionEpoch
@@ -168,9 +169,20 @@ internal fun CameraPreview(
             val handler = Handler(Looper.getMainLooper())
             val captureCallback = object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                    if (Build.VERSION.SDK_INT >= 29) {
-                        val id = result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
-                        handler.post { if (!disposed && probe.selectionEpoch == selectionEpoch && probe.activePhysicalId != id) probe.activePhysicalId = id }
+                    val id = if (Build.VERSION.SDK_INT >= 29)
+                        result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID) else null
+                    val zoom = if (Build.VERSION.SDK_INT >= 30)
+                        result.get(CaptureResult.CONTROL_ZOOM_RATIO) else null
+                    handler.post {
+                        if (!disposed && probe.selectionEpoch == selectionEpoch) {
+                            if (probe.activePhysicalId != id || probe.captureZoom != zoom) {
+                                Log.i("CameraPreview", "Camera2 logical=${probe.logicalId}, requestedZoom=$selectedZoom, " +
+                                    "reportedZoom=$zoom, activePhysicalId=$id; lens type unconfirmed")
+                            }
+                            // A missing result clears previous evidence instead of retaining an old sensor ID.
+                            probe.activePhysicalId = id
+                            probe.captureZoom = zoom
+                        }
                     }
                 }
             }

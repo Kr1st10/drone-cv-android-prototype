@@ -18,6 +18,8 @@ internal class CameraProbeState {
     var physicalIds by mutableStateOf<List<String>>(emptyList())
     var zoomRange by mutableStateOf<ZoomRange?>(null)
     var actualZoom by mutableStateOf<Float?>(null)
+    // Camera2 result metadata, separate from CameraX ZoomState; never optical-lens evidence.
+    var captureZoom by mutableStateOf<Float?>(null)
     var loading by mutableStateOf(false)
     var warning by mutableStateOf<String?>(null)
 
