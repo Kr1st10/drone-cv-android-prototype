@@ -43,7 +43,7 @@ assert.equal((await snap()).equivalent_distance_m,before.equivalent_distance_m);
 assert.equal(await page.locator('#referenceViewport').evaluate(e=>[...e.children].filter(c=>getComputedStyle(c).display!=='none').map(c=>c.id).join(',')),'referenceDisplay');
 await page.keyboard.press('r'); assert.equal(await page.locator('#record').isVisible(),false);
 await page.screenshot({path:'/tmp/reference5x-trial.png'});
-await page.evaluate(()=>document.exitFullscreen()); await page.waitForFunction(()=>!document.fullscreenElement); await page.waitForTimeout(100);
+await page.evaluate(()=>document.exitFullscreen()); await page.waitForFunction(()=>!document.fullscreenElement); await page.waitForFunction(()=>referenceTab.snapshot().trial_phase==='idle');
 await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
 assert.equal((await snap()).calibration_id,cal);
 assert.equal(await page.locator('#referenceDisplay').evaluate(e=>e.getBoundingClientRect().width),width);

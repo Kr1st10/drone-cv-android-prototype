@@ -1113,6 +1113,7 @@ document.addEventListener('keydown', e => {
 });
 function fs() { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); }
 function environmentChanged() {
+  referenceTab?.environmentChanged();
   screenStatus();
   if (T && $('settings').classList.contains('hidden') && $('calib').classList.contains('hidden') && $('boundsEditor').classList.contains('hidden')) show();
 }

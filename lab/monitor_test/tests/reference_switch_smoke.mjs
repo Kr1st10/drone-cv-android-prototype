@@ -56,7 +56,7 @@ try {
  await page.fill('#referenceTarget','15,00');await page.click('#referenceApplyTarget');assert.match(await page.textContent('#referenceTargetStatus'),/рассчитан/);const before=await snap();
  const width=await page.locator('#referenceDisplay').evaluate(e=>e.getBoundingClientRect().width);
  await page.click('#referenceTrial');await page.waitForFunction(()=>document.fullscreenElement?.id==='referenceViewport');assert.equal((await snap()).equivalent_distance_m,before.equivalent_distance_m);assert.equal(await page.locator('#referenceDisplay').evaluate(e=>e.getBoundingClientRect().width),width);
- await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>!document.fullscreenElement);await page.waitForTimeout(100);
+ await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>!document.fullscreenElement);await page.waitForFunction(()=>referenceTab.snapshot().trial_phase==='idle');
  await page.fill('#referenceScaleNumber','1000');assert.ok((await snap()).equivalent_distance_m>0);assert.equal((await snap()).fullscreen_fits,false);
  await page.click('#referenceTrial');assert.equal(await page.evaluate(()=>document.fullscreenElement),null);assert.match(await page.textContent('#referenceTargetStatus'),/полноэкран/);
  await page.selectOption('#referenceDrone','skydroid_mx330t');await page.selectOption('#referencePhotoSelect','skydroid_front');await settle();assert.equal((await snap()).equivalent_distance_m,null);assert.match(await page.textContent('#referenceAssumption'),/не приравнивается/);

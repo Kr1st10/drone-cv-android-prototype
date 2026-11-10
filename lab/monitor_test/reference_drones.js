@@ -325,7 +325,8 @@
     const saved = load('reference_tab', {});
     let selected = profiles.find(p => p.id === saved?.model_id) || profiles[0];
     let scale = positive(saved?.scale_percent) && saved.scale_percent >= 0.01 && saved.scale_percent <= 1000 ? saved.scale_percent : 25;
-    let loaded = false, loadState = 'missing', loadGeneration = 0, trialTransition = false, targetError = '';
+    let loaded = false, loadState = 'missing', loadGeneration = 0, targetError = '';
+    let trialPhase = 'idle', settleFrame = null, settleStarted = 0, stableSince = 0, lastLayout = '', exitRequested = false;
     let background = saved?.background === 'sky' ? 'sky' : 'neutral';
     let camera = saved?.camera === '1' ? '1' : '5';
     let mode = saved?.range_mode === 'strict' ? 'strict' : 'approximate';
@@ -401,6 +402,7 @@
     function update() {
       const p = photo, cal = getCalibration();
       $('referenceRangeMode').value = mode;
+      $('referenceTrial').disabled = trialPhase !== 'idle';
       $('referenceBackground').value = background; $('referenceCamera').value = camera;
       viewport.classList.toggle('reference-sky', background === 'sky');
       $('referenceBackgroundNote').textContent = background === 'sky' && !p.transparent ? 'Локальный рисунок неба. Исходное фото непрозрачное: его собственный фон остаётся прямоугольником; корректное наложение дрона на небо не имитируется.' : background === 'sky' ? 'Локальный рисунок неба; используется прозрачный исходник.' : 'Нейтральный однотонный фон. Собственный фон фотографии сохраняется.';
@@ -453,9 +455,8 @@
           'Для ручной проверки включите A–B и измерьте линейкой расстояние между центрами меток. Программное значение не заменяет физический замер линейкой.';
       }
 
-      if (trial && (m.equivalent_distance_m == null || !fullscreenFits)) {
-        targetError = 'Испытание остановлено: калибровка недействительна или изображение обрезано.';
-        document.exitFullscreen().catch(() => {});
+      if (trial && trialPhase === 'active' && (m.equivalent_distance_m == null || !fullscreenFits)) {
+        stopTrial(m.equivalent_distance_m == null ? 'Испытание остановлено: нужна повторная калибровка или проверка исходных данных. Сохранённые измерения не удалены.' : 'Испытание остановлено: объект обрезан фактической полноэкранной областью. Уменьшите масштаб.');
       }
       const range = loadState === 'loading' ? 'Загрузка выбранной фотографии…' : m.equivalent_distance_m == null ? 'нет данных' :
         `${mode === 'approximate' ? '≈ ' : ''}${m.equivalent_distance_m.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} м`;
@@ -471,7 +472,7 @@
         !cal ? 'Нужна актуальная калибровка экрана.' : '', !positive(getDistance()) ? 'Введите расстояние от камеры до экрана.' : ''].filter(Boolean).join(' ');
       $('referenceDiagnostics').textContent = `ID: ${selected.id}; ракурс: ${p.view}; границы файла [x1, y1, x2, y2]: ${b ? b.join(', ') : 'нет'}; физическая ось: ${p.axis ? JSON.stringify(p.axis) : 'не подтверждена'}.`;
       return { model_id: selected.id, photo_id: p.id, view: p.view, scale_percent: scale, screen_distance_cm: getDistance(),
-        load_state: loadState, preview_visible: previewVisible, fullscreen_fits: fullscreenFits,
+        trial_phase: trialPhase, load_state: loadState, preview_visible: previewVisible, fullscreen_fits: fullscreenFits,
         image_width_css_px: loaded ? r.width : null, image_height_css_px: loaded ? r.height : null, review_segment_display_mm: segmentMm,
         camera_label: camera + '×', background, range_mode: mode, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
@@ -489,16 +490,67 @@
     $('referenceScaleNumber').oninput = e => setScale(e.target.value);
     $('referenceHalf').onclick = () => setScale(Math.max(0.01, scale / 2));
     $('referenceDouble').onclick = () => setScale(Math.min(1000, scale * 2));
-    // Fullscreen changes viewport dimensions, but must not change CSS-pixel physical scale.
-    const environment = () => ({ dpr: devicePixelRatio, width: screen.width, height: screen.height,
-      available_width: screen.availWidth, available_height: screen.availHeight,
-      visual_scale: window.visualViewport?.scale ?? 1 });
+    // OS work area and window coordinates change in macOS fullscreen; they are not pixel-scale invariants.
+    const physicalKeys = ['dpr', 'width', 'height', 'visual_scale'];
     function calibrationEnvironmentMatches(before, after, referenceActive = false) {
-      const transitioning = trialTransition || document.fullscreenElement === viewport;
-      if (!transitioning && !referenceActive) return false;
-      // Viewport resizing does not change mm/CSSpx. Still reject screen/zoom changes and ordinary window moves.
-      return before && after && Object.keys(environment()).every(k => before[k] === after[k]) &&
-        (transitioning || (before.x === after.x && before.y === after.y));
+      const controlled = trialPhase !== 'idle' || document.fullscreenElement === viewport;
+      if (!controlled && !referenceActive) return false;
+      if (!before || !after || !physicalKeys.every(k => before[k] === after[k])) return false;
+      return controlled || ['available_width', 'available_height', 'x', 'y'].every(k => before[k] === after[k]);
+    }
+    function layoutKey() {
+      const r = viewport.getBoundingClientRect(), i = image.getBoundingClientRect();
+      return JSON.stringify([document.fullscreenElement === viewport, innerWidth, innerHeight,
+        r.x, r.y, r.width, r.height, i.width, i.height, window.screenX, window.screenY,
+        screen.availWidth, screen.availHeight, devicePixelRatio, screen.width, screen.height, window.visualViewport?.scale ?? 1]);
+    }
+    function beginSettling(phase) {
+      trialPhase = phase; settleStarted = stableSince = performance.now(); lastLayout = '';
+      if (settleFrame != null) cancelAnimationFrame(settleFrame);
+      settleFrame = requestAnimationFrame(settleTrial);
+    }
+    function settleTrial(now) {
+      settleFrame = null;
+      if (trialPhase === 'idle') return;
+      const inTrial = document.fullscreenElement === viewport;
+      const key = layoutKey();
+      if (key !== lastLayout) { lastLayout = key; stableSince = now; }
+      // Do not validate the old/zero/transitional viewport on fullscreenchange or the request promise.
+      if (now - stableSince >= 200 && now - settleStarted >= (trialPhase === 'exiting' ? 750 : 400)) {
+        if (trialPhase === 'entering' && inTrial) {
+          trialPhase = 'active'; exitRequested = false; update(); return;
+        }
+        if (trialPhase === 'exiting' && !inTrial) {
+          // Refresh the calibration's environment while the controlled-transition exemption still applies.
+          update(); trialPhase = 'idle'; exitRequested = false; update(); return;
+        }
+      }
+      if (now - settleStarted > 5000) {
+        if (inTrial && trialPhase === 'exiting') requireManualExit();
+        else if (inTrial) stopTrial('Не удалось завершить переход в полноэкранный режим. Сохранённые измерения не удалены.');
+        else { update(); trialPhase = 'idle'; exitRequested = false; update(); }
+        return;
+      }
+      settleFrame = requestAnimationFrame(settleTrial);
+    }
+    function requireManualExit() {
+      targetError = 'Браузер не завершил полноэкранный режим. Выйдите через Esc или меню браузера; измерения сохранены.';
+      if (settleFrame != null) cancelAnimationFrame(settleFrame);
+      settleFrame = null; trialPhase = 'manual-exit'; exitRequested = false; update();
+    }
+    function stopTrial(message) {
+      if (message) targetError = message;
+      if (exitRequested) return;
+      exitRequested = true; beginSettling('exiting');
+      if (document.fullscreenElement === viewport) {
+        Promise.resolve(document.exitFullscreen()).catch(() => {
+          requireManualExit();
+        });
+      }
+    }
+    function environmentChanged() {
+      if (document.fullscreenElement === viewport && trialPhase === 'active') beginSettling('entering');
+      // During entry/exit the sampler itself detects changes until the layout is stable.
     }
     $('referenceCamera').onchange = e => { camera = e.target.value; persist(); update(); };
     $('referenceBackground').onchange = e => { background = e.target.value; persist(); update(); };
@@ -531,30 +583,40 @@
       update();
     };
     $('referenceTrial').onclick = async () => {
+      if (trialPhase !== 'idle') return;
       targetError = '';
       viewport.scrollIntoView({ block: 'center' });
       const state = update();
-      if (!positive(state.equivalent_distance_m)) { targetError = 'Сначала получите корректную геометрию изображения: проверьте калибровку, ракурс, расстояние и обрезку.'; update(); return; }
+      if (!positive(state.equivalent_distance_m)) { targetError = 'Сначала получите корректную геометрию изображения: проверьте калибровку, ракурс, расстояние и исходные данные.'; update(); return; }
       if (!state.fullscreen_fits) { targetError = 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб.'; update(); return; }
-      if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим.'; update(); return; }
-      trialTransition = true;
-      try { await viewport.requestFullscreen(); update(); }
-      catch { targetError = 'Браузер не разрешил полноэкранный режим.'; update(); }
-      finally { if (document.fullscreenElement !== viewport) trialTransition = false; }
+      if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим. Измерения сохранены.'; update(); return; }
+      // The exemption starts before requestFullscreen: resize may precede fullscreenchange/promise resolution.
+      beginSettling('entering');
+      try { await viewport.requestFullscreen(); }
+      catch {
+        if (trialPhase !== 'exiting') beginSettling('exiting');
+        targetError = 'Браузер не разрешил полноэкранный режим. Проверьте разрешения и активность окна, затем повторите. Измерения сохранены.';
+        update();
+      }
     };
     document.addEventListener('fullscreenchange', () => {
-      if (document.fullscreenElement === viewport) { update(); return; }
-      if (trialTransition) {
-        // Give resize/visualViewport events the same controlled transition exemption on exit.
-        requestAnimationFrame(() => requestAnimationFrame(() => { update(); trialTransition = false; }));
-      }
+      if (document.fullscreenElement === viewport) { beginSettling('entering'); update(); }
+      else if (trialPhase !== 'idle') { beginSettling('exiting'); update(); }
     });
-    // No legacy gallery shortcuts or scrolling while the clean stimulus is visible.
+    viewport.addEventListener('fullscreenerror', () => {
+      if (trialPhase === 'idle') return;
+      targetError = 'Браузер не разрешил полноэкранный режим. Проверьте разрешения и активность окна, затем повторите. Измерения сохранены.';
+      beginSettling('exiting'); update();
+    });
+    // No legacy gallery shortcuts; explicit Esc also works when a browser doesn't consume it natively.
     document.addEventListener('keydown', e => {
-      if (document.fullscreenElement === viewport) e.stopImmediatePropagation();
+      if (document.fullscreenElement === viewport) {
+        e.stopImmediatePropagation();
+        if (e.key === 'Escape') stopTrial();
+      }
     }, true);
     select.value = selected.id; chooseModel(photo.id);
-    return { update, snapshot: update, calibrationEnvironmentMatches };
+    return { update, snapshot: update, calibrationEnvironmentMatches, environmentChanged };
   }
   root.DroneReferences = { profiles, measure, estimate, reviewSegmentLength, mount };
 })(typeof window === 'undefined' ? globalThis : window);
