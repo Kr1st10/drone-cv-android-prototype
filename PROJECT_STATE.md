@@ -2,6 +2,12 @@
 
 _Обновлено: 2026-11-10. Подготовлена диагностика эксперимента 1×/5× на базе main @ f9e7101; физическая камера Xiaomi не проверена._
 
+## Стенд «Движущаяся цель» — 2026-11-10
+
+- Добавлены полноэкранное движение фото по времени, повтор сценария в парах A/B, экранная метка `run_id/step_id`, четыре калибровочные точки и отдельный JSON эталона. Формат v1 описан в [протоколе стенда](lab/monitor_test/PROTOCOL.md#7-движущаяся-цель).
+- На базе `main` @ `5d02f33` прошли отдельный тест движения в Node.js и 23 теста галереи, включая сценарии движения и эталонных БПЛА в Chrome.
+- Импорт журнала и расчёт метрик сравнения отложены. Считывание метки камерой и сквозное сравнение режимов на телефоне предстоит проверить.
+
 ## PR #31: разбор и исправление Android CI — 2026-11-10
 
 - В run `42822687148` два ORT-теста (`loadsModelAndRunsInference`, `rotationGivesSameResultAsPreRotatedBitmap`) падают с OOM при выделении ~3.7 MB; пять LiveCamera-тестов (`diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable`, `zoomRequestKeepsCameraRunningAndCanReturnToOne`, `cameraRunsRealModelAndStopClearsLateResults`, `threadSwitchStopsBeforeRecreatingAndCameraRunsAgain`, `backgroundRecreationAndBothLandscapeDirectionsResumeInference`) истекают в первом `openAndStart/awaitResult` до последующих сценариев. В каждом camera-интервале есть вход ImageAnalysis и OOM при выделении ~4.9 MB. Ошибок binding не найдено; после исправления окружения все семь тестов прошли без изменений приложения/старых тестов, независимая регрессия приложения не выявлена.

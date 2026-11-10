@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { planMotion, sampleMotion, markerBits } = require('../motion.js');
+const config = { width: 1000, height: 700, image_width: 200, image_height: 100, bbox: [50, 20, 150, 80], target_width_px: 100, max_speed_px_s: 200, acceleration_px_s2: 100, laps: 1 };
+const plan = planMotion(config);
+const sample = t => sampleMotion(plan, t, 42, 'ABCDEF01');
+assert.deepEqual(plan.marker, { x: 26, y: 26, module_px: 10 });
+assert.deepEqual(plan.calibration_points, [[16,132],[984,132],[984,684],[16,684]]);
+assert.equal(sample(0).phase, 'blank_before');
+assert.equal(sample(-5).elapsed_ms, 0);
+assert.equal(sample(1000).phase, 'accelerate');
+assert.equal(sample(2000).velocity_px_s[0], 100);
+assert.equal(sample(3500).phase, 'cruise');
+const leg = plan.legs[0];
+assert.equal(sample(1000 + leg.duration_ms - 100).phase, 'brake');
+assert.equal(sample(1000 + leg.duration_ms).phase, 'turn');
+assert.equal(sample(plan.duration_ms).phase, 'blank_after');
+assert.equal(sample(plan.duration_ms + 1).elapsed_ms, plan.duration_ms + 1);
+assert.deepEqual(sample(2100), sample(2100));
+for (let t = 1000; t < plan.duration_ms - 1000; t += 13) {
+  const s = sample(t), [l, top, r, b] = s.image_rect_px;
+  assert.ok(l >= 40 - 1e-8 && top >= 156 - 1e-8 && r <= 960 + 1e-8 && b <= 660 + 1e-8);
+  assert.ok(Math.hypot(...s.velocity_px_s) <= config.max_speed_px_s + 1e-8);
+  assert.ok(Math.hypot(...s.acceleration_px_s2) <= config.acceleration_px_s2 + 1e-8);
+  assert.ok(s.bbox_screen_px[0] >= l && s.bbox_screen_px[2] <= r);
+}
+const triangle = planMotion({ ...config, max_speed_px_s: 10000 });
+assert.equal(triangle.legs[0].cruise_s, 0);
+assert.ok(triangle.legs[0].peak < 10000);
+for (const invalid of [{ width: 20 }, { laps: 21 }, { bbox: [0,0,201,100] }, { acceleration_px_s2: 0 }, { max_speed_px_s: 0.01 }]) assert.throws(() => planMotion({ ...config, ...invalid }));
+assert.throws(() => sample(NaN));
+assert.throws(() => markerBits('00000000', -1));
+const bits = markerBits('12345678', 0x90abcdef);
+assert.equal(bits.length, 80);
+const bytes = Array.from({ length: 10 }, (_, i) => parseInt(bits.slice(i * 8, i * 8 + 8).join(''), 2));
+assert.deepEqual(bytes.slice(0, 9), [0xd1,0x12,0x34,0x56,0x78,0x90,0xab,0xcd,0xef]);
+let crc = 0;
+for (const byte of bytes) { crc ^= byte; for (let i = 0; i < 8; i++) crc = ((crc << 1) ^ ((crc & 128) ? 7 : 0)) & 255; }
+assert.equal(crc, 0);
+console.log('motion tests passed');
