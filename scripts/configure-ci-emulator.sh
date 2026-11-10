@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CI-only correction for API 29 AOSP's 16 MiB normal-app heap on our 2 GiB AVD.
+# CI-only correction for API 29 AOSP's early-zygote 16 MiB heap on our 2 GiB AVD.
 # Android 10's phone-xhdpi-2048-dalvik-heap.mk uses 192m growth / 512m maximum:
 # https://android.googlesource.com/platform/frameworks/native/+/android10-release/build/phone-xhdpi-2048-dalvik-heap.mk
 set -euo pipefail
@@ -16,7 +16,9 @@ record_heap() {
 # Fail on a changed image instead of silently tuning an unknown environment.
 [[ $(adb shell getprop dalvik.vm.heapsize | tr -d '\r') == 512m ]] || { echo 'Unexpected maximum heap'; exit 1; }
 case $(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r') in
-    16m)
+    ''|16m)
+        # This image has no growth-limit property. AndroidRuntime falls back to 16m
+        # if zygote starts before ranchu's on-boot action sets heapsize to 512m.
         adb root
         adb wait-for-device
         adb shell stop
