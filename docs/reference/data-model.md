@@ -1,6 +1,6 @@
 # Данные в памяти и экспорт
 
-Справочник для разработчика и потребителя диагностических файлов. Применяется к Android `0.5.1` на основе `acb3e9e` и отдельно к галерее 6.6. Реляционной БД, таблиц, ключей, индексов, транзакций и миграций нет; ER-диаграмма — `N/A`.
+Справочник для разработчика и потребителя диагностических файлов. Применяется к Android `0.5.2` на основе `acb3e9e` и отдельно к галерее 6.6. Реляционной БД, таблиц, ключей, индексов, транзакций и миграций нет; ER-диаграмма — `N/A`.
 
 ## Обнаружения и изображения
 
@@ -20,7 +20,7 @@
 | `PhotoInference` | `detections: List<Detection>`, `inferenceMs: Double` | Время ORT с копированием тензоров |
 | [PhotoState<Image>](../../app/src/main/java/ru/university/dronecv/photo/PhotoController.kt) | `phase: PhotoPhase=IDLE`, `image: Image?=null`, `result: PhotoInference?=null`, `error: PhotoError?=null` | `canRecognize=image!=null && phase!=RUNNING`; инварианты переходов обеспечивает controller, а не constructor data class |
 | [LiveInference](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt) | `detections`, `width,height: Int`, `inferenceMs: Double`, optional `conversionMs,preprocessMs,postprocessMs: Double?` | Размеры upright crop; для записи диагностики нужны все стадии |
-| `LiveState` | `phase=STOPPED`, `result?`, `pipelineMs?,fps?: Double?`, `completedFrames: Long=0`, `error: String?`, `revision: Long=0` | Ревизия монотонная; сброс текущей активации обнуляет счётчик; expiry снимает result/FPS/pipeline |
+| `LiveState` | `phase=STOPPED`, `result?`, `pipelineMs?,fps?: Double?`, `completedFrames: Long=0`, `error: String?`, `revision: Long=0`, `tracking: TrackingSignal?`, `trackingFps: Double?`, историческое `target: TargetSignal?` | Ревизия монотонная; сброс обнуляет счётчик. Expiry убирает наблюдение и частоту LK, сохраняя сводку YOLO. В ветви без LK очищает result/FPS/pipeline |
 | `ThreadConfiguration` | `threads: Int=2`, `switching: Boolean=false`, `error: String?` | UI отражает принятую конфигурацию, не обещание успешности запроса |
 | [DiagnosticUi](../../app/src/main/java/ru/university/dronecv/diagnostics/DiagnosticViewModel.kt) | recording, report?, exportStatus?, pipeline?/ort? summaries, elapsedSeconds | Отчёт в Activity ViewModel до нового start/уничтожения процесса |
 
@@ -40,7 +40,7 @@
 | `model` | object | Конфигурация из таблицы ниже |
 | `duration_ms` | number, ms | Длительность сессии по монотонным часам |
 | `interrupted`, `reason` | boolean, string/null | Прерванная сессия и причина; штатный Stop записи может иметь null reason |
-| `analyzer_callbacks_accepted` | integer | Принятые для работы callbacks во время записи |
+| `analyzer_callbacks_accepted` | integer | Отобранные для ML-работы снимки во время записи; не все входные callback |
 | `completed_frames`, `unstored_frames` | integer | Актуальные успешные результаты; из них не сохранённые из-за capacity |
 | `accepted_callbacks_not_completed` | integer | accepted минус completed, не полное число потерянных камерой кадров |
 | `processed_fps_session` | number/null, кадр/с | completed / duration, при нулевой длительности null |
@@ -61,11 +61,46 @@
 
 В памяти `FrameMeasurement`/`ResourceSample` содержат `offsetNanos`, а `DiagnosticFrameSnapshot` — `durationNanos`, все типа `Long` в наносекундах; JSON преобразует эти поля в мс. Длительности стадий (`conversionMs` и другие) уже хранятся как `Double` в миллисекундах. Лимит установлен для кадрового ряда; отдельного capacity для списка resource samples нет. Подробные границы длительностей и разные определения FPS — [потоки данных](../architecture/data-flow.md#границы-измерений).
 
+## Вход камеры в 0.5.2
+
+Корневая schema 1 и payload сигнала v2 сохраняются. Добавлен camera_input; старые отчёты без него анализируются как прежде.
+
+| Поле camera_input | Тип / смысл |
+|---|---|
+| received_frames | integer, принятые callback текущего входа во время записи; старый/inactive source не считается |
+| copied_frames | integer, подготовленные и переданные в offer снимки |
+| superseded_frames | integer, pending-снимки, заменённые более свежим |
+| no_buffer_frames | integer, пропуски из-за слота/бюджета пула |
+| stale_frames | integer, слишком старые входы или ожидание перед ORT |
+| invalidated_frames | integer, собственные снимки, освобождённые при invalidation/неактуальном token |
+| copy_errors | integer, ошибки подготовки или закрытия исходного кадра |
+| copy_mean_ms, copy_max_ms | number/null, время подготовки по всем copied_frames, null без копий |
+| fps_session | number/null, received_frames / длительность записи; null при нулевой длительности |
+
+Счётчики отражают события в пределах diagnostic token, не полный баланс незавершённой работы после Stop. analyzer_callbacks_accepted и completed_frames относятся к отобранной ML-работе; они не равны received_frames. Pipeline — подготовка плюс ML, очередь между workers в него не входит, но входит в analyzer_to_signal. UI input.fps использует окно до 30 входов, экспорт fps_session — всю длительность сессии. Подробнее — [владение кадрами](../guides/camera-frame-ingress.md).
+
+## Наблюдения LK
+
+Корневой отчёт сохраняет `schema_version=1`. В режиме сопровождения `frames[]` хранит завершения YOLO, длительности и `detection_count` — число рамок модели. `target_signal` в этих строках равен null: позиция камеры публикуется отдельно в `LiveState.tracking`. Сводки v2 не подменяются задержкой LK. Для анализа используйте раздел `tracking`, если в сессии были публикации.
+
+| Поля `tracking` версии 1 | Смысл |
+|---|---|
+| `observed_frames`, `track_updates` | Публикации по новым кадрам; второе число включает только кадры с координатами. |
+| `corrections`, `loss_events` | Успешные коррекции и переходы от рамки к `lost` в том же поколении и источнике. Stop/expiry без кадра не считаются потерей. |
+| `updates_fps_session` | `track_updates` на секунду длительности всей записи; null при нулевой длительности. |
+| `samples`, `unstored_samples` | Первые 10 000 публикаций и число не сохранённых. Счётчики относятся ко всей записи. |
+| `stored_updates`, `updates_with_capture_timing` | Знаменатель и числитель для доступности задержки от экспозиции среди сохранённых кадров с координатами. |
+| `timing_summary_ms` | `update_work`, `update_capture_to_signal`, `update_capture_to_analyzer`, `update_analyzer_to_signal` по сохранённым кадрам с координатами; `correction_work` отдельно. p50 равен median, p95 доступен от 20 значений. |
+
+`samples[]`: `kind` равен `frame` или `correction`. Коррекция может повторить ключ (`generation`, `source_id`, `sequence`) кадра и относится к записи, активной при входе этого кадра. `status` — `searching`, `tracking` или `lost`. При `tracking` есть локальный `track_id`, `box`, `center`, `pixel` и `quality`; иначе эти поля null. `width/height` и координаты относятся к полному upright crop. `tracking_width/height` и `median_fb_error_px` относятся к сетке LK.
+
+`classification`, `last_yolo_confidence`, `last_yolo_frame` и `confirmation_age_ms` описывают последнее подтверждение отдельно от `quality`. Метки наблюдения находятся в `frame`, конец интервала — `signal_dispatch_ns`. `work_ms` измеряет grayscale и LK для кадра; для коррекции — работу replay и commit. Оно не включает копирование ImageProxy или ожидание между исполнителями. При несовместимых часах метрики от экспозиции null, с `timing_issue`. [Границы интервалов](../guides/latency-and-prediction.md).
+
 ## Сигнал текущего кадра: payload v2 в 0.5.1
 
 Внешний формат диагностики остаётся `schema_version=1`; версия вложенного сигнала — `target_signal_schema_version=2`. Поля прежней диагностики сохранены. `frames[].target_signal` — object/null, в памяти это `FrameMeasurement.targetSignal` и `LiveState.target`. Сигналы усекаются вместе с кадровым рядом.
 
-`application_stale_frames_discarded: integer` считает пропуски приложения до ORT из-за подтверждённого возраста больше 250 мс, отдельно от accepted callbacks и неизвестных drops CameraX. `timing_summary_ms` дополнен сводками `capture_to_signal`, `capture_to_analyzer`, `analyzer_to_signal`; каждая включает только ненулевые метрики сохранённых сигналов. Во всех сводках `p50` — явный псевдоним `median`; прежние `median` и `p95_nearest_rank` сохранены.
+`application_stale_frames_discarded: integer` считает пропуски приложения до ORT из-за подтверждённого возраста или ожидания в очереди больше 250 мс, отдельно от accepted callbacks и неизвестных drops CameraX. `timing_summary_ms` дополнен сводками `capture_to_signal`, `capture_to_analyzer`, `analyzer_to_signal`; каждая включает только ненулевые метрики сохранённых сигналов. Во всех сводках `p50` — явный псевдоним `median`; прежние `median` и `p95_nearest_rank` сохранены.
 
 | Поля `target_signal` | Типы и смысл |
 |---|---|

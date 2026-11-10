@@ -22,8 +22,8 @@ android {
         applicationId = "ru.university.dronecv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.5.1"
+        versionCode = 7
+        versionName = "0.5.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DRONE_MODEL_ASSET", "\"$droneModelAsset\"")
@@ -121,6 +121,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
@@ -128,6 +129,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.onnxruntime.android)
+    implementation(libs.opencv)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)
@@ -136,6 +138,7 @@ dependencies {
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }

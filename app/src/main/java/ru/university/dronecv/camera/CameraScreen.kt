@@ -10,7 +10,6 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.ImageProxy
 import androidx.camera.core.CameraState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -48,16 +47,24 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.university.dronecv.diagnostics.DiagnosticViewModel
 import ru.university.dronecv.R
 import ru.university.dronecv.detection.DetectorWorker
+import ru.university.dronecv.tracking.GrayFrame
+import ru.university.dronecv.tracking.OpenCvLkTracker
+import ru.university.dronecv.tracking.TrackingSession
 
 /** Главный экран: запрос разрешения, видеопревью и обработка ошибок камеры. */
 @Composable
 fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int) -> Unit, onConfidenceChange: (Float) -> Unit) {
     val context = LocalContext.current
     val diagnostics: DiagnosticViewModel = viewModel()
-    val cameraProbe = remember { CameraProbeState() }
+    val cameraProbe = rememberCameraProbeState()
     var running by rememberSaveable { mutableStateOf(false) }
-    val controller = remember { LiveController<ImageProxy>(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor,
-        diagnostics.frames, initialThreads, eventTime = android.os.SystemClock::elapsedRealtimeNanos) }
+    val controller = remember {
+        val tracking = LiveTracking<CameraFrameSnapshot>(VisionWorker.executor, TrackingSession(::OpenCvLkTracker)) { frame, key, stamp ->
+            GrayFrame.fromArgb(key, stamp, frame.image, frame.rotationDegrees)
+        }
+        LiveController(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads,
+            eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking)
+    }
     DisposableEffect(controller) { onDispose { diagnostics.stop(true, "Camera screen disposed"); controller.close() } }
     val liveState by controller.state.collectAsStateWithLifecycle()
     val threadState by controller.threadConfiguration.collectAsStateWithLifecycle()

@@ -1,6 +1,6 @@
 # Проверки приложения и инструментов
 
-Инструкция для разработчика и тестировщика Android `0.5.1`. Команды выполняются из корня репозитория с JDK 17, SDK 35 и установленной моделью по [быстрому старту](../getting-started.md). Результаты текущего изменения находятся в PROJECT_STATE; [аудит](../documentation-audit.md) содержит исторические проверки подготовки документации. Этот раздел описывает воспроизводимые проверки.
+Инструкция для разработчика и тестировщика Android `0.5.2`. Команды выполняются из корня репозитория с JDK 17, SDK 35 и установленной моделью по [быстрому старту](../getting-started.md). Результаты текущего изменения находятся в PROJECT_STATE; [аудит](../documentation-audit.md) содержит исторические проверки подготовки документации. Этот раздел описывает воспроизводимые проверки.
 
 ## Локальная Android-сборка и JVM
 
@@ -18,6 +18,7 @@ python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
 | [photo JVM tests](../../app/src/test/java/ru/university/dronecv/photo) | Состояния/очередь/устаревшие ошибки, close и Fit/decode размеры | Поддельный backend тестирует управление ресурсами, не подменяет реальные CV-результаты приложения |
 | [camera JVM tests](../../app/src/test/java/ru/university/dronecv/camera) | Stride/crop/каналы, mapping, generation/source/expiry/FPS, смена потоков | Без физического сенсора; не доказывают реальное совмещение Preview/Analysis |
 | [diagnostics JVM tests](../../app/src/test/java/ru/university/dronecv/diagnostics) | Статистика, token/capacity, export metadata и invalidation | Не измеряют OEM thermal/PSS и длительную стабильность |
+| `DiagnosticExporterTest`, `LiveTrackingConcurrencyTest` | Поздний экспорт, порядок статусов, конкурентные Stop/start и смена контроллера с удержанием кадра | Управляемые записи и backend; без физических устройств |
 | `assembleDebugAndroidTest` | Компиляция [device tests](../../app/src/androidTest/java/ru/university/dronecv) | Не выполняет ни одного теста на устройстве |
 | `lintDebug` | Статический Android lint | Не заменяет запуск UI/инференса |
 
@@ -32,7 +33,7 @@ adb devices
 ./gradlew --no-daemon connectedDebugAndroidTest
 ```
 
-Ожидайте успешный Gradle result и отчёт `app/build/reports/androidTests/connected/debug/index.html`; проверьте failures и skipped. [LiveCameraInstrumentedTest](../../app/src/androidTest/java/ru/university/dronecv/camera/LiveCameraInstrumentedTest.kt) проверяет реальный CameraX→ORT→UI, Stop/restart, потоки, zoom request, фон/ротацию/вкладки. Также есть decoder/EXIF, ORT, JSON и inventory tests. Camera tests используют assumptions при отсутствии hardware; сам зелёный итог без просмотра skipped не доказывает их выполнение.
+Ожидайте успешный Gradle result и отчёт `app/build/reports/androidTests/connected/debug/index.html`; проверьте failures и skipped. [LiveCameraInstrumentedTest](../../app/src/androidTest/java/ru/university/dronecv/camera/LiveCameraInstrumentedTest.kt) проверяет реальный CameraX→ORT→UI, Stop/restart, потоки, zoom request, фон/ротацию/вкладки. CameraProbeRestorationTest проверяет сохранение запроса и очистку runtime через Compose StateRestorationTester. Для изолированного Compose-теста debug APK включает `ui-test-manifest`. В AndroidTest закреплён Espresso Core 3.7.0: на проверенном образе Android 16 прежний вызов `InputManager.getInstance` останавливал Compose-тесты до assertions ([примечания AndroidX](https://developer.android.com/jetpack/androidx/releases/test#espresso-3.7.0)). Также есть decoder/EXIF, ORT, JSON и inventory tests. Camera tests используют assumptions при отсутствии hardware; сам зелёный итог без просмотра skipped не доказывает их выполнение.
 
 Повороты эмулятора не доказывают оптику, полевую точность, нагрев и длительную работу Xiaomi. Ручные протоколы: [PHOTO_QA](../PHOTO_QA.md), [LIVE_QA](../LIVE_QA.md), [CAMERA_QA](../CAMERA_QA.md), [PERFORMANCE_QA](../PERFORMANCE_QA.md), [потоки ORT](../ORT_THREAD_BENCHMARK.md).
 
@@ -83,3 +84,13 @@ python3 ml/scripts/analyze_android_sessions.py /absolute/path/to/report.json --o
 ## Проверка документации
 
 Для Markdown проверяйте UTF-8/LF, один H1, последовательность заголовков, языки fenced code, таблицы и существование локальных ссылок/якорей. По возможности проверяйте Mermaid настоящим parser и внешние URL; недоступный инструмент отражайте в отчёте. Не устанавливайте новые зависимости и не меняйте CI в рамках документационного задания без отдельного разрешения. Состав выполненной проверки и открытые замечания — [аудит](../documentation-audit.md).
+
+## Независимый вход камеры
+
+LiveFrameCaptureTest использует отдельный заблокированный backend: последующие входы завершают копирование/close, pending заменяется, инференсы остаются последовательными. Проверяются Stop/start до запуска pump и во время infer, порог во время copy, rejected worker, stale очередь и diagnostic tokens. CameraFramePoolTest проверяет лимит 3 массива/16 MiB, смену crop, повторный release и сохранность собственных пикселей. Это JVM-проверки управления ресурсами, не аппаратные показатели камеры.
+
+Новый camera_input читается Python-анализатором вместе со старыми отчётами без этого поля. Для конкретного этапа допускается только локальная сборка/JVM/lint; assembleDebugAndroidTest не запускает Android-тесты. Поведение на телефоне и частота входа требуют отдельного последующего испытания по [контракту](../guides/camera-frame-ingress.md).
+
+## Трекер камеры
+
+GrayFrameTest и TrackingSessionTest проверяют владение пикселями, повороты, bounded историю, период YOLO, выбор той же цели, TTL и отклонение устаревшей коррекции. Fake VisualTracker в JVM проверяет управление, а не optical flow. OpenCvLkInstrumentedTest выполняет настоящий OpenCV LK на перемещаемом текстурном фрагменте и проверяет потерю при исчезновении/непригодной текстуре. Эти тесты входят в instrumentation CI. LiveOpenCvTrackingInstrumentedTest проверяет реальный LK через LiveController с задержанным тестовым ответом детектора и новыми изображениями. Камерный UI smoke проверяет настоящий YOLO, публикацию наблюдения и очистку после Stop; он не требует цели на сцене эмулятора и не доказывает сопровождение реального дрона. LiveTrackingIntegrationTest связывает оба исполнителя управляемыми очередями и проверяет публикацию, когда YOLO ещё не завершён, запоздавшую коррекцию, освобождение ресурсов и Stop/rebind. Python test_tracking_reports.py проверяет раздельные счётчики и интервалы. Приёмка на движущейся цели описана в [руководстве](../guides/visual-tracking-core.md).
