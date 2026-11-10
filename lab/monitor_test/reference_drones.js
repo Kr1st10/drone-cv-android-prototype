@@ -256,7 +256,7 @@
 
   /**
    * Measure the annotated object in CSS pixels, then reuse the gallery's mm and range functions.
-   * `render` is the actually loaded image/scale and unclipped-object flag, never a desired CSS size.
+   * `render` is the decoded image/actual CSS scale; visible means valid loaded geometry, independent of preview clipping.
    * `render.photo_id` selects that photo only; omitted IDs select the primary photo, unknown IDs return nulls.
    * A quantitative photo needs confirmed identity/projection plus axis {from, to, real_cm, source}.
    * Returns null for unavailable/unverified geometry; no side effects or guessed dimensions.
@@ -325,7 +325,7 @@
     const saved = load('reference_tab', {});
     let selected = profiles.find(p => p.id === saved?.model_id) || profiles[0];
     let scale = positive(saved?.scale_percent) && saved.scale_percent >= 0.01 && saved.scale_percent <= 1000 ? saved.scale_percent : 25;
-    let loaded = false, trialTransition = false, targetError = '';
+    let loaded = false, loadState = 'missing', loadGeneration = 0, trialTransition = false, targetError = '';
     let background = saved?.background === 'sky' ? 'sky' : 'neutral';
     let camera = saved?.camera === '1' ? '1' : '5';
     let mode = saved?.range_mode === 'strict' ? 'strict' : 'approximate';
@@ -349,32 +349,46 @@
       <details id="referenceSegmentReview" class="hidden"><summary>Проверяемая моторная диагональ — не подтверждена</summary><label><input id="referenceSegmentToggle" type="checkbox"> Показать проверяемый отрезок A–B (не подтверждён)</label><p id="referenceSegmentReadout"></p></details><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
       <p class="muted">Лабораторная эквивалентная дальность по угловому размеру. Не измерение дальности обнаружения в полёте.</p>
       <details><summary>Дополнительно: источник фотографии и геометрия</summary>
-        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. При обрезке объекта окном расчёт недоступен. Обрезанный силуэт не приравнивается полному габариту. Для него нужен отдельный достоверный отрезок.</p>
+        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. Предпросмотр может обрезать изображение, не меняя расчёт. Полноэкранный режим отдельно проверяет, помещается ли объект на экране. Обрезанный силуэт не приравнивается полному габариту. Для него нужен отдельный достоверный отрезок.</p>
         <p id="referenceDimensionNote"></p><p id="referenceDiagnostics"></p><p id="referencePhotoSource"></p>
         <p>Разрешение авторов на использование и публикацию фотографий подтверждено пользователем 2026-11-06. Это не подтверждение проекции.</p>
       </details>`;
     const $ = id => element.querySelector('#' + id);
-    const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), image = $('referenceDisplay'), viewport = $('referenceViewport');
+    const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), viewport = $('referenceViewport');
+    let image = $('referenceDisplay');
+    const decodedImages = new Map();
     let photo = selected.photos.find(p => p.id === saved?.photo_id) || selected.photos[0];
     for (const p of profiles) select.add(new Option(p.model, p.id));
     function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, camera }); }
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
     function choosePhoto() {
       photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
-      const p = photo; loaded = false; image.removeAttribute('src');
+      const p = photo, generation = ++loadGeneration;
+      loaded = false; loadState = p.file ? 'loading' : 'missing'; targetError = '';
       $('referenceDimensions').textContent = `${selected.dimensions_mm.join(' × ')} мм; пропеллеры ${selected.propeller_in}″`;
       $('referenceDimensionNote').textContent = selected.dimension_note;
       link($('referenceSpecSource'), selected.source, 'Источник характеристик');
       link($('referencePhotoSource'), p.source, 'Страница источника фотографии');
       $('referenceView').textContent = p.label;
-      image.alt = selected.model + ' — ' + p.label;
+      // Decode a separate request-owned image. Old events can never publish into the new selection.
       const expected = p.file && new URL(p.file, document.baseURI).href;
-      image.onload = () => {
-        if (image.currentSrc !== expected || photo.id !== p.id) return;
-        loaded = image.naturalWidth === p.width && image.naturalHeight === p.height; update();
+      const cached = decodedImages.get(expected);
+      const next = cached || new Image(); next.id = 'referenceDisplay';
+      next.alt = selected.model + ' — ' + p.label;
+      next.onload = () => {
+        if (generation !== loadGeneration || next.currentSrc !== expected) return;
+        loaded = next.naturalWidth === p.width && next.naturalHeight === p.height;
+        loadState = loaded ? 'ready' : 'error';
+        if (loaded) { decodedImages.set(expected, next); if (image !== next) image.replaceWith(next); image = next; }
+        update();
       };
-      image.onerror = () => { if (photo.id === p.id) { loaded = false; update(); } };
-      if (p.file) image.src = p.file;
+      next.onerror = () => { if (generation === loadGeneration) { loaded = false; loadState = 'error'; update(); } };
+      if (cached) next.onload();
+      else if (p.file) next.src = p.file;
+      else {
+        const empty = document.createElement('img'); empty.id = 'referenceDisplay'; empty.alt = '';
+        image.replaceWith(empty); image = empty;
+      }
       persist(); update();
     }
     function chooseModel(preferredPhoto = null) {
@@ -395,20 +409,28 @@
       image.style.width = p.width * scale / 100 + 'px';
       image.classList.toggle('hidden', !loaded);
       $('referenceMissing').classList.toggle('hidden', loaded);
+      $('referenceMissing').textContent = loadState === 'loading' ? 'Загрузка выбранной фотографии…' : loadState === 'error' ? 'Ошибка загрузки или неверные размеры фотографии.' : 'Фотография недоступна.';
       const r = image.getBoundingClientRect(), v = viewport.getBoundingClientRect(), b = p.bounds_px;
       const trial = document.fullscreenElement === viewport;
       const panel = trial ? viewport : element.closest('.panel'), clip = panel.getBoundingClientRect();
       const left = Math.max(v.left, 0, clip.left + panel.clientLeft), top = Math.max(v.top, 0, clip.top + panel.clientTop);
       const right = Math.min(v.right, innerWidth, clip.left + panel.clientLeft + panel.clientWidth);
       const bottom = Math.min(v.bottom, innerHeight, clip.top + panel.clientTop + panel.clientHeight);
-      const actualScale = p.width ? r.width / p.width : null;
-      const visible = loaded && !!b && r.left + b[0] * actualScale >= left - 0.1 && r.top + b[1] * actualScale >= top - 0.1 &&
+      const actualScale = loaded && p.width ? r.width / p.width : null;
+      const previewVisible = loaded && !!b && r.left + b[0] * actualScale >= left - 0.1 && r.top + b[1] * actualScale >= top - 0.1 &&
         r.left + b[2] * actualScale <= right + 0.1 && r.top + b[3] * actualScale <= bottom + 0.1;
-      const m = (mode === 'strict' ? measure : estimate)(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible },
+      const m = (mode === 'strict' ? measure : estimate)(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible: loaded },
         getDistance(), cal?.mm_per_css_px, geometry);
+      const capacityWidth = trial ? Math.min(v.width, innerWidth) : screen.width;
+      const capacityHeight = trial ? Math.min(v.height, innerHeight) : screen.height;
+      const fullscreenFits = loaded && !!b && positive(actualScale) &&
+        capacityWidth / 2 + (b[0] - p.width / 2) * actualScale >= -0.1 &&
+        capacityHeight / 2 + (b[1] - p.height / 2) * actualScale >= -0.1 &&
+        capacityWidth / 2 + (b[2] - p.width / 2) * actualScale <= capacityWidth + 0.1 &&
+        capacityHeight / 2 + (b[3] - p.height / 2) * actualScale <= capacityHeight + 0.1;
       const fmt = n => n == null ? 'нет данных' : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
       const candidate = p.review_segment, overlay = $('referenceSegmentOverlay');
-      const segmentMm = reviewSegmentLength(p, { width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible }, cal?.mm_per_css_px);
+      const segmentMm = reviewSegmentLength(p, { width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible: loaded }, cal?.mm_per_css_px);
       $('referenceSegmentReview').classList.toggle('hidden', !candidate);
       overlay.replaceChildren();
       overlay.classList.toggle('hidden', !candidate || !loaded || !$('referenceSegmentToggle').checked);
@@ -431,11 +453,11 @@
           'Для ручной проверки включите A–B и измерьте линейкой расстояние между центрами меток. Программное значение не заменяет физический замер линейкой.';
       }
 
-      if (trial && m.equivalent_distance_m == null) {
+      if (trial && (m.equivalent_distance_m == null || !fullscreenFits)) {
         targetError = 'Испытание остановлено: калибровка недействительна или изображение обрезано.';
         document.exitFullscreen().catch(() => {});
       }
-      const range = m.equivalent_distance_m == null ? 'нет данных' :
+      const range = loadState === 'loading' ? 'Загрузка выбранной фотографии…' : m.equivalent_distance_m == null ? 'нет данных' :
         `${mode === 'approximate' ? '≈ ' : ''}${m.equivalent_distance_m.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} м`;
       $('referenceAssumption').textContent = mode === 'approximate' ?
         `Приближённая оценка, не точная дальность и не подтверждённая геометрия. ${m.assumption || 'Для оценки нужны доступное изображение и ширина видимого коптера.'}${positive(m.assumed_extent_mm) ? ` Принятый габарит: ${fmt(m.assumed_extent_mm)} мм.` : ''}` :
@@ -443,12 +465,14 @@
       $('referenceReadout').textContent = `Масштаб: ${scale} %. До экрана: ${fmt(getDistance())} см. Ширина силуэта на экране: ${fmt(m.display_width_cm)} см. Эквивалентная дальность: ${range}.`;
       if (m.display_axis_cm != null) $('referenceReadout').textContent += ` Размер расчётной оси: ${fmt(m.display_axis_cm)} см.`;
       $('referenceTargetStatus').textContent = targetError;
-      $('referenceIssue').textContent = [p.issue, !loaded ? 'Локальная фотография не загружена.' : !visible ? 'Объект обрезан видимой областью. Уменьшите масштаб или прокрутите к фотографии.' : '',
+      $('referenceIssue').textContent = [p.issue, !loaded ? (loadState === 'loading' ? 'Загрузка выбранной фотографии…' : 'Локальная фотография не загружена или её размеры неверны.') : !previewVisible ? 'Предпросмотр показывает часть изображения. Расчёт использует полный размер объекта при заданном масштабе.' : '',
+        loaded && !fullscreenFits ? 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб; математическая дальность показана для полного размера.' : '',
         !$('referenceScaleNumber').validity.valid ? 'Некорректный масштаб: применяется последнее допустимое значение.' : '',
         !cal ? 'Нужна актуальная калибровка экрана.' : '', !positive(getDistance()) ? 'Введите расстояние от камеры до экрана.' : ''].filter(Boolean).join(' ');
       $('referenceDiagnostics').textContent = `ID: ${selected.id}; ракурс: ${p.view}; границы файла [x1, y1, x2, y2]: ${b ? b.join(', ') : 'нет'}; физическая ось: ${p.axis ? JSON.stringify(p.axis) : 'не подтверждена'}.`;
       return { model_id: selected.id, photo_id: p.id, view: p.view, scale_percent: scale, screen_distance_cm: getDistance(),
-        review_segment_display_mm: segmentMm,
+        load_state: loadState, preview_visible: previewVisible, fullscreen_fits: fullscreenFits,
+        image_width_css_px: loaded ? r.width : null, image_height_css_px: loaded ? r.height : null, review_segment_display_mm: segmentMm,
         camera_label: camera + '×', background, range_mode: mode, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
     }
@@ -469,9 +493,12 @@
     const environment = () => ({ dpr: devicePixelRatio, width: screen.width, height: screen.height,
       available_width: screen.availWidth, available_height: screen.availHeight,
       visual_scale: window.visualViewport?.scale ?? 1 });
-    function calibrationEnvironmentMatches(before, after) {
-      if (!trialTransition && document.fullscreenElement !== viewport) return false;
-      return Object.keys(environment()).every(k => before[k] === after[k]);
+    function calibrationEnvironmentMatches(before, after, referenceActive = false) {
+      const transitioning = trialTransition || document.fullscreenElement === viewport;
+      if (!transitioning && !referenceActive) return false;
+      // Viewport resizing does not change mm/CSSpx. Still reject screen/zoom changes and ordinary window moves.
+      return before && after && Object.keys(environment()).every(k => before[k] === after[k]) &&
+        (transitioning || (before.x === after.x && before.y === after.y));
     }
     $('referenceCamera').onchange = e => { camera = e.target.value; persist(); update(); };
     $('referenceBackground').onchange = e => { background = e.target.value; persist(); update(); };
@@ -495,10 +522,10 @@
           const previous = scale;
           setScale(needed);
           const actual = update();
-          if (!positive(actual.equivalent_distance_m)) {
+          if (!positive(actual.equivalent_distance_m) || !actual.fullscreen_fits) {
             setScale(previous);
-            targetError = 'Требуемое изображение обрезается текущей видимой областью. Увеличьте окно или уменьшите требуемый размер.';
-          } else targetError = 'Масштаб рассчитан. Фактическая дальность показана ниже с учётом CSS-размера; предварительные размеры остаются оценкой.';
+            targetError = 'Требуемый объект не помещается на экране в полноэкранном режиме. Увеличьте заданную дальность или уменьшите масштаб.';
+          } else targetError = 'Масштаб рассчитан. Фактическая дальность показана ниже с учётом CSS-размера; предварительные размеры остаются оценкой. Вместимость окончательно проверяется при входе в полноэкранный режим.';
         }
       }
       update();
@@ -508,6 +535,7 @@
       viewport.scrollIntoView({ block: 'center' });
       const state = update();
       if (!positive(state.equivalent_distance_m)) { targetError = 'Сначала получите корректную геометрию изображения: проверьте калибровку, ракурс, расстояние и обрезку.'; update(); return; }
+      if (!state.fullscreen_fits) { targetError = 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб.'; update(); return; }
       if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим.'; update(); return; }
       trialTransition = true;
       try { await viewport.requestFullscreen(); update(); }

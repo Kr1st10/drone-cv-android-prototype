@@ -47,7 +47,7 @@ await page.evaluate(()=>document.exitFullscreen()); await page.waitForFunction((
 await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
 assert.equal((await snap()).calibration_id,cal);
 assert.equal(await page.locator('#referenceDisplay').evaluate(e=>e.getBoundingClientRect().width),width);
-for(const [value,message] of [['0.001',/вне диапазона/],['0.5',/обрезается/],['abc',/положительную/]]){
+for(const [value,message] of [['0.001',/вне диапазона/],['0.5',/не помещается.*полноэкран/ ],['abc',/положительную/]]){
  await page.fill('#referenceTarget',value);await page.click('#referenceApplyTarget');assert.match(await page.textContent('#referenceTargetStatus'),message);
 }
 await page.selectOption('#referenceBackground','neutral');

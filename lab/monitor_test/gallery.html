@@ -585,7 +585,7 @@ function screenEnvironment() {
 function activeScreenCalibration() {
   if (!SCREEN_CAL || !screenConfirmed) return null;
   if (JSON.stringify(SCREEN_CAL.environment) !== JSON.stringify(screenEnvironment()) &&
-      !referenceTab?.calibrationEnvironmentMatches(SCREEN_CAL.environment, screenEnvironment())) { screenConfirmed = false; return null; }
+      !referenceTab?.calibrationEnvironmentMatches(SCREEN_CAL.environment, screenEnvironment(), ui.section === 'reference')) { screenConfirmed = false; return null; }
   if (referenceTab?.calibrationEnvironmentMatches(SCREEN_CAL.environment, screenEnvironment())) SCREEN_CAL.environment = screenEnvironment();
   return positive(SCREEN_CAL.mm_per_css_px) ? SCREEN_CAL : null;
 }
@@ -593,7 +593,7 @@ function screenStatus() {
   const cal = activeScreenCalibration();
   $('screenCalibStatus').textContent = cal ? `Подтверждена линейкой: ${cal.mm_per_css_px.toFixed(6)} мм / CSS px · ${cal.label || 'дисплей без имени'}` :
     SCREEN_CAL ? `Требуется повторный замер линейкой. Сохранённый коэффициент ${SCREEN_CAL.mm_per_css_px} мм / CSS px не применяется.` : 'Физический масштаб не измерен. Нажмите «Калибровка экрана линейкой».';
-  $('confirmSavedScreen').classList.toggle('hidden', !!cal || !SCREEN_CAL || JSON.stringify(SCREEN_CAL.environment) !== JSON.stringify(screenEnvironment()));
+  $('confirmSavedScreen').classList.toggle('hidden', !!cal || !SCREEN_CAL || (JSON.stringify(SCREEN_CAL.environment) !== JSON.stringify(screenEnvironment()) && !referenceTab?.calibrationEnvironmentMatches(SCREEN_CAL.environment, screenEnvironment(), ui.section === 'reference')));
   if (ui.section === 'reference') referenceTab?.update();
 }
 function calibrationFor(s) {
@@ -1133,7 +1133,7 @@ $('previousImage').onclick = () => go(-1); $('nextImage').onclick = () => go(1);
 $('smallerImage').onclick = () => { ui.manual /= 1.1; show(); }; $('largerImage').onclick = () => { ui.manual *= 1.1; show(); };
 $('recordButton').onclick = openRecord; $('settingsButton').onclick = openSettings;
 $('currentBounds').onclick = () => { if (!T) return; $('boundImage').value = current().id; ui.editingCurrent = true; editBounds(); };
-$('confirmSavedScreen').onclick = () => { if (SCREEN_CAL && JSON.stringify(SCREEN_CAL.environment) === JSON.stringify(screenEnvironment())) { screenConfirmed = true; screenStatus(); toast('Калибровка подтверждена оператором для той же установки. При сомнении повторите замер.'); } };
+$('confirmSavedScreen').onclick = () => { if (SCREEN_CAL && (JSON.stringify(SCREEN_CAL.environment) === JSON.stringify(screenEnvironment()) || referenceTab?.calibrationEnvironmentMatches(SCREEN_CAL.environment, screenEnvironment(), ui.section === 'reference'))) { screenConfirmed = true; screenStatus(); toast('Калибровка подтверждена оператором для той же установки. При сомнении повторите замер.'); } };
 $('referencePhoto').onchange = async e => { try { await addReferencePhoto(e.target.files[0]); } catch (x) { $('referencePhotoStatus').textContent = x.message; } e.target.value = ''; };
 $('referenceProjection').onchange = () => { const m = LOCAL_IMAGES[REFERENCE_IMAGE]; if (m) { m.projection_confirmed = $('referenceProjection').checked; save('local_images', LOCAL_IMAGES); } };
 $('prepareReference').onclick = () => { if (!byId(REFERENCE_IMAGE)) { toast('Сначала загрузите допустимый снимок эталона.'); return; } $('boundImage').value = REFERENCE_IMAGE; editBounds(); };

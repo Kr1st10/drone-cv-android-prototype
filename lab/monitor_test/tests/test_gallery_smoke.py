@@ -6,7 +6,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize('script', ['gallery_smoke.mjs', 'screen_smoke.mjs', 'product_smoke.mjs', 'reference_smoke.mjs', 'reference_trial_smoke.mjs'])
+@pytest.mark.parametrize('script', ['gallery_smoke.mjs', 'screen_smoke.mjs', 'product_smoke.mjs', 'reference_smoke.mjs', 'reference_trial_smoke.mjs', 'reference_switch_smoke.mjs'])
 def test_gallery_smoke(script, tmp_path):
     node, chromium = shutil.which('node'), os.environ.get('CHROMIUM') or shutil.which('chromium') or shutil.which('chromium-browser')
     cwd = os.environ.get('PLAYWRIGHT_NODE_DIR', os.getcwd())  # directory whose node_modules has playwright

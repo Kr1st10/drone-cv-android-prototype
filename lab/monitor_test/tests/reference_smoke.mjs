@@ -156,13 +156,14 @@ const clipped = await page.evaluate(() => {
   panel.scrollTop += r.top + p.bounds_px[1] * r.width / p.width - (c.top - 5);
   return image.getBoundingClientRect().top + p.bounds_px[1] * r.width / p.width < c.top;
 });
-assert.ok(clipped); assert.equal((await snapshot()).equivalent_distance_m, null);
+assert.ok(clipped); assert.ok((await snapshot()).equivalent_distance_m > 0);
+assert.equal((await snapshot()).preview_visible, false);
 await page.locator('#settings').evaluate(e => { e.style.maxHeight = ''; e.scrollTop = 0; });
 await page.locator('#referenceSection details:not(#referenceSegmentReview)').evaluate(e => e.open = false);
 assert.ok((await snapshot()).equivalent_distance_m > 0);
 await page.fill('#distance', ''); assert.equal((await snapshot()).equivalent_distance_m, null);
 await page.fill('#distance', '150');
-await page.fill('#referenceScaleNumber', '200'); assert.equal((await snapshot()).equivalent_distance_m, null); // clipped object
+await page.fill('#referenceScaleNumber', '200'); assert.ok((await snapshot()).equivalent_distance_m > 0); // clipping preview never blocks math
 await page.fill('#referenceScaleNumber', '25');
 // Changing photo drops a previously valid fixture immediately; no old metres survive into the other view.
 await page.selectOption('#referencePhotoSelect', 'skydroid_front');
