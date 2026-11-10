@@ -31,5 +31,7 @@ case $(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r') in
     192m) ;; # Already configured, e.g. when reusing an AVD in this job.
     *) echo 'Unexpected normal-app heap limit; inspect the image'; exit 1 ;;
 esac
+# Repeat emulator-runner's unlock after restarting the Android framework.
+adb shell input keyevent 82
 { echo 'After CI configuration / Android restart'; record_heap; } | tee -a emulator-environment.txt
 [[ $(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r') == 192m ]]
