@@ -57,5 +57,6 @@ internal fun exportCameraInventory(saved: String, probe: CameraProbeState): Stri
         .put("physical_ids", JSONArray(probe.physicalIds))
         .put("requested_zoom_ratio", probe.requestedZoom)
         .put("current_zoom_ratio", probe.actualZoom ?: JSONObject.NULL)
+        .put("capture_zoom_ratio", probe.captureZoom ?: JSONObject.NULL)
         .put("switching", probe.loading)
         .put("warning", probe.warning ?: JSONObject.NULL)).toString(2)

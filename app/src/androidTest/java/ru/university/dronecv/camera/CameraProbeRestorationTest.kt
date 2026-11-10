@@ -27,6 +27,7 @@ class CameraProbeRestorationTest {
             probe.activePhysicalId = "active-test"
             probe.physicalIds = listOf("physical-test")
             probe.actualZoom = 2f
+            probe.captureZoom = 2f
             probe.loading = true
             probe.warning = "old warning"
             probe.selectionEpoch = 7
@@ -40,6 +41,7 @@ class CameraProbeRestorationTest {
             assertEquals(emptyList<String>(), probe.physicalIds)
             assertNull(probe.zoomRange)
             assertNull(probe.actualZoom)
+            assertNull(probe.captureZoom)
             assertFalse(probe.loading)
             assertNull(probe.warning)
             assertEquals(0L, probe.selectionEpoch)

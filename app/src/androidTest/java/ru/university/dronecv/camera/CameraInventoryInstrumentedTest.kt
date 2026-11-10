@@ -29,7 +29,15 @@ class CameraInventoryInstrumentedTest {
         val exported = JSONObject(exportCameraInventory(report.toString(), probe)).getJSONObject("current_camera")
         assertEquals(5.0, exported.getDouble("requested_zoom_ratio"), 0.0)
         assertTrue(exported.isNull("current_zoom_ratio"))
+        assertTrue(exported.isNull("capture_zoom_ratio"))
         assertTrue(exported.isNull("active_physical_id"))
         assertEquals("physical-test", exported.getJSONArray("physical_ids").getString(0))
+        // Keep the requested ratio, CameraX state and Camera2 result distinct in the experiment.
+        probe.actualZoom = 5f
+        probe.captureZoom = 4.9f
+        val observed = JSONObject(exportCameraInventory(report.toString(), probe)).getJSONObject("current_camera")
+        assertEquals(5.0, observed.getDouble("current_zoom_ratio"), 0.0)
+        assertEquals(4.9, observed.getDouble("capture_zoom_ratio"), 0.0001)
+        assertTrue(observed.isNull("active_physical_id"))
     }
 }

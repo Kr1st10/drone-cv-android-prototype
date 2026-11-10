@@ -171,12 +171,14 @@ private fun LiveControls(
         DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING && !threadState.switching,
             confidence, threadState.threads, state.completedFrames)
         Text("Камера ID: ${probe.logicalId ?: "неизвестно"}; физический запрос: ${probe.physicalId ?: "авто"} · запрошено ${probe.requestedZoom}× · текущий zoomRatio ${probe.actualZoom ?: "неизвестен"}", style = MaterialTheme.typography.bodySmall)
+        Text("Последний Camera2 zoomRatio: ${probe.captureZoom ?: "не сообщён"} (не оптическая кратность)",
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("camera-capture-zoom"))
         Text(sensorEvidence(probe.activePhysicalId, probe.physicalIds.toSet()), style = MaterialTheme.typography.bodySmall)
         Text("Физический ID не доказывает тип объектива; 5× может быть цифровым.", style = MaterialTheme.typography.bodySmall)
         fun change(zoom: Float, physical: String?) {
             diagnostics.stop(true, "Camera zoom or physical camera changed")
             controller.configure(false, confidence)
-            probe.activePhysicalId = null; probe.actualZoom = null; probe.warning = null; probe.loading = true
+            probe.activePhysicalId = null; probe.actualZoom = null; probe.captureZoom = null; probe.warning = null; probe.loading = true
             probe.physicalId = physical; probe.requestedZoom = zoom; probe.selectionEpoch++
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -186,7 +188,7 @@ private fun LiveControls(
                     is ZoomDecision.Request -> change(decision.ratio, null)
                     is ZoomDecision.Unavailable -> probe.warning = decision.reason
                 }
-            }, modifier = Modifier.weight(1f).testTag("zoom-five")) { Text("5×") }
+            }, modifier = Modifier.weight(1f).testTag("zoom-five")) { Text("5× (запрос)") }
         }
         if (probe.physicalIds.isEmpty()) Text("Прямой выбор физической камеры не доступен или не раскрыт API.", style = MaterialTheme.typography.bodySmall)
         else {
