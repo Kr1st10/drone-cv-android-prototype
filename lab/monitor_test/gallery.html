@@ -23,6 +23,9 @@
   #screenLine { display: block; max-width: calc(100vw - 112px); height: 90px; overflow: visible; flex-shrink: 0; }
   #screenLineCaption { text-align: center; }
   #referenceViewport { position: relative; height: min(360px, 45vh); overflow: hidden; background: #fff; color: #111; }
+  #referenceViewport.reference-sky { background: #91c5e8 url('reference_assets/sky.svg') center / cover no-repeat; }
+  #referenceViewport:fullscreen { width: 100vw; height: 100vh; margin: 0; padding: 0; border: 0; background-color: #fff; cursor: none; }
+  #referenceViewport:fullscreen > :not(#referenceDisplay) { display: none !important; }
   #referenceDisplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: none; }
   #referenceMissing { padding: 24px; }
   #referenceSection input[type=range] { width: min(240px, 40vw); vertical-align: middle; }
@@ -581,7 +584,9 @@ function screenEnvironment() {
 }
 function activeScreenCalibration() {
   if (!SCREEN_CAL || !screenConfirmed) return null;
-  if (JSON.stringify(SCREEN_CAL.environment) !== JSON.stringify(screenEnvironment())) { screenConfirmed = false; return null; }
+  if (JSON.stringify(SCREEN_CAL.environment) !== JSON.stringify(screenEnvironment()) &&
+      !referenceTab?.calibrationEnvironmentMatches(SCREEN_CAL.environment, screenEnvironment())) { screenConfirmed = false; return null; }
+  if (referenceTab?.calibrationEnvironmentMatches(SCREEN_CAL.environment, screenEnvironment())) SCREEN_CAL.environment = screenEnvironment();
   return positive(SCREEN_CAL.mm_per_css_px) ? SCREEN_CAL : null;
 }
 function screenStatus() {

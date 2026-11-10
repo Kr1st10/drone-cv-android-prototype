@@ -2,6 +2,11 @@
 
 _Обновлено: 2026-11-10. Подготовлена диагностика эксперимента 1×/5× на базе main @ f9e7101; физическая камера Xiaomi не проверена._
 
+## Кабинетный эталон и стенд 5× — 2026-11-10
+
+- От `main` @ `5d02f33` подготовлена отдельная ветка `codex/reference-lab-5x`: новый первый эталон с тремя предварительными проекциями, обратный расчёт дальности/масштаба, 1×/5× без множителя геометрии, чистый fullscreen с сохранением CSS-размера и локальными фонами. Android и остальные режимы не менялись.
+- **23 теста passed, без skipped**, JS syntax/diff — OK; проверены геометрия 100 м, fullscreen/калибровка и прежние галерея/экспорт. Реальные размеры/ракурсы/фото эталона и линейка/телевик Xiaomi ещё требуют физической приёмки. Подробности и следующий шаг — [состояние стенда](lab/monitor_test/PROJECT_STATE.md), [инструкция](lab/monitor_test/README.md).
+
 ## PR #31: разбор и исправление Android CI — 2026-11-10
 
 - В run `42822687148` два ORT-теста (`loadsModelAndRunsInference`, `rotationGivesSameResultAsPreRotatedBitmap`) падают с OOM при выделении ~3.7 MB; пять LiveCamera-тестов (`diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable`, `zoomRequestKeepsCameraRunningAndCanReturnToOne`, `cameraRunsRealModelAndStopClearsLateResults`, `threadSwitchStopsBeforeRecreatingAndCameraRunsAgain`, `backgroundRecreationAndBothLandscapeDirectionsResumeInference`) истекают в первом `openAndStart/awaitResult` до последующих сценариев. В каждом camera-интервале есть вход ImageAnalysis и OOM при выделении ~4.9 MB. Ошибок binding не найдено; после исправления окружения все семь тестов прошли без изменений приложения/старых тестов, независимая регрессия приложения не выявлена.
