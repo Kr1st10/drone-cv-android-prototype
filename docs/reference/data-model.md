@@ -135,7 +135,7 @@
 
 ## Лабораторная галерея
 
-Полноэкранный режим движения выгружает отдельные JSON эталона. Контракты `dronecv-motion-run-1`, `dronecv-motion-series-1` и экранная метка v1 описаны в [протоколе движения](../../lab/monitor_test/PROTOCOL.md#7-движущаяся-цель).
+Полноэкранный режим движения выгружает отдельные JSON эталона. Схемы `dronecv-motion-run-1`, `dronecv-motion-series-1`, журнал Android `dronecv-motion-android-1`, экранная метка и методика IoU описаны в [протоколе движения](../../lab/monitor_test/PROTOCOL.md#7-движущаяся-цель).
 
 Галерея хранит выборку, settings, runs, trial и results в браузерном `localStorage` с префиксом `dronecv66v2.`. Это отдельное хранилище, не связанное с Android ViewModel. Экспорт JSON имеет `format="dronecv66-session-2"`; [results_template.csv](../../lab/monitor_test/results_template.csv) задаёт 36 столбцов CSV. Назначение полей, единицы, null и правила TP/FN/FP/TN канонически описаны в [протоколе](../../lab/monitor_test/PROTOCOL.md#5-размеры-и-экспорт).
 

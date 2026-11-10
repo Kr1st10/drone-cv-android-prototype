@@ -9,7 +9,7 @@ MAN = json.loads((ROOT / 'manifest.json').read_text(encoding='utf-8'))
 
 def test_no_network_resources():
     # Only local scripts and images; no CDN, fonts or remote scripts
-    assert re.findall(r'<script[^>]*\ssrc="([^"]+)"', HTML) == ['manifest.js', 'experiment.js', 'reference_drones.js', 'motion.js', 'motion-ui.js']
+    assert re.findall(r'<script[^>]*\ssrc="([^"]+)"', HTML) == ['manifest.js', 'experiment.js', 'reference_drones.js', 'motion.js', 'motion-ui.js', 'motion-report.js', 'motion-report-ui.js']
     assert not re.search(r'<(?:img|script|link)[^>]*(?:src|href)="(https?:)?//', HTML)
     assert '@import' not in HTML and 'fetch(' not in HTML
 

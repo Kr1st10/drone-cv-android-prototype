@@ -132,6 +132,15 @@
     <p id="motionStatus" class="warn"></p>
     <button id="motionStart" class="primary">Начать запуск</button><button id="motionNextPair">Следующая пара</button><button id="motionNewSeries">Новая серия</button>
     <button id="motionExportLast">Экспорт последнего запуска JSON</button><button id="motionExport">Экспорт серии JSON</button>
+    <h4>Отчёт по журналам Android</h4>
+    <label>Эталон прогона или серии <input id="reportReference" type="file" accept="application/json,.json"></label>
+    <label>Журналы Android <input id="reportJournals" type="file" accept="application/json,.json" multiple></label>
+    <label>Журнал для калибровки <select id="reportSelect"></select></label>
+    <p>На первом сохранённом повёрнутом кадре нажмите центры меток по порядку: TL, TR, BR, BL. Для каждого журнала отметьте точки заново.</p>
+    <canvas id="reportCanvas" style="display:block;max-width:100%;height:auto;cursor:crosshair"></canvas>
+    <p id="reportStatus" class="warn"></p>
+    <button id="reportReset">Сбросить точки</button><button id="reportCalculate">Рассчитать отчёт</button><button id="reportExport" disabled>Экспорт отчёта JSON</button>
+    <pre id="reportOutput" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
     <p class="muted">Данные запусков находятся только в памяти страницы: экспортируйте их до закрытия или обновления. Серия ограничена 20 запусками, каждый запуск — 40 000, серия — 120 000 отрисованных кадров. Прерванные запуски также доступны для экспорта. Esc или выход из полного экрана прерывает запуск.</p>
   </section>
   <section id="resultsSection" class="hidden">
@@ -314,6 +323,8 @@
 
 <script src="motion.js"></script>
 <script src="motion-ui.js" defer></script>
+<script src="motion-report.js"></script>
+<script src="motion-report-ui.js" defer></script>
 <script>
 "use strict";
 const LS = 'dronecv66v2.', FORMAT = 'dronecv66-session-2';
