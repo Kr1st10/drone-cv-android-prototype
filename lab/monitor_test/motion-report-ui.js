@@ -12,6 +12,30 @@
   $('reportSelect').onchange=show;
   canvas.onclick=e=>{const j=journals[Number($('reportSelect').value)];if(!j||!image||j.points.length>=4)return;const r=canvas.getBoundingClientRect();j.points.push([(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]);invalidate();draw();status(`Отмечено точек: ${j.points.length} из 4.`);};
   $('reportReset').onclick=()=>{const j=journals[Number($('reportSelect').value)];if(j){j.points=[];invalidate();draw();status('Отметьте четыре центра.');}};
-  $('reportCalculate').onclick=()=>{try {if(!runs.length||!journals.length)throw Error('Загрузите эталон и журналы.');const items=journals.map(j=>{if(j.points.length!==4)throw Error(`Калибровка не завершена: ${j.name}`);const ids=new Set(j.data.frames.filter(f=>f.marker).map(f=>f.marker.run_id));if(ids.size!==1)throw Error(`Ожидается один run_id: ${j.name}`);const candidates=runs.filter(r=>ids.has(r.run_id));if(candidates.length!==1)throw Error(`Эталон не найден или повторён: ${j.name}`);const run=candidates[0],result=MotionReport.analyze(run,j.data,j.points);return {run,result,journal:j.name,calibration_points:j.points};});output={schema:'dronecv-motion-report-1',runs:items.map(({result,journal,calibration_points})=>({journal,calibration_points,...result})),maxima:MotionReport.maxima(items)};$('reportOutput').textContent='Результаты по прогонам\n'+output.runs.map(r=>`Прогон ${r.run_id} (${r.mode})\nЗахват: ${r.capture_latency_ms===null?'нет':r.capture_latency_ms.toFixed(1)+' мс'}; IoU ≥ 0,5: ${(r.good_fraction*100).toFixed(1)}%; самый длинный провал: ${r.longest_failure_ms.toFixed(1)} мс\nЛожная рамка на пустом фоне: ${r.false_box_blank_intervals} интервалов, ${r.false_box_blank_ms.toFixed(1)} мс; несопоставленных кадров: ${r.total_frames ? ((r.missing_markers+r.unmatched_markers)*100/r.total_frames).toFixed(1) : '0'}%; покрытие: ${(r.coverage*100).toFixed(1)}%\nДостаточно данных: ${r.sufficient?'да':'нет'}; критерий: ${r.pass===null?'не определён':r.pass?'пройден':'не пройден'}`).join('\n\n')+'\n\nМаксимальное проверенное ускорение (минимум два разных прогона)\n'+output.maxima.map(m=>`${m.mode}, размер ${m.size_px} px: ${m.max_acceleration_px_s2===null?'не определено':m.max_acceleration_px_s2+' px/с²'}`).join('\n');$('reportExport').disabled=false;status('Отчёт рассчитан. null означает недостаточно данных или отсутствие успешного уровня.');}catch(err){invalidate();status(err.message);}};
+  $('reportCalculate').onclick=()=>{try {
+    if(!runs.length||!journals.length) throw Error('Загрузите эталон и журналы.');
+    const items=journals.map(j=>{
+      if(j.points.length!==4) throw Error(`Калибровка не завершена: ${j.name}`);
+      const ids=new Set(j.data.frames.filter(f=>f.marker).map(f=>f.marker.run_id));
+      if(ids.size!==1) throw Error(`Ожидается один run_id: ${j.name}`);
+      const candidates=runs.filter(r=>ids.has(r.run_id));
+      if(candidates.length!==1) throw Error(`Эталон не найден или повторён: ${j.name}`);
+      const run=candidates[0],result=MotionReport.analyze(run,j.data,j.points);
+      return {run,result,journal:j.name,calibration_points:j.points};
+    });
+    if(new Set(items.map(i=>i.run.run_id)).size!==items.length) throw Error('Для одного run_id загружено несколько журналов.');
+    output={schema:'dronecv-motion-report-2',runs:items.map(({run,result,journal,calibration_points})=>({journal,calibration_points,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result})),maxima:MotionReport.maxima(items)};
+    const percent=x=>x===null?'нет данных':(x*100).toFixed(1)+'%';
+    $('reportOutput').textContent='Результаты по прогонам\n'+output.runs.map(r=>
+      `Прогон ${r.run_id} (${r.mode}); версия критерия: ${r.criterion_version}\n`+
+      `Захват: ${r.capture_latency_ms===null?'нет':r.capture_latency_ms.toFixed(1)+' мс'}; границы доли IoU ≥ 0,5: ${percent(r.good_fraction_lower)}–${percent(r.good_fraction_upper)}; неизвестно: ${r.unknown_ms.toFixed(1)} мс; доля среди оценённых (диагностика): ${percent(r.good_fraction)}\n`+
+      `Самый длинный известный провал: ${r.longest_failure_ms.toFixed(1)} мс; возможный: ${r.longest_possible_failure_ms.toFixed(1)} мс\n`+
+      `Ложная рамка на пустом фоне: ${r.false_box_blank_intervals} интервалов, ${r.false_box_blank_ms.toFixed(1)} мс; несопоставленных кадров: ${r.total_frames ? ((r.missing_markers+r.unmatched_markers)*100/r.total_frames).toFixed(1) : '0'}%; покрытие: ${percent(r.coverage)}\n`+
+      `Достаточно данных: ${r.sufficient?'да':'нет'}; критерий: ${r.pass===null?'не определён':r.pass?'пройден':'не пройден'}; причина: ${r.decision_reason}\n`+
+      `Условия: ${JSON.stringify(r.conditions)}; фото: ${JSON.stringify(r.photo)}; сценарий: ${JSON.stringify(r.scenario)}`).join('\n\n')+
+      '\n\nНаибольшее прошедшее ускорение среди испытанных уровней (минимум два разных прогона)\n'+output.maxima.map(m=>
+        `${m.mode}, размер ${m.size_px} px, ограничение скорости ${m.max_speed_px_s} px/с: ${m.max_acceleration_px_s2===null?'не определено':m.max_acceleration_px_s2+' px/с²'}; фото: ${JSON.stringify(m.photo)}; окно: ${m.viewport.width}×${m.viewport.height}; кругов: ${m.laps}; условия: ${JSON.stringify(m.conditions)}; run_id: ${m.run_ids.join(', ') || 'нет'}; критерий: ${m.criterion_version}`).join('\n');
+    $('reportExport').disabled=false;status('Отчёт рассчитан. null означает неопределённый результат или отсутствие прошедшего уровня.');
+  }catch(err){invalidate();status(err.message);}};
   $('reportExport').onclick=()=>{if(output)MotionGallery.download('motion-report.json',JSON.stringify(output,null,2),'application/json');};
 })();

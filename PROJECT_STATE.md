@@ -2,6 +2,11 @@
 
 _Обновлено: 2026-11-10. Подготовлена диагностика эксперимента 1×/5× на базе main @ f9e7101; физическая камера Xiaomi не проверена._
 
+## PR #33: критерий отчёта движения — 2026-11-10
+
+- Локально исправлен расчёт отчёта движения: версия `motion-retention-v2` учитывает неизвестное время и границы доли для фаз движения, исключает внешнюю запись при подтверждённых границах и не считает повтор метки пропуском. Отчёт v2 сохраняет условия, скорость и идентификаторы прогонов в максимумах; методика и ограничения — [протокол](lab/monitor_test/PROTOCOL.md#отчёт-по-захвату-и-удержанию).
+- До добавления проверки продвижения локально прошёл полный набор `pytest lab/monitor_test/tests -q` с Chrome/Playwright: 24 passed за 20,90 с. После добавления проверки прошли оба Node-набора, целевой браузерный `test_motion.py` (2 passed за 4,50 с) и `git diff --check`. Это синтетические проверки; GitHub Actions и физические испытания телефона на этом этапе не выполнялись.
+
 ## PR #31: разбор и исправление Android CI — 2026-11-10
 
 - В run `42822687148` два ORT-теста (`loadsModelAndRunsInference`, `rotationGivesSameResultAsPreRotatedBitmap`) падают с OOM при выделении ~3.7 MB; пять LiveCamera-тестов (`diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable`, `zoomRequestKeepsCameraRunningAndCanReturnToOne`, `cameraRunsRealModelAndStopClearsLateResults`, `threadSwitchStopsBeforeRecreatingAndCameraRunsAgain`, `backgroundRecreationAndBothLandscapeDirectionsResumeInference`) истекают в первом `openAndStart/awaitResult` до последующих сценариев. В каждом camera-интервале есть вход ImageAnalysis и OOM при выделении ~4.9 MB. Ошибок binding не найдено; после исправления окружения все семь тестов прошли без изменений приложения/старых тестов, независимая регрессия приложения не выявлена.

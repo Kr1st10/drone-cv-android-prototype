@@ -74,6 +74,31 @@ await page.click('#reportCalculate');
 assert.match(await page.textContent('#reportOutput'),/Результаты по прогонам/);
 assert.match(await page.textContent('#reportOutput'),/критерий: пройден/);
 const report=await exportJson('#reportExport');assert.equal(report.runs[0].capture_latency_ms,100);assert.equal(report.runs[0].pass,true);
+// Synthetic multiple conditions and uncertain observation must agree in UI and export.
+const runs=[]; const journals=[];
+for (const [id,speed,accel,missing] of [['a1',100,200,false],['a2',100,200,false],['b1',300,600,false],['b2',300,600,false],['u1',100,300,true]]) {
+ const samples=syntheticSamples.map(x=>({...x,run_id:id}));
+ runs.push({...syntheticRun,run_id:id,samples,scenario:{target_width_px:20,width:100,height:100,laps:2,max_speed_px_s:speed,acceleration_px_s2:accel}});
+ const frames=syntheticJournal.frames.map((f,i)=>({...f,marker:missing&&i===10?null:{run_id:id,step_id:i}}));
+ journals.push({...syntheticJournal,frames});
+}
+await page.setInputFiles('#reportReference',jsonFile('series.json',{schema:'dronecv-motion-series-1',runs}));
+await page.setInputFiles('#reportJournals',journals.map((j,i)=>jsonFile(`journal-${i}.json`,j)));
+for(let i=0;i<journals.length;i++) {
+ await page.selectOption('#reportSelect',String(i));
+ await page.waitForFunction(()=>document.getElementById('reportCanvas').width===100, null, {polling:100});
+ for(const [x,y] of [[10,10],[90,10],[90,90],[10,90]]) await page.locator('#reportCanvas').click({position:{x,y}});
+}
+await page.click('#reportCalculate');
+const outputText=await page.textContent('#reportOutput');
+assert.match(outputText,/критерий: не определён/); assert.match(outputText,/неизвестно: 200\.0 мс/);
+assert.match(outputText,/ограничение скорости 100 px\/с: 200 px\/с²/);
+assert.match(outputText,/ограничение скорости 300 px\/с: 600 px\/с²/);
+const multiReport=await exportJson('#reportExport');
+assert.equal(multiReport.schema,'dronecv-motion-report-2');
+assert.equal(multiReport.runs.find(r=>r.run_id==='u1').pass,null);
+assert.equal(multiReport.runs.find(r=>r.run_id==='u1').unknown_ms,200);
+assert.deepEqual(multiReport.maxima.map(m=>[m.max_speed_px_s,m.max_acceleration_px_s2]),[[100,200],[300,600]]);
 const after = await page.evaluate(() => JSON.parse(sessionJson()));
 assert.deepEqual(after.sample, previous.sample); assert.deepEqual(after.results, previous.results); assert.equal(after.trial.run_id, previous.trial.run_id);
 assert.deepEqual(errors, []); assert.deepEqual(network, []);
