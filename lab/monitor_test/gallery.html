@@ -66,6 +66,7 @@
 </style>
 </head>
 <body class="quick">
+<canvas id="motionCanvas" class="hidden" style="position:fixed;inset:0;width:100vw;height:100vh;z-index:100;background:#000"></canvas>
 <div id="stage"><img id="img" alt=""></div>
 <div id="hud"></div>
 <div id="answer" class="panel hidden"></div>
@@ -83,6 +84,8 @@
     <button data-section="gallery" aria-selected="true">Галерея и сравнение</button>
     <button data-section="research" aria-selected="false">Измерить предел</button>
     <button data-section="reference" aria-selected="false">Эксперимент с эталонными БПЛА</button>
+
+    <button data-section="motion" aria-selected="false">Движущаяся цель</button>
     <button data-section="results" aria-selected="false">Результаты</button>
     <button id="helpBtn">Как пользоваться?</button>
   </nav>
@@ -110,6 +113,38 @@
     <p><button id="startResearch" class="primary">Начать исследование: 20 проверок на размер</button><button id="resumeResearch">Продолжить исследование</button><button id="refineResearch">Добавить промежуточный размер</button></p>
     <p id="researchStatus" class="warn"></p>
     <p>Готовые ширины на экране: 6, 4, 3, 2, 1, 0,5 см. Критерий: ≥90 % и ≥20 отдельных проверок на уровне. При необходимости добавьте меньший или промежуточный размер. До измерений подтверждённого порога нет.</p>
+  </section>
+  <section id="motionSection" class="hidden">
+    <h3>Движущаяся цель</h3>
+    <p>Фото целиком движется по прямоугольному маршруту. Ширина, скорость и ускорение заданы в пикселях экрана, не камеры. Перед каждым запуском подготовьте на телефоне указанную конфигурацию.</p>
+    <label>Снимок <select id="motionPhoto"></select></label>
+    <label>Добавить свой снимок <input type="file" id="motionUpload" accept="image/png,image/jpeg,image/webp"></label>
+    <button id="motionBounds">Проверить / выделить границы</button><p id="motionPhotoStatus" class="muted"></p>
+    <label>Ширина рамки, px экрана <input id="motionWidth" type="number" min="1" value="100"></label>
+    <label>Максимальная скорость, px/с <input id="motionSpeed" type="number" min="1" value="300"></label>
+    <label>Ускорение, px/с² <input id="motionAcceleration" type="number" min="1" value="500"></label>
+    <label>Круги <input id="motionLaps" type="number" min="1" max="20" value="1"></label>
+    <fieldset><legend>Условия съёмки</legend>
+      <label>Идентификатор установки / телефона <input id="motionSetup" type="text"></label>
+      <label>Зум <input id="motionZoom" type="text" placeholder="например, 1x"></label>
+      <label>Ориентация <input id="motionOrientation" type="text"></label>
+      <label>Расстояние до экрана, см (необязательно) <input id="motionDistance" type="number" min="0" step="any" placeholder="не измерено"></label>
+      <label>Камера и настройки приложения <input id="motionCamera" type="text" placeholder="физическая камера, конфигурация"></label>
+      <p><label><input id="motionConfirm" type="checkbox"> Подтверждаю ту же установку, экран и настройки камеры для обоих запусков пары</label></p>
+    </fieldset>
+    <p id="motionStatus" class="warn"></p>
+    <button id="motionStart" class="primary">Начать запуск</button><button id="motionNextPair">Следующая пара</button><button id="motionNewSeries">Новая серия</button>
+    <button id="motionExportLast">Экспорт последнего запуска JSON</button><button id="motionExport">Экспорт серии JSON</button>
+    <h4>Отчёт по журналам Android</h4>
+    <label>Эталон прогона или серии <input id="reportReference" type="file" accept="application/json,.json"></label>
+    <label>Журналы Android <input id="reportJournals" type="file" accept="application/json,.json" multiple></label>
+    <label>Журнал для калибровки <select id="reportSelect"></select></label>
+    <p>На первом сохранённом повёрнутом кадре нажмите центры меток по порядку: TL, TR, BR, BL. Для каждого журнала отметьте точки заново.</p>
+    <canvas id="reportCanvas" style="display:block;max-width:100%;height:auto;cursor:crosshair"></canvas>
+    <p id="reportStatus" class="warn"></p>
+    <button id="reportReset">Сбросить точки</button><button id="reportCalculate">Рассчитать отчёт</button><button id="reportExport" disabled>Экспорт отчёта JSON</button>
+    <pre id="reportOutput" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+    <p class="muted">Данные запусков находятся только в памяти страницы: экспортируйте их до закрытия или обновления. Серия ограничена 20 запусками, каждый запуск — 40 000, серия — 120 000 отрисованных кадров. Прерванные запуски также доступны для экспорта. Esc или выход из полного экрана прерывает запуск.</p>
   </section>
   <section id="resultsSection" class="hidden">
     <h3>Сохранённые исследования</h3>
@@ -288,6 +323,11 @@
 <script src="manifest.js"></script>
 <script src="experiment.js"></script>
 <script src="reference_drones.js"></script>
+
+<script src="motion.js"></script>
+<script src="motion-ui.js" defer></script>
+<script src="motion-report.js"></script>
+<script src="motion-report-ui.js" defer></script>
 <script>
 "use strict";
 const LS = 'dronecv66v2.', FORMAT = 'dronecv66-session-2';
@@ -389,10 +429,12 @@ function section(name) {
   }
   ui.section = name;
   document.querySelectorAll('nav [data-section]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.section === name)));
-  ['gallery', 'research', 'reference', 'results'].forEach(n => $(n + 'Section').classList.toggle('hidden', n !== name));
-  $('advanced').classList.toggle('hidden', name === 'results' || name === 'reference');
+  ['gallery', 'research', 'reference', 'motion', 'results'].forEach(n => $(n + 'Section').classList.toggle('hidden', n !== name));
+  $('advanced').classList.toggle('hidden', name === 'results' || name === 'reference' || name === 'motion');
   $('zoom').closest('label').classList.toggle('hidden', name === 'reference');
+  $('mainSetup').classList.toggle('hidden', name === 'motion');
   if (name === 'reference') referenceTab?.update();
+  if (name === 'motion') window.MotionUI?.refresh();
   if (name === 'results') renderExperiments();
 }
 function referencePhotoStatus() {
@@ -496,7 +538,7 @@ async function sha256(bytes) {
   if (!crypto.subtle) return null;
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
 }
-async function addReferencePhoto(file) {
+async function addReferencePhoto(file, motionOnly = false) {
   if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) throw new Error('Выберите JPEG/PNG/WebP до 20 МБ.');
   const url = URL.createObjectURL(file);
   let im; try { im = await imageLoaded(url); } finally { URL.revokeObjectURL(url); }
@@ -510,8 +552,10 @@ async function addReferencePhoto(file) {
     object_bbox: null, source: 'operator_supplied', author: 'Снимок оператора', license: 'Права подтверждает оператор', projection_confirmed: false };
   if (!save('local_images', { ...LOCAL_IMAGES, [id]: m })) throw new Error('Не хватает места в браузере. Сначала экспортируйте результаты.');
   LOCAL_IMAGES[id] = m; const existing = M.findIndex(x => x.id === id); if (existing >= 0) M[existing] = m; else M.push(m);
-  REFERENCE_IMAGE = id; save('reference_image', id); ui.available[id] = true; buildBoundsSelector(); $('boundImage').value = id;
-  builtinReference(); readSettings(); referencePhotoStatus();
+  const previousBound = $('boundImage').value;
+  ui.available[id] = true; buildBoundsSelector(); $('boundImage').value = motionOnly ? previousBound : id;
+  if (!motionOnly) { REFERENCE_IMAGE = id; save('reference_image', id); builtinReference(); readSettings(); referencePhotoStatus(); }
+  return m;
 }
 function startResearch() {
   const m = byId(REFERENCE_IMAGE);
@@ -1070,7 +1114,7 @@ function summary() {
     `<table><tr><th>прогон / снимок</th><th>ширина, мм</th><th>проверок</th><th>TP</th><th>доля TP</th><th>FP</th><th>median confidence % (известно)</th><th>ширина px замер (известно)</th><th>ширина px оценка k</th><th>экв. м / эталон</th><th>критерий серии</th></tr>${repeated}</table>`;
   $('start').textContent = SAMPLE ? `Начать прогон: ${SAMPLE.name}, ${$('zoom').value === '5x' ? '5×' : '1×'}` : 'Начать прогон';
 }
-function openSettings() { closeOverlays(); $('geometry').classList.add('hidden'); $('stageControls').classList.add('hidden'); writeSettings(); sampleInfo(); summary(); screenStatus(); boundsStatus(); referencePhotoStatus(); stage.className = ''; $('settings').classList.remove('hidden'); if (ui.section === 'results') renderExperiments(); }
+function openSettings() { closeOverlays(); $('geometry').classList.add('hidden'); $('stageControls').classList.add('hidden'); writeSettings(); sampleInfo(); summary(); screenStatus(); boundsStatus(); referencePhotoStatus(); stage.className = ''; $('settings').classList.remove('hidden'); if (ui.section === 'results') renderExperiments(); if (ui.section === 'motion') window.MotionUI?.refresh(); }
 function calib(mode = 'camera') {
   if (!$('settings').classList.contains('hidden')) readSettings();
   closeOverlays(); $('settings').classList.add('hidden'); const dpr = window.devicePixelRatio || 1;
@@ -1257,6 +1301,13 @@ $('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f
 $('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); cacheExperiments(); summary(); sampleInfo(); renderExperiments(); } };
 const LEGACY = localStorage.getItem('dronecv66.results');
 if (LEGACY && LEGACY !== '[]') { $('legacy').classList.remove('hidden'); $('legacy').onclick = () => download(`dronecv66_v1_results_${Date.now()}.json`, LEGACY, 'application/json'); }
+
+window.MotionGallery = {
+  images: () => M, bounds: m => confirmedBounds(m, null),
+  upload: file => addReferencePhoto(file, true),
+  edit: id => { ui.editingCurrent = false; $('boundImage').value = id; editBounds(); },
+  imageLoaded, download
+};
 
 // ---------- init ----------
 if (!M.length) $('status').textContent = 'manifest.js не найден: запустите python3 fetch_images.py (скачает изображения и создаст manifest.js).';

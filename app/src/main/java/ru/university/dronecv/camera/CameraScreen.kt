@@ -45,6 +45,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.university.dronecv.diagnostics.DiagnosticViewModel
+import ru.university.dronecv.motion.MotionViewModel
+import ru.university.dronecv.motion.recordMotionFrame
 import ru.university.dronecv.R
 import ru.university.dronecv.detection.DetectorWorker
 import ru.university.dronecv.tracking.GrayFrame
@@ -57,13 +59,16 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
     val context = LocalContext.current
     val diagnostics: DiagnosticViewModel = viewModel()
     val cameraProbe = rememberCameraProbeState()
+    val motionModel: MotionViewModel = viewModel()
+    val motion = motionModel.journal
     var running by rememberSaveable { mutableStateOf(false) }
     val controller = remember {
         val tracking = LiveTracking<CameraFrameSnapshot>(VisionWorker.executor, TrackingSession(::OpenCvLkTracker)) { frame, key, stamp ->
             GrayFrame.fromArgb(key, stamp, frame.image, frame.rotationDegrees)
         }
         LiveController(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads,
-            eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking)
+            eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking, motion = motion,
+            motionFrame = { frame, token, stamp -> recordMotionFrame(motion, frame, token, stamp) })
     }
     DisposableEffect(controller) { onDispose { diagnostics.stop(true, "Camera screen disposed"); controller.close() } }
     val liveState by controller.state.collectAsStateWithLifecycle()
@@ -101,7 +106,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
             hasPermission = granted
             if (granted) permanentlyDenied = false
         }
-        onPauseOrDispose { diagnostics.stop(true, "Activity paused or screen turned off") }
+        onPauseOrDispose { diagnostics.stop(true, "Activity paused or screen turned off"); motion.stop("Activity paused") }
     }
 
     LaunchedEffect(Unit) {
@@ -141,6 +146,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
                     threadState = threadState,
                     probe = cameraProbe,
                     diagnostics = diagnostics,
+                    motionModel = motionModel,
                     running = running,
                     confidence = confidence,
                     onRunningChange = {

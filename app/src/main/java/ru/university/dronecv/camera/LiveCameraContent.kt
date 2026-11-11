@@ -1,5 +1,11 @@
 package ru.university.dronecv.camera
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +28,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
@@ -35,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import ru.university.dronecv.motion.MotionViewModel
 import ru.university.dronecv.tracking.ClassConfirmation
 import ru.university.dronecv.tracking.VisualPhase
 import ru.university.dronecv.diagnostics.DiagnosticViewModel
@@ -46,6 +56,7 @@ internal fun LiveCameraContent(
     threadState: ThreadConfiguration,
     probe: CameraProbeState,
     diagnostics: DiagnosticViewModel,
+    motionModel: MotionViewModel,
     running: Boolean,
     confidence: Float,
     onRunningChange: (Boolean) -> Unit,
@@ -62,6 +73,9 @@ internal fun LiveCameraContent(
             val remainingNs = (observation.displayUntilNs - android.os.SystemClock.elapsedRealtimeNanos()).coerceAtLeast(0L)
             delay((remainingNs + 999_999L) / 1_000_000L)
             controller.expire(observationRevision)
+        } else if (state.result != null) {
+            delay(250)
+            controller.expire(observationRevision)
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -72,13 +86,13 @@ internal fun LiveCameraContent(
             Box(modifier.background(Color.Black)) {
                 CameraPreview(controller, running, confidence, probe, Modifier.fillMaxSize(),
                     onError = onCameraError, onRecoverableIssue = onCameraIssue,
-                    onInterruption = { diagnostics.stop(true, "Camera paused, rebound or interrupted") })
-                LiveOverlay(state, Modifier.fillMaxSize())
+                    onInterruption = { diagnostics.stop(true, "Camera paused, rebound or interrupted"); controller.motion?.stop("Camera interrupted or rebound") })
+                LiveOverlay(state, controller.motion?.ui?.collectAsStateWithLifecycle()?.value?.mode == "yolo", Modifier.fillMaxSize())
             }
         }
         val controls: @Composable (Modifier) -> Unit = { modifier ->
             LiveControls(state, running, confidence, onRunningChange, onConfidenceChange,
-                recoverableIssue, diagnostics, threadState, controller::requestThreads, probe, controller, modifier)
+                recoverableIssue, diagnostics, motionModel, threadState, controller::requestThreads, probe, controller, modifier)
         }
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
@@ -98,10 +112,27 @@ internal fun LiveCameraContent(
 private fun LiveControls(
     state: LiveState, running: Boolean, confidence: Float,
     onRunningChange: (Boolean) -> Unit, onConfidenceChange: (Float) -> Unit,
-    issue: String?, diagnostics: DiagnosticViewModel, threadState: ThreadConfiguration,
+    issue: String?, diagnostics: DiagnosticViewModel, motionModel: MotionViewModel, threadState: ThreadConfiguration,
     onThreadsChange: (Int) -> Boolean, probe: CameraProbeState, controller: LiveController<CameraFrameSnapshot>, modifier: Modifier,
 ) {
     val diagnosticUi by diagnostics.ui.collectAsStateWithLifecycle()
+    val motion = checkNotNull(controller.motion)
+    val motionUi by motion.ui.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exportStatus by remember { mutableStateOf<String?>(null) }
+    val saveMotion = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val report = motionModel.pendingExport
+        if (uri != null && report != null) scope.launch {
+            exportStatus = try {
+                withContext(Dispatchers.IO) {
+                    checkNotNull(context.contentResolver.openOutputStream(uri)).use { it.write(report.toByteArray(Charsets.UTF_8)) }
+                }
+                "Журнал сохранён"
+            } catch (e: Exception) { "Не удалось сохранить журнал: ${e.message ?: e.javaClass.simpleName}" }
+        }
+        motionModel.pendingExport = null
+    }
     val input by controller.input.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     Column(modifier.background(MaterialTheme.colorScheme.surface).verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -168,6 +199,22 @@ private fun LiveControls(
             }
         }
         threadState.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        Text("Стенд движения", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("yolo" to "A: YOLO", "yolo_lk" to "B: YOLO + LK").forEach { (mode, label) ->
+                Button(onClick = { if (controller.setTrackingEnabled(mode == "yolo_lk")) motion.mode(mode) },
+                    enabled = !running && !motionUi.recording && mode != motionUi.mode,
+                    modifier = Modifier.weight(1f)) { Text(label) }
+            }
+        }
+        Text("Режим: ${if (motionUi.mode == "yolo") "A: YOLO" else "B: YOLO + LK"}", style = MaterialTheme.typography.bodySmall)
+        if (motionUi.recording) Button(onClick = { motion.stop() }, modifier = Modifier.fillMaxWidth()) { Text("Завершить запись стенда") }
+        else {
+            Button(onClick = { diagnostics.stop(true, "Motion recording started"); controller.configure(false, confidence); motion.start(); controller.configure(true, confidence) }, enabled = running && state.phase == LivePhase.RUNNING,
+                modifier = Modifier.fillMaxWidth()) { Text("Начать запись стенда") }
+            if (motionUi.report != null) Button(onClick = { motionModel.pendingExport = motionUi.report; saveMotion.launch("drone-motion.json") }, modifier = Modifier.fillMaxWidth()) { Text("Экспорт стенда JSON") }
+        }
+        exportStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING && !threadState.switching,
             confidence, threadState.threads, state.completedFrames)
         Text("Камера ID: ${probe.logicalId ?: "неизвестно"}; физический запрос: ${probe.physicalId ?: "авто"} · запрошено ${probe.requestedZoom}× · текущий zoomRatio ${probe.actualZoom ?: "неизвестен"}", style = MaterialTheme.typography.bodySmall)
@@ -204,9 +251,16 @@ private fun LiveControls(
 }
 
 @Composable
-private fun LiveOverlay(state: LiveState, modifier: Modifier) {
+private fun LiveOverlay(state: LiveState, yoloOnly: Boolean, modifier: Modifier) {
     Canvas(modifier.semantics { contentDescription = "Рамка сопровождаемой цели" }) {
-        val signal = state.tracking ?: return@Canvas
+        val signal = state.tracking
+        if (signal == null) {
+            if (!yoloOnly) return@Canvas
+            val box = state.result?.detections?.maxByOrNull { it.confidence }?.box ?: return@Canvas
+            val topLeft = Offset(box.left * size.width, box.top * size.height)
+            drawRect(Color.Green, topLeft, Size((box.right - box.left) * size.width, (box.bottom - box.top) * size.height), style = Stroke(2.dp.toPx()))
+            return@Canvas
+        }
         val box = signal.box ?: return@Canvas
         fun screen(x: Double, y: Double) = Offset((x / signal.width * size.width).toFloat(),
             (y / signal.height * size.height).toFloat())

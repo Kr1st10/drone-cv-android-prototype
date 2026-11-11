@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.diagnostics.DiagnosticFrames
+import ru.university.dronecv.motion.MotionJournal
+import ru.university.dronecv.detection.NormalizedBox
 
 enum class LivePhase { STOPPED, STARTING, RUNNING, ERROR }
 
@@ -58,6 +60,8 @@ class LiveController<Frame : AutoCloseable>(
     private val eventTime: (() -> Long)? = null,
     private val maxAnalyzerAgeMs: Double = 250.0,
     private val tracking: LiveTracking<Frame>? = null,
+    val motion: MotionJournal? = null,
+    private val motionFrame: ((Frame, Long, FrameStamp) -> Long?)? = null,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     init {
@@ -77,6 +81,11 @@ class LiveController<Frame : AutoCloseable>(
     private var closed = false
     private var busy = false
     private var confidence = 0.5f
+    private var trackingEnabled = motion?.ui?.value?.mode != "yolo"
+
+    fun setTrackingEnabled(enabled: Boolean): Boolean = synchronized(lock) {
+        if (active || motion?.token() != null) false else { trackingEnabled = enabled; true }
+    }
     private var generation = 0L
     private var revision = 0L
     private var source = 0L
@@ -100,7 +109,7 @@ class LiveController<Frame : AutoCloseable>(
 
     /** Called before copying, so a threshold/Stop change during preparation cannot retag an old frame. */
     fun beginFrame(sourceId: Long, stamp: FrameStamp): LiveFrameToken? = synchronized(lock) {
-        val token = LiveFrameToken(generation, sourceId, diagnostics?.currentToken())
+        val token = LiveFrameToken(generation, sourceId, diagnostics?.currentToken(), motion?.token())
         if (!valid(token)) return@synchronized null
         inputEvent(token, CameraInputEvent.RECEIVED)
         if (!valid(token)) return@synchronized null
@@ -126,7 +135,10 @@ class LiveController<Frame : AutoCloseable>(
 
     /** Takes ownership even on rejection. One current pump and one replaceable pending snapshot exist. */
     fun offerFrame(frame: Frame, token: LiveFrameToken, stamp: FrameStamp, preparationMs: Double) {
-        tracking?.let { offerTrackingFrame(it, frame, token, stamp, preparationMs); return }
+        try { token.motionToken?.let { token.motionFrame = motionFrame?.invoke(frame, it, stamp) } }
+        catch (e: Exception) { frame.close(); captureFailed(token, e.message ?: e.javaClass.simpleName); return }
+        catch (_: OutOfMemoryError) { frame.close(); captureFailed(token, "Недостаточно памяти для записи стенда."); return }
+        tracking?.takeIf { trackingEnabled }?.let { offerTrackingFrame(it, frame, token, stamp, preparationMs); return }
         var retained = false
         try {
             if (!preparationMs.isFinite() || preparationMs < 0) {
@@ -239,6 +251,7 @@ class LiveController<Frame : AutoCloseable>(
                                 }
                                 val commitStart = nanoTime()
                                 val observation = live.session.commit(correction, checkNotNull(eventTime)()) ?: return@onVision
+                                motion?.detection(token.motionToken, token.motionFrame, plan.detection, checkNotNull(eventTime)())
                                 publishTracking(live, checkNotNull(live.latestToken), observation, request.anchor,
                                     TrackingSampleKind.CORRECTION, commitStart, replayMs)
                             } finally {
@@ -301,6 +314,7 @@ class LiveController<Frame : AutoCloseable>(
                 (displayUntil <= now ||
                     now - observation.stamp.analyzerEntryNs > maxAnalyzerAgeMs * 1e6 ||
                     observation.stamp.ageAt(now)?.let { it > maxAnalyzerAgeMs } == true)) {
+                if (mutableState.value.tracking?.box != null) motion?.publication(token.motionToken, token.motionFrame, null, "clear", now)
                 mutableState.value = mutableState.value.copy(tracking = null, trackingFps = null, revision = ++revision)
                 return@synchronized
             }
@@ -309,6 +323,8 @@ class LiveController<Frame : AutoCloseable>(
                 extraMs + (end - start) / 1e6, geometry.width, geometry.height, displayUntil)
             val fps = live.fps(signal)
             mutableState.value = mutableState.value.copy(tracking = signal, trackingFps = fps, revision = ++revision)
+            val b = signal.box?.let { NormalizedBox((it.left / signal.width).toFloat(), (it.top / signal.height).toFloat(), (it.right / signal.width).toFloat(), (it.bottom / signal.height).toFloat()) }
+            motion?.publication(token.motionToken, token.motionFrame, b, if (b == null) "clear" else "lk", now)
             token.diagnosticToken?.let { diagnostics?.tracking(it, end, signal) }
         }
 
@@ -368,6 +384,7 @@ class LiveController<Frame : AutoCloseable>(
     fun configure(enabled: Boolean, threshold: Float) = synchronized(lock) {
         require(threshold in 0.01f..1f)
         if (closed || (enabled && mutableThreads.value.switching) || (active == enabled && confidence == threshold)) return@synchronized
+        if (active && (enabled != active || threshold != confidence)) motion?.stop("Detection configuration changed")
         val wasActive = active
         active = enabled
         confidence = threshold
@@ -457,6 +474,7 @@ class LiveController<Frame : AutoCloseable>(
                 return synchronized(lock) {
                     if (!closed && active && generation == request.first) {
                         val selected = selectTarget(result.detections, result.width, result.height)
+                        val selectedDetection = result.detections.maxByOrNull { it.confidence }
                         completions.addLast(end)
                         while (completions.size > 30 ||
                             (completions.size > 2 && end - completions.first() > 3_000_000_000L)) {
@@ -480,7 +498,14 @@ class LiveController<Frame : AutoCloseable>(
                                 detectionCount = result.detections.size.takeIf { forTracking })
                         }
                         // An unconfined signal subscriber may synchronously stop/reconfigure this controller.
-                        if (!closed && active && generation == request.first) mutableState.value = next
+                        if (!closed && active && generation == request.first) {
+                            mutableState.value = next
+                            if (!forTracking && ticket != null && eventTime != null && valid(ticket)) {
+                                val now = eventTime()
+                                if (selectedDetection != null) motion?.detection(ticket.motionToken, ticket.motionFrame, selectedDetection, now)
+                                motion?.publication(ticket.motionToken, ticket.motionFrame, selectedDetection?.box, if (selectedDetection == null) "clear" else "yolo", now)
+                            }
+                        }
                         result
                     } else null
                 }
@@ -500,6 +525,7 @@ class LiveController<Frame : AutoCloseable>(
 
     private fun fail(id: Long, message: String, release: Boolean = true) = synchronized(lock) {
         if (closed || !active || generation != id) return@synchronized
+        motion?.stop("Detector error: $message")
         val failureGeneration = ++generation
         invalidatePending()
         resetTracking(failureGeneration, source)
@@ -515,9 +541,11 @@ class LiveController<Frame : AutoCloseable>(
         val current = mutableState.value
         val expiredGeneration = generation
         if (current.revision != revision) return@synchronized
-        if (tracking != null) {
+        if (tracking != null && trackingEnabled) {
+            if (current.tracking?.box != null && eventTime != null) motion?.publication(motion.token(), null, null, "clear", eventTime())
             mutableState.value = current.copy(tracking = null, trackingFps = null)
         } else if (current.result != null) {
+            if (eventTime != null) motion?.publication(motion.token(), null, null, "clear", eventTime())
             if (mutableSignals.value === current.target) mutableSignals.value = null
             if (generation == expiredGeneration && mutableState.value.revision == revision) {
                 mutableState.value = current.copy(result = null, fps = null, pipelineMs = null, target = null)
@@ -527,6 +555,7 @@ class LiveController<Frame : AutoCloseable>(
 
     override fun close() = synchronized(lock) {
         if (closed) return@synchronized
+        motion?.stop("Camera screen closed")
         closed = true
         active = false
         generation++

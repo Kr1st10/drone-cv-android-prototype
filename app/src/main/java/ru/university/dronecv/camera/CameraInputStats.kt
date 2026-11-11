@@ -36,4 +36,7 @@ class LiveFrameToken internal constructor(
     internal val generation: Long,
     internal val source: Long,
     internal val diagnosticToken: Long?,
-)
+    internal val motionToken: Long? = null,
+) {
+    internal var motionFrame: Long? = null
+}

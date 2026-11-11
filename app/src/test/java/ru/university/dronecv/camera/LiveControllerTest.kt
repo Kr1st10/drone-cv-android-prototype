@@ -9,6 +9,8 @@ import org.junit.Assert.*
 import org.junit.Test
 import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.detection.NormalizedBox
+import ru.university.dronecv.motion.MotionJournal
+import ru.university.dronecv.tracking.TrackingSession
 
 class LiveControllerTest {
     private class Frame : AutoCloseable {
@@ -37,6 +39,28 @@ class LiveControllerTest {
             return result
         }
         override fun close() { events += "close" }
+    }
+
+    @Test fun recreatedControllerUsesRetainedYoloOnlyMode() {
+        val worker = Worker()
+        val journal = MotionJournal(clock = { 100L })
+        assertTrue(journal.mode("yolo"))
+        val backend = Backend()
+        val tracking = LiveTracking<Frame>(worker, TrackingSession(factory = { error("LK must stay disabled") })) { _, _, _ ->
+            error("YOLO-only mode must not create a tracking frame")
+        }
+        val controller = LiveController(backend, worker, eventTime = { 100L }, tracking = tracking,
+            motion = journal, nanoTime = { 100L })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        val stamp = FrameStamp(null, CaptureTimebase.UNKNOWN, 100L)
+        val token = controller.beginFrame(source, stamp)!!
+        val frame = Frame()
+        controller.offerFrame(frame, token, stamp, 0.0)
+        worker.drain()
+        assertEquals(LivePhase.RUNNING, controller.state.value.phase)
+        assertEquals(1, backend.thresholds.size)
+        assertEquals(1, frame.closes.get())
     }
 
     @Test fun stoppedAndClosedControllersCloseFramesWithoutInference() {
