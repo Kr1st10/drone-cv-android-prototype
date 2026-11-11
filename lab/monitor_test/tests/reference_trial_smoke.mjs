@@ -1,0 +1,62 @@
+import {createRequire} from 'node:module';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const {chromium}=createRequire(path.join(process.cwd(),'x.js'))('playwright');
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM,args:['--allow-file-access-from-files']});
+const page=await browser.newPage({viewport:{width:1280,height:1000},deviceScaleFactor:2});
+const errors=[],remote=[];
+page.on('pageerror',e=>errors.push(String(e)));
+page.on('request',r=>{if(/^https?:/.test(r.url()))remote.push(r.url());});
+await page.goto('file://'+path.join(path.resolve(process.argv[2]),'gallery.html'));
+await page.click('[data-section=reference]');
+assert.equal(await page.inputValue('#referenceDrone'),'cabinet_reference');
+assert.equal(await page.locator('#referenceDrone option').count(),4);
+await page.click('#screenCalibBtn'); await page.fill('#screenLineCm','10'); await page.click('#applyScreenCalib'); await page.keyboard.press('Escape');
+await page.fill('#distance','500');
+const snap=()=>page.evaluate(()=>referenceTab.snapshot());
+for(const id of ['cabinet_front','cabinet_oblique_candidate','cabinet_top']){
+ await page.selectOption('#referencePhotoSelect',id);
+ await page.waitForFunction(()=>document.getElementById('referenceDisplay').complete&&!document.getElementById('referenceDisplay').classList.contains('hidden'));
+ await page.fill('#referenceScaleNumber','20'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
+ const a=await snap(); assert.ok(a.equivalent_distance_m>0,JSON.stringify(a));
+ await page.fill('#referenceScaleNumber','10'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
+ assert.equal((await snap()).equivalent_distance_m,a.equivalent_distance_m*2);
+ assert.match(await page.textContent('#referenceAssumption'),/Предварительная оценка/);
+}
+// Synthetic 500mm width, distance 50cm, display 2.5mm -> 100m.
+await page.evaluate(()=>DroneReferences.profiles[0].photos[2].projection_width_mm=500);
+await page.fill('#distance','50');
+await page.fill('#referenceTarget','100,00'); await page.click('#referenceApplyTarget');
+assert.ok(Math.abs((await snap()).equivalent_distance_m-100)<0.2);
+assert.ok(Math.abs((await snap()).display_width_cm-0.25)<0.001);
+const before=await snap();
+await page.selectOption('#referenceCamera','1'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
+assert.equal((await snap()).equivalent_distance_m,before.equivalent_distance_m);
+await page.selectOption('#referenceCamera','5'); await page.selectOption('#referenceBackground','sky');
+assert.match(await page.textContent('#referenceBackgroundNote'),/непрозрачное/);
+await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
+const width=await page.locator('#referenceDisplay').evaluate(e=>e.getBoundingClientRect().width),cal=(await snap()).calibration_id;
+await page.click('#referenceTrial'); await page.waitForFunction(()=>document.fullscreenElement?.id==='referenceViewport');
+assert.equal(await page.locator('#referenceDisplay').evaluate(e=>e.getBoundingClientRect().width),width);
+assert.equal((await snap()).calibration_id,cal);
+assert.equal((await snap()).equivalent_distance_m,before.equivalent_distance_m);
+assert.equal(await page.locator('#referenceViewport').evaluate(e=>[...e.children].filter(c=>getComputedStyle(c).display!=='none').map(c=>c.id).join(',')),'referenceDisplay');
+await page.keyboard.press('r'); assert.equal(await page.locator('#record').isVisible(),false);
+await page.screenshot({path:'/tmp/reference5x-trial.png'});
+await page.evaluate(()=>document.exitFullscreen()); await page.waitForFunction(()=>!document.fullscreenElement); await page.waitForFunction(()=>referenceTab.snapshot().trial_phase==='idle');
+await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
+assert.equal((await snap()).calibration_id,cal);
+assert.equal(await page.locator('#referenceDisplay').evaluate(e=>e.getBoundingClientRect().width),width);
+for(const [value,message] of [['0.001',/вне диапазона/],['0.5',/не помещается.*полноэкран/ ],['abc',/положительную/]]){
+ await page.fill('#referenceTarget',value);await page.click('#referenceApplyTarget');assert.match(await page.textContent('#referenceTargetStatus'),message);
+}
+await page.selectOption('#referenceBackground','neutral');
+await page.click('#referenceTrial'); await page.waitForFunction(()=>document.fullscreenElement?.id==='referenceViewport');
+assert.equal(await page.locator('#referenceViewport').evaluate(e=>getComputedStyle(e).backgroundImage),'none');
+await page.evaluate(()=>document.getElementById('invalidateScreen').click());
+await page.waitForFunction(()=>!document.fullscreenElement);
+assert.match(await page.textContent('#referenceTargetStatus'),/Испытание остановлено/);
+await page.setViewportSize({width:1100,height:900});assert.equal((await snap()).equivalent_distance_m,null);
+await page.fill('#referenceTarget','100');await page.click('#referenceApplyTarget');assert.match(await page.textContent('#referenceTargetStatus'),/калибровка/);
+assert.deepEqual(errors,[]);assert.deepEqual(remote,[]);
+await browser.close();console.log('Cabinet views, inverse 100m, 500cm, 1×/5×, fullscreen CSS/calibration, unreachable targets: OK');

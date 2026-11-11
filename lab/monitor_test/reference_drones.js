@@ -240,11 +240,23 @@
       ]
     }
   ];
+  // Replace these data fields after measuring the cabinet drone; no geometry code changes needed.
+  profiles.unshift({
+    ...profiles[0], id: 'cabinet_reference', model: 'Эталонный БПЛА из кабинета',
+    dimension_note: 'Временные тестовые данные Skydroid MX330T. Настоящий эталон ещё не измерен.',
+    photos: ['front', 'oblique_candidate', 'top'].map((view, i) => ({
+      ...profiles[0].photos.find(p => p.view === view), id: 'cabinet_' + view,
+      label: ['Спереди — 0°', 'Под углом ¾ — поворот корпуса 45°', 'Сверху — контрольный ракурс'][i],
+      projection_width_mm: [528.7, 600, 528.7][i], projection_status: 'preliminary',
+      transparent: false, model_confirmed: false, projection_confirmed: false, review_segment: null,
+      issue: 'Временное фото Skydroid, не фотография кабинетного эталона. Ракурс и ширина видимой проекции предварительные; 45° на фото не подтверждены.' + (view === 'front' ? ' Фронтальный исходник обрезан: оценка относится только к размеченной видимой части, не полному габариту.' : '')
+    }))
+  });
   const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
 
   /**
    * Measure the annotated object in CSS pixels, then reuse the gallery's mm and range functions.
-   * `render` is the actually loaded image/scale and unclipped-object flag, never a desired CSS size.
+   * `render` is the decoded image/actual CSS scale; visible means valid loaded geometry, independent of preview clipping.
    * `render.photo_id` selects that photo only; omitted IDs select the primary photo, unknown IDs return nulls.
    * A quantitative photo needs confirmed identity/projection plus axis {from, to, real_cm, source}.
    * Returns null for unavailable/unverified geometry; no side effects or guessed dimensions.
@@ -277,7 +289,10 @@
     if (!positive(widthMm)) return empty;
     const d = profile.estimate_dimensions_mm;
     let extent, assumption;
-    if (p.view === 'front' || p.view === 'top' || p.view === 'near_top') {
+    if (positive(p.projection_width_mm)) {
+      extent = p.projection_width_mm;
+      assumption = 'Предварительная оценка: отдельная ширина размеченной видимой проекции этого ракурса. Временные тестовые данные; не формула габаритного прямоугольника и не подтверждённая геометрия.';
+    } else if (p.view === 'front' || p.view === 'top' || p.view === 'near_top') {
       extent = d?.width;
       assumption = p.view === 'front' ? 'Спереди: поперечный габарит W.' : 'Сверху: горизонталь силуэта принята за поперечную паспортную ось W.';
     } else if (p.view === 'side') {
@@ -287,8 +302,9 @@
       assumption = '¾: условный угол 45°, W·cos(45°) + L·sin(45°).';
     }
     if (!positive(extent)) return { ...empty, display_width_cm: widthMm / 10 };
-    if (p.object_complete === false) return { ...empty, display_width_cm: widthMm / 10,
+    if (p.object_complete === false && !positive(p.projection_width_mm)) return { ...empty, display_width_cm: widthMm / 10,
       assumption: 'Исходник обрезан. Видимая часть не приравнивается полному габариту: дальность недоступна без физически обоснованного отрезка.' };
+    if (p.object_complete === false) assumption += ' Исходник обрезан: предварительно оценивается только видимая размеченная часть.';
     if (!p.model_confirmed) assumption += ' Точная модель/комплектация изображения не подтверждена.';
     return { ...empty, display_width_cm: widthMm / 10, assumed_extent_mm: extent,
       equivalent_distance_m: geometry.equivalentDistance(extent / 10, distanceCm, widthMm), assumption };
@@ -308,8 +324,11 @@
   function mount({ element, load, save, getCalibration, getDistance, geometry }) {
     const saved = load('reference_tab', {});
     let selected = profiles.find(p => p.id === saved?.model_id) || profiles[0];
-    let scale = positive(saved?.scale_percent) && saved.scale_percent <= 200 ? saved.scale_percent : 100;
-    let loaded = false;
+    let scale = positive(saved?.scale_percent) && saved.scale_percent >= 0.01 && saved.scale_percent <= 1000 ? saved.scale_percent : 25;
+    let loaded = false, loadState = 'missing', loadGeneration = 0, targetError = '';
+    let trialPhase = 'idle', settleFrame = null, settleStarted = 0, stableSince = 0, lastLayout = '', exitRequested = false;
+    let background = saved?.background === 'sky' ? 'sky' : 'neutral';
+    let camera = saved?.camera === '1' ? '1' : '5';
     let mode = saved?.range_mode === 'strict' ? 'strict' : 'approximate';
     element.innerHTML = `
       <h3>Эксперимент с эталонными БПЛА</h3>
@@ -319,39 +338,58 @@
       <p><span id="referenceDimensions"></span> · <span id="referenceSpecSource"></span></p>
       <p id="referenceView"></p>
       <div id="referenceViewport"><img id="referenceDisplay" alt=""><svg id="referenceSegmentOverlay" aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none"></svg><p id="referenceMissing" class="hidden">Фотография недоступна.</p></div>
-      <p><label>Масштаб <input id="referenceScale" type="range" min="0.1" max="200" step="0.1"></label>
-      <label><input id="referenceScaleNumber" type="number" min="0.1" max="200" step="any" aria-label="Масштаб фотографии, %"> %</label>
+      <p><label>Масштаб <input id="referenceScale" type="range" min="0.1" max="1000" step="0.1"></label>
+      <label><input id="referenceScaleNumber" type="number" min="0.01" max="1000" step="any" aria-label="Масштаб фотографии, %"> %</label>
       <button id="referenceHalf">Уменьшить вдвое</button><button id="referenceDouble">Увеличить вдвое</button></p>
+      <p><label>Желаемая эквивалентная дальность, м <input id="referenceTarget" type="text" inputmode="decimal" placeholder="100,00"></label><button id="referenceApplyTarget">Рассчитать масштаб</button><span id="referenceTargetStatus" role="status"></span></p>
+      <p><label>Камера Xiaomi 17 Pro <select id="referenceCamera"><option value="5">Физическая телекамера 5× — план опыта</option><option value="1">1× — сравнение</option></select></label></p>
+      <p>1×/5× — обозначение условий опыта. Дальность не умножается на 5; камера меняет размер объекта в кадре YOLO. Использование физического телевика проверяется на телефоне.</p>
+      <p><label>Фон <select id="referenceBackground"><option value="neutral">Нейтральный однотонный</option><option value="sky">Фиксированное небо</option></select></label><button id="referenceTrial">Режим испытания</button></p>
+      <p id="referenceBackgroundNote"></p>
       <p id="referenceReadout" aria-live="polite"></p>
       <details id="referenceSegmentReview" class="hidden"><summary>Проверяемая моторная диагональ — не подтверждена</summary><label><input id="referenceSegmentToggle" type="checkbox"> Показать проверяемый отрезок A–B (не подтверждён)</label><p id="referenceSegmentReadout"></p></details><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
       <p class="muted">Лабораторная эквивалентная дальность по угловому размеру. Не измерение дальности обнаружения в полёте.</p>
       <details><summary>Дополнительно: источник фотографии и геометрия</summary>
-        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. При обрезке объекта окном расчёт недоступен. Обрезанный силуэт не приравнивается полному габариту. Для него нужен отдельный достоверный отрезок.</p>
+        <p>100 % = один пиксель исходного файла на один CSS px. Белые поля не входят в измерение объекта. Предпросмотр может обрезать изображение, не меняя расчёт. Полноэкранный режим отдельно проверяет, помещается ли объект на экране. Обрезанный силуэт не приравнивается полному габариту. Для него нужен отдельный достоверный отрезок.</p>
         <p id="referenceDimensionNote"></p><p id="referenceDiagnostics"></p><p id="referencePhotoSource"></p>
         <p>Разрешение авторов на использование и публикацию фотографий подтверждено пользователем 2026-11-06. Это не подтверждение проекции.</p>
       </details>`;
     const $ = id => element.querySelector('#' + id);
-    const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), image = $('referenceDisplay'), viewport = $('referenceViewport');
+    const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), viewport = $('referenceViewport');
+    let image = $('referenceDisplay');
+    const decodedImages = new Map();
     let photo = selected.photos.find(p => p.id === saved?.photo_id) || selected.photos[0];
     for (const p of profiles) select.add(new Option(p.model, p.id));
-    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode }); }
+    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, camera }); }
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
     function choosePhoto() {
       photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
-      const p = photo; loaded = false; image.removeAttribute('src');
+      const p = photo, generation = ++loadGeneration;
+      loaded = false; loadState = p.file ? 'loading' : 'missing'; targetError = '';
       $('referenceDimensions').textContent = `${selected.dimensions_mm.join(' × ')} мм; пропеллеры ${selected.propeller_in}″`;
       $('referenceDimensionNote').textContent = selected.dimension_note;
       link($('referenceSpecSource'), selected.source, 'Источник характеристик');
       link($('referencePhotoSource'), p.source, 'Страница источника фотографии');
       $('referenceView').textContent = p.label;
-      image.alt = selected.model + ' — ' + p.label;
+      // Decode a separate request-owned image. Old events can never publish into the new selection.
       const expected = p.file && new URL(p.file, document.baseURI).href;
-      image.onload = () => {
-        if (image.currentSrc !== expected || photo.id !== p.id) return;
-        loaded = image.naturalWidth === p.width && image.naturalHeight === p.height; update();
+      const cached = decodedImages.get(expected);
+      const next = cached || new Image(); next.id = 'referenceDisplay';
+      next.alt = selected.model + ' — ' + p.label;
+      next.onload = () => {
+        if (generation !== loadGeneration || next.currentSrc !== expected) return;
+        loaded = next.naturalWidth === p.width && next.naturalHeight === p.height;
+        loadState = loaded ? 'ready' : 'error';
+        if (loaded) { decodedImages.set(expected, next); if (image !== next) image.replaceWith(next); image = next; }
+        update();
       };
-      image.onerror = () => { if (photo.id === p.id) { loaded = false; update(); } };
-      if (p.file) image.src = p.file;
+      next.onerror = () => { if (generation === loadGeneration) { loaded = false; loadState = 'error'; update(); } };
+      if (cached) next.onload();
+      else if (p.file) next.src = p.file;
+      else {
+        const empty = document.createElement('img'); empty.id = 'referenceDisplay'; empty.alt = '';
+        image.replaceWith(empty); image = empty;
+      }
       persist(); update();
     }
     function chooseModel(preferredPhoto = null) {
@@ -364,24 +402,37 @@
     function update() {
       const p = photo, cal = getCalibration();
       $('referenceRangeMode').value = mode;
+      $('referenceTrial').disabled = trialPhase !== 'idle';
+      $('referenceBackground').value = background; $('referenceCamera').value = camera;
+      viewport.classList.toggle('reference-sky', background === 'sky');
+      $('referenceBackgroundNote').textContent = background === 'sky' && !p.transparent ? 'Локальный рисунок неба. Исходное фото непрозрачное: его собственный фон остаётся прямоугольником; корректное наложение дрона на небо не имитируется.' : background === 'sky' ? 'Локальный рисунок неба; используется прозрачный исходник.' : 'Нейтральный однотонный фон. Собственный фон фотографии сохраняется.';
       $('referenceScale').value = scale;
       if (document.activeElement !== $('referenceScaleNumber')) $('referenceScaleNumber').value = scale;
       image.style.width = p.width * scale / 100 + 'px';
       image.classList.toggle('hidden', !loaded);
       $('referenceMissing').classList.toggle('hidden', loaded);
+      $('referenceMissing').textContent = loadState === 'loading' ? 'Загрузка выбранной фотографии…' : loadState === 'error' ? 'Ошибка загрузки или неверные размеры фотографии.' : 'Фотография недоступна.';
       const r = image.getBoundingClientRect(), v = viewport.getBoundingClientRect(), b = p.bounds_px;
-      const panel = element.closest('.panel'), clip = panel.getBoundingClientRect();
+      const trial = document.fullscreenElement === viewport;
+      const panel = trial ? viewport : element.closest('.panel'), clip = panel.getBoundingClientRect();
       const left = Math.max(v.left, 0, clip.left + panel.clientLeft), top = Math.max(v.top, 0, clip.top + panel.clientTop);
       const right = Math.min(v.right, innerWidth, clip.left + panel.clientLeft + panel.clientWidth);
       const bottom = Math.min(v.bottom, innerHeight, clip.top + panel.clientTop + panel.clientHeight);
-      const actualScale = p.width ? r.width / p.width : null;
-      const visible = loaded && !!b && r.left + b[0] * actualScale >= left - 0.1 && r.top + b[1] * actualScale >= top - 0.1 &&
+      const actualScale = loaded && p.width ? r.width / p.width : null;
+      const previewVisible = loaded && !!b && r.left + b[0] * actualScale >= left - 0.1 && r.top + b[1] * actualScale >= top - 0.1 &&
         r.left + b[2] * actualScale <= right + 0.1 && r.top + b[3] * actualScale <= bottom + 0.1;
-      const m = (mode === 'strict' ? measure : estimate)(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible },
+      const m = (mode === 'strict' ? measure : estimate)(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible: loaded },
         getDistance(), cal?.mm_per_css_px, geometry);
+      const capacityWidth = trial ? Math.min(v.width, innerWidth) : screen.width;
+      const capacityHeight = trial ? Math.min(v.height, innerHeight) : screen.height;
+      const fullscreenFits = loaded && !!b && positive(actualScale) &&
+        capacityWidth / 2 + (b[0] - p.width / 2) * actualScale >= -0.1 &&
+        capacityHeight / 2 + (b[1] - p.height / 2) * actualScale >= -0.1 &&
+        capacityWidth / 2 + (b[2] - p.width / 2) * actualScale <= capacityWidth + 0.1 &&
+        capacityHeight / 2 + (b[3] - p.height / 2) * actualScale <= capacityHeight + 0.1;
       const fmt = n => n == null ? 'нет данных' : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
       const candidate = p.review_segment, overlay = $('referenceSegmentOverlay');
-      const segmentMm = reviewSegmentLength(p, { width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible }, cal?.mm_per_css_px);
+      const segmentMm = reviewSegmentLength(p, { width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible: loaded }, cal?.mm_per_css_px);
       $('referenceSegmentReview').classList.toggle('hidden', !candidate);
       overlay.replaceChildren();
       overlay.classList.toggle('hidden', !candidate || !loaded || !$('referenceSegmentToggle').checked);
@@ -404,25 +455,31 @@
           'Для ручной проверки включите A–B и измерьте линейкой расстояние между центрами меток. Программное значение не заменяет физический замер линейкой.';
       }
 
-      const range = m.equivalent_distance_m == null ? 'нет данных' :
+      if (trial && trialPhase === 'active' && (m.equivalent_distance_m == null || !fullscreenFits)) {
+        stopTrial(m.equivalent_distance_m == null ? 'Испытание остановлено: нужна повторная калибровка или проверка исходных данных. Сохранённые измерения не удалены.' : 'Испытание остановлено: объект обрезан фактической полноэкранной областью. Уменьшите масштаб.');
+      }
+      const range = loadState === 'loading' ? 'Загрузка выбранной фотографии…' : m.equivalent_distance_m == null ? 'нет данных' :
         `${mode === 'approximate' ? '≈ ' : ''}${m.equivalent_distance_m.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} м`;
       $('referenceAssumption').textContent = mode === 'approximate' ?
         `Приближённая оценка, не точная дальность и не подтверждённая геометрия. ${m.assumption || 'Для оценки нужны доступное изображение и ширина видимого коптера.'}${positive(m.assumed_extent_mm) ? ` Принятый габарит: ${fmt(m.assumed_extent_mm)} мм.` : ''}` :
         'Строгий режим: метры доступны только для подтверждённой физической оси и проекции.';
       $('referenceReadout').textContent = `Масштаб: ${scale} %. До экрана: ${fmt(getDistance())} см. Ширина силуэта на экране: ${fmt(m.display_width_cm)} см. Эквивалентная дальность: ${range}.`;
       if (m.display_axis_cm != null) $('referenceReadout').textContent += ` Размер расчётной оси: ${fmt(m.display_axis_cm)} см.`;
-      $('referenceIssue').textContent = [p.issue, !loaded ? 'Локальная фотография не загружена.' : !visible ? 'Объект обрезан видимой областью. Уменьшите масштаб или прокрутите к фотографии.' : '',
+      $('referenceTargetStatus').textContent = targetError;
+      $('referenceIssue').textContent = [p.issue, !loaded ? (loadState === 'loading' ? 'Загрузка выбранной фотографии…' : 'Локальная фотография не загружена или её размеры неверны.') : !previewVisible ? 'Предпросмотр показывает часть изображения. Расчёт использует полный размер объекта при заданном масштабе.' : '',
+        loaded && !fullscreenFits ? 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб; математическая дальность показана для полного размера.' : '',
         !$('referenceScaleNumber').validity.valid ? 'Некорректный масштаб: применяется последнее допустимое значение.' : '',
         !cal ? 'Нужна актуальная калибровка экрана.' : '', !positive(getDistance()) ? 'Введите расстояние от камеры до экрана.' : ''].filter(Boolean).join(' ');
       $('referenceDiagnostics').textContent = `ID: ${selected.id}; ракурс: ${p.view}; границы файла [x1, y1, x2, y2]: ${b ? b.join(', ') : 'нет'}; физическая ось: ${p.axis ? JSON.stringify(p.axis) : 'не подтверждена'}.`;
       return { model_id: selected.id, photo_id: p.id, view: p.view, scale_percent: scale, screen_distance_cm: getDistance(),
-        review_segment_display_mm: segmentMm,
-        range_mode: mode, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
+        trial_phase: trialPhase, load_state: loadState, preview_visible: previewVisible, fullscreen_fits: fullscreenFits,
+        image_width_css_px: loaded ? r.width : null, image_height_css_px: loaded ? r.height : null, review_segment_display_mm: segmentMm,
+        camera_label: camera + '×', background, range_mode: mode, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
     }
     function setScale(value) {
       const n = Number(value);
-      if (!positive(n) || n < 0.1 || n > 200) { $('referenceScaleNumber').setCustomValidity('Введите масштаб от 0,1 до 200 %.'); update(); return; }
+      if (!positive(n) || n < 0.01 || n > 1000) { $('referenceScaleNumber').setCustomValidity('Введите масштаб от 0,01 до 1000 %.'); update(); return; }
       $('referenceScaleNumber').setCustomValidity(''); scale = n; persist(); update();
     }
     $('referenceSegmentToggle').onchange = update;
@@ -431,10 +488,135 @@
     photoSelect.onchange = choosePhoto;
     $('referenceScale').oninput = e => setScale(e.target.value);
     $('referenceScaleNumber').oninput = e => setScale(e.target.value);
-    $('referenceHalf').onclick = () => setScale(Math.max(0.1, scale / 2));
-    $('referenceDouble').onclick = () => setScale(Math.min(200, scale * 2));
+    $('referenceHalf').onclick = () => setScale(Math.max(0.01, scale / 2));
+    $('referenceDouble').onclick = () => setScale(Math.min(1000, scale * 2));
+    // OS work area and window coordinates change in macOS fullscreen; they are not pixel-scale invariants.
+    const physicalKeys = ['dpr', 'width', 'height', 'visual_scale'];
+    function calibrationEnvironmentMatches(before, after, referenceActive = false) {
+      const controlled = trialPhase !== 'idle' || document.fullscreenElement === viewport;
+      if (!controlled && !referenceActive) return false;
+      if (!before || !after || !physicalKeys.every(k => before[k] === after[k])) return false;
+      return controlled || ['available_width', 'available_height', 'x', 'y'].every(k => before[k] === after[k]);
+    }
+    function layoutKey() {
+      const r = viewport.getBoundingClientRect(), i = image.getBoundingClientRect();
+      return JSON.stringify([document.fullscreenElement === viewport, innerWidth, innerHeight,
+        r.x, r.y, r.width, r.height, i.width, i.height, window.screenX, window.screenY,
+        screen.availWidth, screen.availHeight, devicePixelRatio, screen.width, screen.height, window.visualViewport?.scale ?? 1]);
+    }
+    function beginSettling(phase) {
+      trialPhase = phase; settleStarted = stableSince = performance.now(); lastLayout = '';
+      if (settleFrame != null) cancelAnimationFrame(settleFrame);
+      settleFrame = requestAnimationFrame(settleTrial);
+    }
+    function settleTrial(now) {
+      settleFrame = null;
+      if (trialPhase === 'idle') return;
+      const inTrial = document.fullscreenElement === viewport;
+      const key = layoutKey();
+      if (key !== lastLayout) { lastLayout = key; stableSince = now; }
+      // Do not validate the old/zero/transitional viewport on fullscreenchange or the request promise.
+      if (now - stableSince >= 200 && now - settleStarted >= (trialPhase === 'exiting' ? 750 : 400)) {
+        if (trialPhase === 'entering' && inTrial) {
+          trialPhase = 'active'; exitRequested = false; update(); return;
+        }
+        if (trialPhase === 'exiting' && !inTrial) {
+          // Refresh the calibration's environment while the controlled-transition exemption still applies.
+          update(); trialPhase = 'idle'; exitRequested = false; update(); return;
+        }
+      }
+      if (now - settleStarted > 5000) {
+        if (inTrial && trialPhase === 'exiting') requireManualExit();
+        else if (inTrial) stopTrial('Не удалось завершить переход в полноэкранный режим. Сохранённые измерения не удалены.');
+        else { update(); trialPhase = 'idle'; exitRequested = false; update(); }
+        return;
+      }
+      settleFrame = requestAnimationFrame(settleTrial);
+    }
+    function requireManualExit() {
+      targetError = 'Браузер не завершил полноэкранный режим. Выйдите через Esc или меню браузера; измерения сохранены.';
+      if (settleFrame != null) cancelAnimationFrame(settleFrame);
+      settleFrame = null; trialPhase = 'manual-exit'; exitRequested = false; update();
+    }
+    function stopTrial(message) {
+      if (message) targetError = message;
+      if (exitRequested) return;
+      exitRequested = true; beginSettling('exiting');
+      if (document.fullscreenElement === viewport) {
+        Promise.resolve(document.exitFullscreen()).catch(() => {
+          requireManualExit();
+        });
+      }
+    }
+    function environmentChanged() {
+      if (document.fullscreenElement === viewport && trialPhase === 'active') beginSettling('entering');
+      // During entry/exit the sampler itself detects changes until the layout is stable.
+    }
+    $('referenceCamera').onchange = e => { camera = e.target.value; persist(); update(); };
+    $('referenceBackground').onchange = e => { background = e.target.value; persist(); update(); };
+    $('referenceApplyTarget').onclick = () => {
+      targetError = '';
+      const target = Number($('referenceTarget').value.trim().replace(',', '.'));
+      viewport.scrollIntoView({ block: 'center' });
+      const cal = getCalibration();
+      if (!positive(target)) targetError = 'Введите положительную дальность в метрах, например 100,00.';
+      else if (!cal) targetError = 'Нужна актуальная калибровка экрана.';
+      else if (!loaded || !positive(getDistance())) targetError = 'Нужны загруженное изображение и расстояние до монитора.';
+      else {
+        // Probe at unit scale: independent of current clipping; never use rounded readout values.
+        const unit = (mode === 'strict' ? measure : estimate)(selected,
+          { photo_id: photo.id, width: image.naturalWidth, height: image.naturalHeight, scale: 1, visible: true },
+          getDistance(), cal.mm_per_css_px, geometry);
+        const needed = unit.equivalent_distance_m / target * 100;
+        if (!positive(needed)) targetError = 'У этого ракурса нет физической ширины проекции для выбранного режима расчёта.';
+        else if (needed < 0.01 || needed > 1000) targetError = 'Заданная дальность требует масштаба вне диапазона 0,01–1000 %.';
+        else {
+          const previous = scale;
+          setScale(needed);
+          const actual = update();
+          if (!positive(actual.equivalent_distance_m) || !actual.fullscreen_fits) {
+            setScale(previous);
+            targetError = 'Требуемый объект не помещается на экране в полноэкранном режиме. Увеличьте заданную дальность или уменьшите масштаб.';
+          } else targetError = 'Масштаб рассчитан. Фактическая дальность показана ниже с учётом CSS-размера; предварительные размеры остаются оценкой. Вместимость окончательно проверяется при входе в полноэкранный режим.';
+        }
+      }
+      update();
+    };
+    $('referenceTrial').onclick = async () => {
+      if (trialPhase !== 'idle') return;
+      targetError = '';
+      viewport.scrollIntoView({ block: 'center' });
+      const state = update();
+      if (!positive(state.equivalent_distance_m)) { targetError = 'Сначала получите корректную геометрию изображения: проверьте калибровку, ракурс, расстояние и исходные данные.'; update(); return; }
+      if (!state.fullscreen_fits) { targetError = 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб.'; update(); return; }
+      if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим. Измерения сохранены.'; update(); return; }
+      // The exemption starts before requestFullscreen: resize may precede fullscreenchange/promise resolution.
+      beginSettling('entering');
+      try { await viewport.requestFullscreen(); }
+      catch {
+        if (trialPhase !== 'exiting') beginSettling('exiting');
+        targetError = 'Браузер не разрешил полноэкранный режим. Проверьте разрешения и активность окна, затем повторите. Измерения сохранены.';
+        update();
+      }
+    };
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement === viewport) { beginSettling('entering'); update(); }
+      else if (trialPhase !== 'idle') { beginSettling('exiting'); update(); }
+    });
+    viewport.addEventListener('fullscreenerror', () => {
+      if (trialPhase === 'idle') return;
+      targetError = 'Браузер не разрешил полноэкранный режим. Проверьте разрешения и активность окна, затем повторите. Измерения сохранены.';
+      beginSettling('exiting'); update();
+    });
+    // No legacy gallery shortcuts; explicit Esc also works when a browser doesn't consume it natively.
+    document.addEventListener('keydown', e => {
+      if (document.fullscreenElement === viewport) {
+        e.stopImmediatePropagation();
+        if (e.key === 'Escape') stopTrial();
+      }
+    }, true);
     select.value = selected.id; chooseModel(photo.id);
-    return { update, snapshot: update };
+    return { update, snapshot: update, calibrationEnvironmentMatches, environmentChanged };
   }
   root.DroneReferences = { profiles, measure, estimate, reviewSegmentLength, mount };
 })(typeof window === 'undefined' ? globalThis : window);
