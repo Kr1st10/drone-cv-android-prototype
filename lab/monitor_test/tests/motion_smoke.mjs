@@ -91,13 +91,16 @@ for(let i=0;i<journals.length;i++) {
 }
 await page.click('#reportCalculate');
 const outputText=await page.textContent('#reportOutput');
-assert.match(outputText,/критерий: не определён/); assert.match(outputText,/неизвестно: 200\.0 мс/);
+assert.match(outputText,/критерий: не определён/); assert.match(outputText,/неизвестно: 400\.0 мс/);
 assert.match(outputText,/ограничение скорости 100 px\/с: 200 px\/с²/);
 assert.match(outputText,/ограничение скорости 300 px\/с: 600 px\/с²/);
 const multiReport=await exportJson('#reportExport');
-assert.equal(multiReport.schema,'dronecv-motion-report-2');
+assert.equal(multiReport.schema,'dronecv-motion-report-3');
 assert.equal(multiReport.runs.find(r=>r.run_id==='u1').pass,null);
-assert.equal(multiReport.runs.find(r=>r.run_id==='u1').unknown_ms,200);
+assert.equal(multiReport.runs[0].criterion_version,'motion-retention-v3');
+assert.equal(multiReport.runs[0].timing_status,'compatible');
+assert.equal(multiReport.runs[0].offset_lower_ms,-100); assert.equal(multiReport.runs[0].offset_upper_ms,0);
+assert.equal(multiReport.runs.find(r=>r.run_id==='u1').unknown_ms,400);
 assert.deepEqual(multiReport.maxima.map(m=>[m.max_speed_px_s,m.max_acceleration_px_s2]),[[100,200],[300,600]]);
 const after = await page.evaluate(() => JSON.parse(sessionJson()));
 assert.deepEqual(after.sample, previous.sample); assert.deepEqual(after.results, previous.results); assert.equal(after.trial.run_id, previous.trial.run_id);

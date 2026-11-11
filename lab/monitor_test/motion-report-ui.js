@@ -24,11 +24,12 @@
       return {run,result,journal:j.name,calibration_points:j.points};
     });
     if(new Set(items.map(i=>i.run.run_id)).size!==items.length) throw Error('Для одного run_id загружено несколько журналов.');
-    output={schema:'dronecv-motion-report-2',runs:items.map(({run,result,journal,calibration_points})=>({journal,calibration_points,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result})),maxima:MotionReport.maxima(items)};
+    output={schema:'dronecv-motion-report-3',runs:items.map(({run,result,journal,calibration_points})=>({journal,calibration_points,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result})),maxima:MotionReport.maxima(items)};
     const percent=x=>x===null?'нет данных':(x*100).toFixed(1)+'%';
     $('reportOutput').textContent='Результаты по прогонам\n'+output.runs.map(r=>
       `Прогон ${r.run_id} (${r.mode}); версия критерия: ${r.criterion_version}\n`+
-      `Захват: ${r.capture_latency_ms===null?'нет':r.capture_latency_ms.toFixed(1)+' мс'}; границы доли IoU ≥ 0,5: ${percent(r.good_fraction_lower)}–${percent(r.good_fraction_upper)}; неизвестно: ${r.unknown_ms.toFixed(1)} мс; доля среди оценённых (диагностика): ${percent(r.good_fraction)}\n`+
+      `Совместимый интервал смещения часов: ${r.timing_status==='compatible'?r.offset_lower_ms.toFixed(1)+'–'+r.offset_upper_ms.toFixed(1)+' мс':'не определён'}; статус: ${r.timing_status}\n`+
+      `Захват (диагностика): ${r.capture_latency_ms===null?'нет':r.capture_latency_ms.toFixed(1)+' мс'}; границы доли IoU ≥ 0,5: ${percent(r.good_fraction_lower)}–${percent(r.good_fraction_upper)}; неизвестно: ${r.unknown_ms.toFixed(1)} мс; доля среди оценённых (диагностика): ${percent(r.good_fraction)}\n`+
       `Самый длинный известный провал: ${r.longest_failure_ms.toFixed(1)} мс; возможный: ${r.longest_possible_failure_ms.toFixed(1)} мс\n`+
       `Ложная рамка на пустом фоне: ${r.false_box_blank_intervals} интервалов, ${r.false_box_blank_ms.toFixed(1)} мс; несопоставленных кадров: ${r.total_frames ? ((r.missing_markers+r.unmatched_markers)*100/r.total_frames).toFixed(1) : '0'}%; покрытие: ${percent(r.coverage)}\n`+
       `Достаточно данных: ${r.sufficient?'да':'нет'}; критерий: ${r.pass===null?'не определён':r.pass?'пройден':'не пройден'}; причина: ${r.decision_reason}\n`+
