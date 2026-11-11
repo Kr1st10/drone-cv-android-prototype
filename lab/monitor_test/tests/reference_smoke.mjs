@@ -28,8 +28,10 @@ await page.keyboard.press('r'); await page.click('.det[data-det=no_box]'); await
 const old = await session(); assert.equal(old.results.length, 1); assert.equal(old.sample.ids.length, 20);
 await nav('reference');
 assert.ok(await page.isVisible('#referenceSection')); assert.ok(await page.isHidden('#advanced'));
-assert.ok(await page.isHidden('#zoom')); assert.equal(await page.locator('#referenceDrone option').count(), 3);
+assert.ok(await page.isHidden('#zoom')); assert.equal(await page.locator('#referenceDrone option').count(), 4);
 assert.equal(await page.locator('#referencePhotoSelect option').count(), 3);
+assert.equal(await page.inputValue('#referenceDrone'), 'cabinet_reference');
+await page.selectOption('#referenceDrone', 'skydroid_mx330t');
 await page.waitForFunction(() => document.getElementById('referenceDisplay').naturalWidth === 416);
 assert.equal((await snapshot()).equivalent_distance_m, null);
 await page.click('#screenCalibBtn'); await page.fill('#screenLineCm', '10'); await page.click('#applyScreenCalib'); await page.keyboard.press('Escape');
@@ -128,7 +130,7 @@ await page.waitForFunction(() => document.getElementById('referenceDisplay').nat
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT + '_reference_skydroid.png' });
 // Only this test temporarily supplies an invented verified axis. Production profiles stay unverified.
 await page.evaluate(() => {
-  const p = DroneReferences.profiles[0].photos[0];
+  const p = DroneReferences.profiles.find(p => p.id === 'skydroid_mx330t').photos[0];
   p.model_confirmed = p.projection_confirmed = true;
   p.axis = { from: [90, 200], to: [330, 200], real_cm: 57.85, source: 'SYNTHETIC TEST ONLY' };
 });
@@ -150,17 +152,18 @@ await page.locator('#referenceSection details:not(#referenceSegmentReview)').eva
 const clipped = await page.evaluate(() => {
   const panel = document.getElementById('settings'), image = document.getElementById('referenceDisplay');
   panel.style.maxHeight = '500px'; // ensure enough scroll range without invalidating the calibrated window
-  const p = DroneReferences.profiles[0].photos[0], r = image.getBoundingClientRect(), c = panel.getBoundingClientRect();
+  const p = DroneReferences.profiles.find(p => p.id === 'skydroid_mx330t').photos[0], r = image.getBoundingClientRect(), c = panel.getBoundingClientRect();
   panel.scrollTop += r.top + p.bounds_px[1] * r.width / p.width - (c.top - 5);
   return image.getBoundingClientRect().top + p.bounds_px[1] * r.width / p.width < c.top;
 });
-assert.ok(clipped); assert.equal((await snapshot()).equivalent_distance_m, null);
+assert.ok(clipped); assert.ok((await snapshot()).equivalent_distance_m > 0);
+assert.equal((await snapshot()).preview_visible, false);
 await page.locator('#settings').evaluate(e => { e.style.maxHeight = ''; e.scrollTop = 0; });
 await page.locator('#referenceSection details:not(#referenceSegmentReview)').evaluate(e => e.open = false);
 assert.ok((await snapshot()).equivalent_distance_m > 0);
 await page.fill('#distance', ''); assert.equal((await snapshot()).equivalent_distance_m, null);
 await page.fill('#distance', '150');
-await page.fill('#referenceScaleNumber', '200'); assert.equal((await snapshot()).equivalent_distance_m, null); // clipped object
+await page.fill('#referenceScaleNumber', '200'); assert.ok((await snapshot()).equivalent_distance_m > 0); // clipping preview never blocks math
 await page.fill('#referenceScaleNumber', '25');
 // Changing photo drops a previously valid fixture immediately; no old metres survive into the other view.
 await page.selectOption('#referencePhotoSelect', 'skydroid_front');

@@ -14,7 +14,7 @@ for (const name of ['positive', 'equivalentDistance', 'validBounds', 'physicalWi
 const geometry = { physicalWidth: ctx.physicalWidth, equivalentDistance: ctx.equivalentDistance };
 if (process.argv.includes('--segment-oracle')) {
   const cases = JSON.parse(fs.readFileSync(0, 'utf8'));
-  console.log(JSON.stringify(cases.map(c => reviewSegmentLength(profiles[0].photos[0], c.render, c.mm_per_css_px))));
+  console.log(JSON.stringify(cases.map(c => reviewSegmentLength(profiles.find(p => p.id === 'skydroid_mx330t').photos[0], c.render, c.mm_per_css_px))));
   process.exit(0);
 }
 if (process.argv.includes('--estimate-oracle')) {
@@ -27,8 +27,8 @@ if (process.argv.includes('--oracle')) {
   console.log(JSON.stringify(cases.map(c => measure(c.profile, c.render, c.distance_cm, c.mm_per_css_px, geometry))));
   process.exit(0);
 }
-assert.deepEqual(Array.from(profiles, p => Array.from(p.dimensions_mm)), [[578.5, 528.7, 80.5], [590, 530, 200], [500, 419, 60]]);
-assert.equal(new Set(profiles.map(p => p.id)).size, 3);
+assert.deepEqual(Array.from(profiles.slice(1), p => Array.from(p.dimensions_mm)), [[578.5, 528.7, 80.5], [590, 530, 200], [500, 419, 60]]);
+assert.equal(new Set(profiles.map(p => p.id)).size, 4);
 for (const p of profiles) {
   assert.match(p.source, /^https:\/\//);
   assert.equal(p.photos.length, 3);
@@ -38,7 +38,7 @@ for (const p of profiles) {
     if (photo.file) assert.ok(fs.existsSync(new URL('../' + photo.file, import.meta.url)));
   }
 }
-assert.equal(profiles.flatMap(p => p.photos).filter(p => p.file).length, 6);
+assert.equal(profiles.flatMap(p => p.photos).filter(p => p.file).length, 9);
 const profile = { photos: [{ id: 'fixture', file: 'TEST ONLY', width: 1000, height: 500, bounds_px: [100, 50, 400, 200],
   model_confirmed: true, projection_confirmed: true,
   axis: { from: [100, 100], to: [400, 100], real_cm: 57.85, source: 'SYNTHETIC axis — not a real photograph' } }] };
@@ -73,7 +73,7 @@ for (const profile of profiles) for (const p of profile.photos) {
   const r = { photo_id: p.id, width: p.width, height: p.height, scale: 1, visible: true };
   const e = estimate(profile, r, 150, 0.25, geometry);
   if (!p.file) { assert.equal(e.equivalent_distance_m, null); continue; }
-  if (p.object_complete === false) {
+  if (p.object_complete === false && !p.projection_width_mm) {
     assert.equal(e.equivalent_distance_m, null);
     assert.equal(e.assumed_extent_mm, null);
     assert.match(e.assumption, /не приравнивается полному габариту/);
@@ -96,7 +96,7 @@ for (const profile of profiles) for (const p of profile.photos) {
 }
 console.log('Local geometry: three estimates, three cropped-image refusals, scale, distance and strict isolation: OK');
 
-const candidate = profiles[0].photos[0];
+const candidate = profiles.find(p => p.id === 'skydroid_mx330t').photos[0];
 assert.equal(candidate.review_segment.status, 'unconfirmed');
 assert.equal(candidate.axis, null); // visible motor points do not prove a 430mm axis
 const candidateRender = { width: 416, height: 416, scale: 1, visible: true };
@@ -107,3 +107,8 @@ for (const patch of [{ visible: false }, { width: 800 }, { height: 800 }, { scal
   assert.equal(reviewSegmentLength(candidate, { ...candidateRender, ...patch }, 0.25), null);
 }
 for (const k of [null, -1, 0, NaN, Infinity]) assert.equal(reviewSegmentLength(candidate, candidateRender, k), null);
+
+// Exact unit acceptance independently specified by the task: 50cm, 50cm, 2.5mm -> 100m.
+assert.equal(geometry.equivalentDistance(50, 50, 2.5), 100);
+assert.equal(profiles[0].id, 'cabinet_reference');
+assert.deepEqual(Array.from(profiles[0].photos, p => p.projection_width_mm), [528.7, 600, 528.7]);
