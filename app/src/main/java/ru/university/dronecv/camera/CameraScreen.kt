@@ -55,7 +55,7 @@ import ru.university.dronecv.tracking.TrackingSession
 
 /** Главный экран: запрос разрешения, видеопревью и обработка ошибок камеры. */
 @Composable
-fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int) -> Unit, onConfidenceChange: (Float) -> Unit) {
+fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int) -> Unit, onOpenJournals: () -> Unit = {}, onConfidenceChange: (Float) -> Unit) {
     val context = LocalContext.current
     val diagnostics: DiagnosticViewModel = viewModel()
     val cameraProbe = rememberCameraProbeState()
@@ -148,6 +148,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
                     probe = cameraProbe,
                     diagnostics = diagnostics,
                     motionModel = motionModel,
+                    onOpenJournals = onOpenJournals,
                     running = running,
                     confidence = confidence,
                     onRunningChange = {

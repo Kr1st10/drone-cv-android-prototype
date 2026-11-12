@@ -13,6 +13,8 @@ class TimelineWriter(
     private val capacity: Int = 4096,
     private val open: (File) -> java.io.OutputStream = { it.outputStream() },
     private val onIssue: (String) -> Unit = {},
+    private val onFinishing: () -> Unit = {},
+    private val onClosed: (Boolean, String?) -> Unit = { _, _ -> },
 ) {
     private data class Entry(val id: Long, val time: Long, val type: String, val data: String)
     private val queue = ArrayBlockingQueue<Entry>(capacity)
@@ -29,6 +31,7 @@ class TimelineWriter(
     private var lastMissing: Entry? = null
     private var end: Entry? = null
     @Volatile private var failure: String? = null
+    @Volatile private var failureRecord: String? = null
     private val worker = Thread({ runWriter() }, "timeline-writer").apply { isDaemon = true; start() }
 
     init { require(capacity > 0) }
@@ -48,6 +51,7 @@ class TimelineWriter(
 
     @Synchronized fun finish(stopNs: Long, interrupted: Boolean, reason: String?) {
         if (end != null) return
+        onFinishing()
         end = Entry(++nextId, stopNs, "session_end", "{\"stop_ns\":\"$stopNs\",\"experiment_status\":\"${if (interrupted) "interrupted" else "not_observed"}\",\"interrupted\":$interrupted,\"reason\":${reason?.let(::quote) ?: "null"}")
     }
 
@@ -69,11 +73,10 @@ class TimelineWriter(
                 if (size > 0) { output.write(buffer, 0, size); lastByte = buffer[size - 1].toInt() }
             }
         }
-        val issue = failure
-        if (issue != null) {
-            val record = synchronized(this) { Entry(++nextId, clock(), "recording_failure", "{\"reason\":${quote(issue)}}") }
+        val record = failureRecord
+        if (record != null) {
             if (lastByte != -1 && lastByte != 10) output.write("\n".toByteArray(Charsets.UTF_8))
-            output.write(line(record).toByteArray(Charsets.UTF_8))
+            output.write(record.toByteArray(Charsets.UTF_8))
         }
     }
 
@@ -95,7 +98,15 @@ class TimelineWriter(
                 }
             }
         } catch (e: Exception) { failure = e.message ?: e.javaClass.simpleName; onIssue("Ошибка записи: $failure") }
-        finally { finished.countDown() }
+        finally {
+            try {
+                val complete = synchronized(this) {
+                    failure?.let { failureRecord = line(Entry(++nextId, clock(), "recording_failure", "{\"reason\":${quote(it)}}")) }
+                    end != null && failure == null && dropped == 0L
+                }
+                onClosed(complete, failureRecord)
+            } finally { finished.countDown() }
+        }
     }
 }
 

@@ -30,7 +30,7 @@ if (process.argv.includes('--oracle')) {
 assert.deepEqual(Array.from(profiles.slice(1), p => Array.from(p.dimensions_mm)), [[578.5, 528.7, 80.5], [590, 530, 200], [500, 419, 60]]);
 assert.equal(new Set(profiles.map(p => p.id)).size, 4);
 for (const p of profiles) {
-  assert.match(p.source, /^https:\/\//);
+  if (p.id !== 'cabinet_reference') assert.match(p.source, /^https:\/\//);
   assert.equal(p.photos.length, 3);
   for (const photo of p.photos) {
     assert.equal(photo.axis, null); // no verified physical segment was supplied for these real pictures
@@ -73,7 +73,7 @@ for (const profile of profiles) for (const p of profile.photos) {
   const r = { photo_id: p.id, width: p.width, height: p.height, scale: 1, visible: true };
   const e = estimate(profile, r, 150, 0.25, geometry);
   if (!p.file) { assert.equal(e.equivalent_distance_m, null); continue; }
-  if (p.object_complete === false && !p.projection_width_mm) {
+  if (p.object_complete === false) {
     assert.equal(e.equivalent_distance_m, null);
     assert.equal(e.assumed_extent_mm, null);
     assert.match(e.assumption, /не приравнивается полному габариту/);
@@ -111,4 +111,26 @@ for (const k of [null, -1, 0, NaN, Infinity]) assert.equal(reviewSegmentLength(c
 // Exact unit acceptance independently specified by the task: 50cm, 50cm, 2.5mm -> 100m.
 assert.equal(geometry.equivalentDistance(50, 50, 2.5), 100);
 assert.equal(profiles[0].id, 'cabinet_reference');
-assert.deepEqual(Array.from(profiles[0].photos, p => p.projection_width_mm), [528.7, 600, 528.7]);
+const cabinet = profiles[0];
+assert.deepEqual(JSON.parse(JSON.stringify(cabinet.measurements_mm)), {
+  span_transverse: 580, span_longitudinal: 530, motor_transverse: 325, motor_longitudinal: 275,
+  motor_diagonal: 428, propeller_radius: 126, height_without_propellers: 60, height_with_propellers: 70
+});
+const expected = {
+  front: { extent: 325, status: 'measured', sourceLength: Math.hypot(2248, 32) },
+  top: { extent: 428, status: 'measured', sourceLength: Math.hypot(2131, 1771) },
+  oblique_candidate: { extent: 676.2640687119285, status: 'preliminary', sourceLength: 3506 }
+};
+for (const p of cabinet.photos) {
+  assert.ok(fs.existsSync(new URL('../' + p.source, import.meta.url)));
+  const { extent, status, sourceLength } = expected[p.view];
+  const r = { photo_id: p.id, width: p.width, height: p.height, scale: 0.2, visible: true };
+  // Trial pixels = original pixels / 4; 0.2 CSS px per trial px, 0.25 mm per CSS px.
+  const displayMm = sourceLength / 80;
+  const result = estimate(cabinet, r, 500, 0.25, geometry);
+  assert.equal(result.geometry_status, status);
+  assert.ok(Math.abs(result.assumed_extent_mm - extent) < 1e-9);
+  assert.ok(Math.abs(result.display_axis_cm - displayMm / 10) < 1e-9);
+  assert.ok(Math.abs(result.equivalent_distance_m - 5 * extent / displayMm) < 1e-9);
+  assert.notEqual(result.display_axis_cm, result.display_width_cm);
+}

@@ -13,7 +13,7 @@ try {
  await page.click('#screenCalibBtn');await page.fill('#screenLineCm','10');await page.click('#applyScreenCalib');await page.keyboard.press('Escape');
  await page.addStyleTag({content:'#referenceViewport:not(:fullscreen){height:80px}'});
  await page.fill('#distance','400');await page.fill('#referenceScaleNumber','57');
- await page.waitForFunction(()=>document.getElementById('referenceDisplay').complete&&document.getElementById('referenceDisplay').naturalWidth===1000);
+ await settle();
  assert.ok((await snap()).equivalent_distance_m>0,'400cm / 57% must calculate despite clipped preview');
  const calibration=(await snap()).calibration_id;
  assert.ok(await page.evaluate(()=>{
@@ -30,22 +30,23 @@ try {
   await page.selectOption('#referencePhotoSelect',photo);if(cycle>0)assert.equal((await snap()).load_state,'ready','warm switches commit synchronously without a blank frame');await settle();
   const s=await snap();assert.equal(s.photo_id,photo);assert.equal(s.calibration_id,calibration);assert.equal(s.screen_distance_cm,400);assert.equal(s.scale_percent,57);
   const p=await page.evaluate(id=>DroneReferences.profiles[0].photos.find(p=>p.id===id),photo);
-  const expected=4*p.projection_width_mm/((p.bounds_px[2]-p.bounds_px[0])*.57*.25);
+  const { from, to, real_mm }=p.review_segment;
+  const expected=4*real_mm/(Math.hypot(to[0]-from[0],to[1]-from[1])*.57*.25);
   assert.ok(Math.abs(s.equivalent_distance_m-expected)<0.005,JSON.stringify({s,expected,cal:await page.evaluate(()=>activeScreenCalibration())}));
   await page.locator('#settings').evaluate(e=>e.scrollTop=e.scrollHeight);assert.equal((await snap()).equivalent_distance_m,s.equivalent_distance_m);
  }
- // Force delayed, out-of-order load events, including same-file model switches.
+ // Force delayed, out-of-order load events, for all three cabinet photographs.
  await page.evaluate(()=>{
   DroneReferences.profiles[0].photos.forEach((p,i)=>p.file+='?race='+i);
   const descriptor=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
-  Object.defineProperty(HTMLImageElement.prototype,'src',{...descriptor,set(url){const img=this;const handler=img.onload;img.onload=e=>setTimeout(()=>handler?.call(img,e),url.includes('front')?180:20);descriptor.set.call(img,url);}});
+  Object.defineProperty(HTMLImageElement.prototype,'src',{...descriptor,set(url){const img=this;const handler=img.onload;img.onload=e=>setTimeout(()=>handler?.call(img,e),url.includes('2707')?180:20);descriptor.set.call(img,url);}});
   for(const id of ['cabinet_front','cabinet_top','cabinet_front','cabinet_oblique_candidate']){const e=document.getElementById('referencePhotoSelect');e.value=id;e.dispatchEvent(new Event('change'));}
  });
  await settle();await page.waitForTimeout(250);assert.equal((await snap()).photo_id,'cabinet_oblique_candidate');assert.equal((await snap()).calibration_id,calibration);
  const frames=await page.evaluate(()=>{window.sampleReference=false;return window.framesSeen;});assert.ok(frames.length>25);
  for(const s of frames){
   assert.equal(s.calibration_id,calibration);
-  if(s.load_state==='ready'){assert.ok(s.equivalent_distance_m>0);assert.doesNotMatch(s.readout,/нет данных|Загрузка/);assert.equal(s.natural,s.photo_id==='cabinet_front'?1000:s.photo_id==='cabinet_top'?416:800);}
+  if(s.load_state==='ready'){assert.ok(s.equivalent_distance_m>0);assert.doesNotMatch(s.readout,/нет данных|Загрузка/);assert.equal(s.natural,s.photo_id==='cabinet_front'?1010:s.photo_id==='cabinet_top'?920:905);}
   else {assert.equal(s.equivalent_distance_m,null);assert.match(s.readout,/Загрузка/);}
  }
  const cdp=await page.context().newCDPSession(page);
@@ -61,7 +62,7 @@ try {
  await page.click('#referenceTrial');assert.equal(await page.evaluate(()=>document.fullscreenElement),null);assert.match(await page.textContent('#referenceTargetStatus'),/полноэкран/);
  await page.selectOption('#referenceDrone','skydroid_mx330t');await page.selectOption('#referencePhotoSelect','skydroid_front');await settle();assert.equal((await snap()).equivalent_distance_m,null);assert.match(await page.textContent('#referenceAssumption'),/не приравнивается/);
  await page.selectOption('#referenceDrone','unik_sd_10ufp');assert.equal((await snap()).load_state,'missing');assert.equal((await snap()).equivalent_distance_m,null);
- // Same URL shared by two models must still use the current model's geometry.
+ // Changing models must use the current model's geometry.
  await page.selectOption('#referenceDrone','cabinet_reference');await settle();assert.ok((await snap()).equivalent_distance_m>0);
  await page.selectOption('#referenceDrone','skydroid_mx330t');await page.selectOption('#referencePhotoSelect','skydroid_front');await settle();assert.equal((await snap()).equivalent_distance_m,null);
  // Recover after missing source; an incompatible decoded size must never inherit old metres.

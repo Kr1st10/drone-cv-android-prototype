@@ -8,6 +8,7 @@ import ru.university.dronecv.camera.FrameStamp
 import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.detection.NormalizedBox
 import java.io.File
+import ru.university.dronecv.journals.JournalArchive
 import ru.university.dronecv.timeline.updateForSession
 import ru.university.dronecv.timeline.TimelineWriter
 import ru.university.dronecv.timeline.quote
@@ -15,9 +16,19 @@ import ru.university.dronecv.timeline.quote
 /** Bounded, session-tokened journal. Calls may arrive from UI, vision and ML workers. */
 class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_000,
                     private val fileFactory: (() -> File)? = null,
+                    private val requiresReservation: Boolean = false,
                     private val writerFactory: (File, () -> Long, (String) -> Unit) -> TimelineWriter =
                         { file, time, issue -> TimelineWriter(file, time, onIssue = issue) }) {
     private var writer: TimelineWriter? = null
+    private var reservation: JournalArchive.Recording? = null
+    private var preparationRevision = 0L
+    @Synchronized fun preparationToken(): Long = preparationRevision
+    @Synchronized fun prepareRecording(value: JournalArchive.Recording, expectedRevision: Long): Boolean {
+        if (preparationRevision != expectedRevision || mutableUi.value.recording || reservation != null) return false
+        reservation = value
+        return true
+    }
+    @Synchronized fun cancelPreparation() { reservation = null }
     private var exportWriter: TimelineWriter? = null
     @Synchronized fun exportFile(): File? = writer?.file
     @Synchronized fun selectExport(): File? { exportWriter = writer; return exportWriter?.file }
@@ -45,18 +56,24 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
     @Synchronized fun mode(mode: String): Boolean {
         require(mode in setOf("yolo", "yolo_lk"))
         if (mutableUi.value.recording) return false
+        preparationRevision++
         mutableUi.update { it.copy(mode = mode) }
         return true
     }
     @Synchronized fun start() {
         if (mutableUi.value.recording) return
+        val selected = reservation.also { reservation = null }
+        if (requiresReservation && selected == null) {
+            mutableUi.update { it.copy(issue = "Сначала подготовьте место в архиве журналов") }; return
+        }
         if (writer?.isFinished() == false) { mutableUi.update { it.copy(issue = "Ожидание завершения предыдущей записи") }; return }
         epoch++; start = clock(); geometry = null; image = null; fileFrameId = 0
         frames.clear(); detections.clear(); publications.clear(); truncated = false
         val sessionId = epoch
         mutableUi.value = mutableUi.value.copy(recording = true, report = null, issue = null, sessionId = sessionId)
         writer = try {
-            fileFactory?.invoke()?.let { file -> writerFactory(file, clock) { issue -> mutableUi.updateForSession(sessionId, { it.sessionId }) { it.copy(issue = issue) } } }
+            val issueCallback: (String) -> Unit = { issue -> mutableUi.updateForSession(sessionId, { it.sessionId }) { it.copy(issue = issue) } }
+            selected?.openWriter(clock, issueCallback) ?: fileFactory?.invoke()?.let { file -> writerFactory(file, clock, issueCallback) }
         } catch (e: Exception) {
             mutableUi.value = mutableUi.value.copy(recording = false, issue = "Ошибка создания записи: ${e.message ?: e.javaClass.simpleName}")
             return
@@ -98,6 +115,7 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
         add(publications, "{\"frame_id\":$frame,\"published_ns\":${now-start},\"bbox\":${value?.let(::box) ?: "null"},\"source\":\"$source\"}")
     }
     @Synchronized fun stop(reason: String? = null) {
+        preparationRevision++
         if (!mutableUi.value.recording) return
         val now = clock()
         if (writer != null) {

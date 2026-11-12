@@ -22,6 +22,7 @@
 | Общая модель/сессия | [detection/onnx](../../app/src/main/java/ru/university/dronecv/detection/onnx), [DetectorWorker](../../app/src/main/java/ru/university/dronecv/detection/DetectorWorker.kt) | ModelSpecTest, OnnxParityTest, ThreadSessionManagerTest |
 | Pre/postprocessing | [detection/yolo](../../app/src/main/java/ru/university/dronecv/detection/yolo) | LetterboxTest, PreprocessorTest, PostprocessorTest, Python parity |
 | Диагностика/экспорт | [diagnostics](../../app/src/main/java/ru/university/dronecv/diagnostics) | DiagnosticStatisticsTest, DiagnosticControllerTest, DiagnosticJsonInstrumentedTest, Python analyzer tests |
+| Архив двух типов журналов | [journals](../../app/src/main/java/ru/university/dronecv/journals) | JournalArchiveTest: восстановление, квоты, отмены, ошибки close и гонки; [политика](../guides/journal-archive.md) |
 | Тексты/тема/разрешения | [strings.xml](../../app/src/main/res/values/strings.xml), [Theme](../../app/src/main/java/ru/university/dronecv/ui/theme/Theme.kt), [manifest](../../app/src/main/AndroidManifest.xml) | Обе ориентации, большой шрифт, permission/export flow; фиксированная тёмная тема |
 
 Конкурентный доступ/жизненный цикл описаны в [сценариях](../internals/detection-lifecycle.md), а пути тестов — в [тестировании](testing.md). При поиске реализации удобно начинать с `rg 'requestThreads|selectionEpoch' app/src`, подставив нужный символ.

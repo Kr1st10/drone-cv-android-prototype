@@ -3,7 +3,6 @@ package ru.university.dronecv.diagnostics
 import android.app.Application
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Debug
@@ -22,8 +21,11 @@ import ru.university.dronecv.BuildConfig
 import ru.university.dronecv.timeline.updateForSession
 import ru.university.dronecv.timeline.TimelineWriter
 import ru.university.dronecv.timeline.quote
-import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.withContext
+import ru.university.dronecv.journals.JournalArchive
+import ru.university.dronecv.journals.JournalArchives
+import ru.university.dronecv.journals.JournalKind
 
 /** Activity-scoped: an interrupted report survives tab switches and Activity recreation. */
 class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) {
@@ -39,12 +41,37 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     private var sampler: Job? = null
     private var report: DiagnosticReport? = null
     private var timeline: TimelineWriter? = null
-    private var pendingExport: Pair<TimelineWriter, String?>? = null
+    private val archive = JournalArchives.get(app)
+    private var startRevision = 0L
     private val mutableUi = MutableStateFlow(DiagnosticUi())
     val ui = mutableUi.asStateFlow()
 
-    fun start(confidence: Float, threads: Int = 2, warmupCompletedFrames: Long = 0) = synchronized(lock) {
-        if (token != null) return@synchronized
+    fun start(confidence: Float, threads: Int = 2, warmupCompletedFrames: Long = 0,
+              activate: (() -> Unit) -> Unit = { it() }) {
+        val revision = synchronized(lock) {
+            if (token != null || mutableUi.value.starting) return
+            mutableUi.update { it.copy(starting = true, exportStatus = null) }
+            ++startRevision
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            var reservation: JournalArchive.Recording? = null
+            try {
+                reservation = archive.reserve(JournalKind.DIAGNOSTIC)
+                val selected = reservation
+                withContext(Dispatchers.Main.immediate) {
+                    activate { startReserved(confidence, threads, warmupCompletedFrames, selected, revision) }
+                }
+            } catch (e: Exception) {
+                mutableUi.update { it.copy(exportStatus = "Запись не началась: ${e.message}") }
+            } finally {
+                reservation?.close()
+                mutableUi.update { it.copy(starting = false) }
+            }
+        }
+    }
+    private fun startReserved(confidence: Float, threads: Int, warmupCompletedFrames: Long,
+                              reservation: JournalArchive.Recording, revision: Long) = synchronized(lock) {
+        if (startRevision != revision || token != null) return@synchronized
         if (timeline?.isFinished() == false) { mutableUi.update { it.copy(exportStatus = "Ожидание завершения предыдущей записи") }; return@synchronized }
         require(threads in setOf(1, 2, 4) && warmupCompletedFrames >= 0)
         startedNs = System.nanoTime(); startedEpochMs = System.currentTimeMillis(); threshold = confidence
@@ -54,7 +81,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
         mutableUi.value = DiagnosticUi(recording = true, sessionId = sessionId)
         val timelineStartNs = SystemClock.elapsedRealtimeNanos()
         val writer = try {
-            TimelineWriter(File(app.filesDir, "diagnostic-${UUID.randomUUID()}.ndjson"), SystemClock::elapsedRealtimeNanos, onIssue = { issue -> mutableUi.updateForSession(sessionId, { it.sessionId }) { it.copy(recordingIssue = issue) } })
+            reservation.openWriter(SystemClock::elapsedRealtimeNanos, onIssue = { issue -> mutableUi.updateForSession(sessionId, { it.sessionId }) { it.copy(recordingIssue = issue) } })
         } catch (e: Exception) {
             frames.stop(id, System.nanoTime(), true, "Cannot create recording")
             token = null
@@ -80,6 +107,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
         }
     }
     fun stop(interrupted: Boolean = false, reason: String? = null) = synchronized(lock) {
+        startRevision++
         val id = token ?: return@synchronized
         token = null; sampler?.cancel(); sampler = null
         val stopNs = System.nanoTime()
@@ -97,22 +125,6 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             synchronized(lock) {
                 if (report === result && token == null) mutableUi.update { it.copy(pipeline = pipeline, ort = ort) }
             }
-        }
-    }
-    fun prepareExport() = synchronized(lock) { pendingExport = timeline?.let { it to mutableUi.value.sessionId } }
-    fun cancelExport() = synchronized(lock) { pendingExport = null }
-    fun export(uri: Uri) {
-        val (saved, sessionId) = synchronized(lock) { pendingExport.also { pendingExport = null } } ?: return
-        mutableUi.updateForSession(sessionId, { it.sessionId }) { it.copy(exportStatus = "Сохранение…") }
-        viewModelScope.launch(Dispatchers.IO) {
-            val result = try {
-                saved.awaitFinished()
-                app.contentResolver.openOutputStream(uri)?.use { output -> saved.copyTo(output) }
-                    ?: error("Не удалось открыть файл")
-                "Отчёт сохранён"
-            } catch (e: Exception) { "Ошибка экспорта: ${e.message ?: e.javaClass.simpleName}" }
-            val issue = saved.integrityIssue()
-            mutableUi.updateForSession(sessionId, { it.sessionId }) { it.copy(exportStatus = result, recordingIssue = issue ?: it.recordingIssue) }
         }
     }
     private fun sampleResources(start: Long): ResourceSample {
@@ -135,4 +147,4 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
 
 data class DiagnosticUi(val recording: Boolean = false, val report: DiagnosticReport? = null, val exportStatus: String? = null,
                         val pipeline: DurationSummary? = null, val ort: DurationSummary? = null, val elapsedSeconds: Long = 0,
-                        val sessionId: String? = null, val recordingIssue: String? = null)
+                        val sessionId: String? = null, val recordingIssue: String? = null, val starting: Boolean = false)
