@@ -5,8 +5,29 @@
   const status=s=>{$('reportStatus').textContent=s;};
   function invalidate(){output=null; $('reportExport').disabled=true; $('reportOutput').textContent='';}
   async function parse(file){return JSON.parse(await file.text());}
+  async function parseJournal(file) {
+    // Bound memory even for a damaged file; a 30-minute session normally fits.
+    if(file.size>256*1024*1024) throw Error('Журнал больше допустимых 256 МиБ.');
+    const prefix=await file.slice(0,512).text();
+    if(!prefix.includes('dronecv-session-timeline-')) return parse(file);
+    const parser=MotionReport.timelineImporter(), reader=file.stream().getReader(), decoder=new TextDecoder('utf-8',{fatal:true});
+    let pending='', partial=false;
+    while(true) {
+      const {value,done}=await reader.read();
+      pending+=decoder.decode(value||new Uint8Array(),{stream:!done});
+      let i;
+      while((i=pending.indexOf('\n'))>=0) {
+        const line=pending.slice(0,i);pending=pending.slice(i+1);
+        try {parser.push(JSON.parse(line));} catch(err) {if(err instanceof SyntaxError){partial=true;break;}throw err;}
+      }
+      if(partial || done) break;
+      if(pending.length>16*1024*1024) throw Error('Слишком длинная строка журнала.');
+    }
+    if(pending.length) partial=true;
+    return parser.finish(partial);
+  }
   $('reportReference').onchange=async e=>{ try { const data=await parse(e.target.files[0]); runs=data.schema==='dronecv-motion-series-1'?data.runs:[data]; if(!Array.isArray(runs)||runs.some(r=>r.schema!=='dronecv-motion-run-1')) throw Error('Неверный эталон.'); invalidate(); status(`Загружено эталонов: ${runs.length}.`); } catch(err){runs=[];invalidate();status(err.message);} };
-  $('reportJournals').onchange=async e=>{ try { journals=await Promise.all([...e.target.files].map(async f=>({name:f.name,data:await parse(f),points:[]}))); if(journals.some(j=>j.data.schema!=='dronecv-motion-android-1')) throw Error('Неверный журнал Android.'); const sel=$('reportSelect'); sel.replaceChildren(); journals.forEach((j,i)=>{const o=document.createElement('option');o.value=i;o.textContent=j.name;sel.append(o);}); invalidate(); await show(); } catch(err){journals=[];invalidate();status(err.message);} };
+  $('reportJournals').onchange=async e=>{ try { journals=await Promise.all([...e.target.files].map(async f=>({name:f.name,data:await parseJournal(f),points:[]}))); if(journals.some(j=>j.data.schema!=='dronecv-motion-android-1')) throw Error('Неверный журнал Android.'); const sel=$('reportSelect'); sel.replaceChildren(); journals.forEach((j,i)=>{const o=document.createElement('option');o.value=i;o.textContent=j.name;sel.append(o);}); invalidate(); await show(); } catch(err){journals=[];invalidate();status(err.message);} };
   function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);if(image)ctx.drawImage(image,0,0); const j=journals[Number($('reportSelect').value)]; j?.points.forEach(([x,y],i)=>{ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(x*canvas.width,y*canvas.height,6,0,2*Math.PI);ctx.fill();ctx.font='bold 20px sans-serif';ctx.fillText(['TL','TR','BR','BL'][i],x*canvas.width+8,y*canvas.height-8);});}
   async function show(){const request=++imageRequest;const j=journals[Number($('reportSelect').value)]; image=null;canvas.width=canvas.height=0;if(!j)return; const url=j.data.calibration_image?.data_url; if(typeof url!=='string'||!url.startsWith('data:image/jpeg;base64,')){status('В журнале нет калибровочного JPEG.');return;} const img=new Image(); try {await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Кадр не удалось декодировать.'));img.src=url;}); if(request!==imageRequest)return; if(img.naturalWidth!==j.data.calibration_image.width||img.naturalHeight!==j.data.calibration_image.height)throw Error('Размер кадра не совпадает с журналом.'); image=img;canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;draw();status(`Отмечено точек: ${j.points.length} из 4.`);}catch(err){if(request===imageRequest)status(err.message);} }
   $('reportSelect').onchange=show;

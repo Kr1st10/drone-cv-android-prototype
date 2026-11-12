@@ -41,6 +41,8 @@ class CameraFrameSnapshot(
     val rotationDegrees: Int,
     val conversionMs: Double,
     private val lease: CameraFramePool.Lease,
+    val sourceWidth: Int? = null, val sourceHeight: Int? = null,
+    val cropLeft: Int? = null, val cropTop: Int? = null, val cropRight: Int? = null, val cropBottom: Int? = null,
 ) : AutoCloseable {
     init {
         require(rotationDegrees in setOf(0, 90, 180, 270))

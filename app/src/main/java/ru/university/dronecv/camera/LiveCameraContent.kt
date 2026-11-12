@@ -126,7 +126,7 @@ private fun LiveControls(
         if (uri != null && report != null) scope.launch {
             exportStatus = try {
                 withContext(Dispatchers.IO) {
-                    checkNotNull(context.contentResolver.openOutputStream(uri)).use { it.write(report.toByteArray(Charsets.UTF_8)) }
+                    checkNotNull(context.contentResolver.openOutputStream(uri)).use { output -> motion.copyExport(report, output) }
                 }
                 "Журнал сохранён"
             } catch (e: Exception) { "Не удалось сохранить журнал: ${e.message ?: e.javaClass.simpleName}" }
@@ -210,21 +210,23 @@ private fun LiveControls(
         Text("Режим: ${if (motionUi.mode == "yolo") "A: YOLO" else "B: YOLO + LK"}", style = MaterialTheme.typography.bodySmall)
         if (motionUi.recording) Button(onClick = { motion.stop() }, modifier = Modifier.fillMaxWidth()) { Text("Завершить запись стенда") }
         else {
-            Button(onClick = { diagnostics.stop(true, "Motion recording started"); controller.configure(false, confidence); motion.start(); controller.configure(true, confidence) }, enabled = running && state.phase == LivePhase.RUNNING,
+            Button(onClick = { diagnostics.stop(true, "Motion recording started"); controller.startRecording(cameraContext(probe)) }, enabled = running && state.phase == LivePhase.RUNNING,
                 modifier = Modifier.fillMaxWidth()) { Text("Начать запись стенда") }
-            if (motionUi.report != null) Button(onClick = { motionModel.pendingExport = motionUi.report; saveMotion.launch("drone-motion.json") }, modifier = Modifier.fillMaxWidth()) { Text("Экспорт стенда JSON") }
+            if (motionUi.report != null && motion.exportFile() != null) Button(onClick = { motionModel.pendingExport = motion.selectExport(); saveMotion.launch("drone-motion.ndjson") }, modifier = Modifier.fillMaxWidth()) { Text("Экспорт стенда NDJSON") }
         }
+        motionUi.issue?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         exportStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING && !threadState.switching,
-            confidence, threadState.threads, state.completedFrames)
+            confidence, threadState.threads, state.completedFrames,
+            onStart = { controller.startDiagnostics(cameraContext(probe)) { diagnostics.start(confidence, threadState.threads, state.completedFrames) } })
         Text("Камера ID: ${probe.logicalId ?: "неизвестно"}; физический запрос: ${probe.physicalId ?: "авто"} · запрошено ${probe.requestedZoom}× · текущий zoomRatio ${probe.actualZoom ?: "неизвестен"}", style = MaterialTheme.typography.bodySmall)
         Text("Последний Camera2 zoomRatio: ${probe.captureZoom ?: "не сообщён"} (не оптическая кратность)",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("camera-capture-zoom"))
         Text(sensorEvidence(probe.activePhysicalId, probe.physicalIds.toSet()), style = MaterialTheme.typography.bodySmall)
         Text("Физический ID не доказывает тип объектива; 5× может быть цифровым.", style = MaterialTheme.typography.bodySmall)
         fun change(zoom: Float, physical: String?) {
+            controller.configure(false, confidence, "camera_configuration_changed")
             diagnostics.stop(true, "Camera zoom or physical camera changed")
-            controller.configure(false, confidence)
             probe.activePhysicalId = null; probe.actualZoom = null; probe.captureZoom = null; probe.warning = null; probe.loading = true
             probe.physicalId = physical; probe.requestedZoom = zoom; probe.selectionEpoch++
         }
@@ -273,3 +275,14 @@ private fun LiveOverlay(state: LiveState, yoloOnly: Boolean, modifier: Modifier)
 }
 
 private fun format(value: Double) = String.format(Locale.US, "%.1f", value)
+
+private fun cameraContext(probe: CameraProbeState): String {
+    fun q(value: String?): String = value?.let { ru.university.dronecv.timeline.quote(it) } ?: "null"
+    return "{\"logical_id\":${q(probe.logicalId)},\"requested_physical_id\":${q(probe.physicalId)}," +
+        "\"latest_active_physical_id\":${q(probe.activePhysicalId)},\"requested_zoom\":${probe.requestedZoom}," +
+        "\"confirmed_zoom\":${probe.actualZoom},\"latest_capture_zoom\":${probe.captureZoom}," +
+        "\"scope\":\"latest_context_not_frame_bound\",\"requested_af\":${probe.requestedAf},\"actual_af\":${probe.actualAf},\"available_af\":${probe.availableAf},\"requested_ae\":${probe.requestedAe},\"actual_ae\":${probe.actualAe},\"available_ae\":${probe.availableAe},\"requested_stabilization\":${probe.requestedStabilization},\"actual_stabilization\":${probe.actualStabilization},\"available_stabilization\":${probe.availableStabilization}, " +
+        "\"git_sha\":${q(ru.university.dronecv.BuildConfig.BUILD_GIT_SHA)},\"git_dirty\":${ru.university.dronecv.BuildConfig.BUILD_GIT_DIRTY}," +
+        "\"app_version\":${q(ru.university.dronecv.BuildConfig.VERSION_NAME)},\"model_asset\":${q(ru.university.dronecv.BuildConfig.DRONE_MODEL_ASSET)}," +
+        "\"model_sha256\":${q(ru.university.dronecv.BuildConfig.DRONE_MODEL_SHA256)},\"device\":${q(android.os.Build.MODEL)},\"android_release\":${q(android.os.Build.VERSION.RELEASE)}}"
+}

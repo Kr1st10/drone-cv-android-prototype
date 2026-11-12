@@ -95,8 +95,8 @@ internal fun CameraPreview(
     var activationEpoch by remember { mutableLongStateOf(0L) }
 
     fun suspendAnalysis() {
+        controller.configure(false, currentConfidence, "camera_interrupted_or_rebound")
         currentOnInterruption()
-        controller.configure(false, currentConfidence)
         activationEpoch++ // even pause/resume coalesced before recomposition needs a new analyzer token.
     }
 
@@ -173,8 +173,17 @@ internal fun CameraPreview(
                         result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID) else null
                     val zoom = if (Build.VERSION.SDK_INT >= 30)
                         result.get(CaptureResult.CONTROL_ZOOM_RATIO) else null
+                    val requestedAf = request.get(CaptureRequest.CONTROL_AF_MODE)
+                    val requestedAe = request.get(CaptureRequest.CONTROL_AE_MODE)
+                    val requestedStabilization = request.get(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE)
+                    val actualAf = result.get(CaptureResult.CONTROL_AF_MODE)
+                    val actualAe = result.get(CaptureResult.CONTROL_AE_MODE)
+                    val actualStabilization = result.get(CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE)
                     handler.post {
                         if (!disposed && probe.selectionEpoch == selectionEpoch) {
+                            probe.requestedAf = requestedAf; probe.requestedAe = requestedAe
+                            probe.requestedStabilization = requestedStabilization
+                            probe.actualAf = actualAf; probe.actualAe = actualAe; probe.actualStabilization = actualStabilization
                             if (probe.activePhysicalId != id || probe.captureZoom != zoom) {
                                 Log.i("CameraPreview", "Camera2 logical=${probe.logicalId}, requestedZoom=$selectedZoom, " +
                                     "reportedZoom=$zoom, activePhysicalId=$id; lens type unconfirmed")
@@ -253,6 +262,15 @@ internal fun CameraPreview(
                             if (source == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME)
                                 CaptureTimebase.ELAPSED_REALTIME else CaptureTimebase.UNKNOWN
                         } catch (_: Exception) { CaptureTimebase.UNKNOWN }
+                        try {
+                            val characteristics = context.getSystemService(CameraManager::class.java)
+                                .getCameraCharacteristics(selectedPhysical ?: logicalId)
+                            probe.availableAf = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList()
+                            probe.availableAe = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES)?.toList()
+                            probe.availableStabilization = characteristics.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.toList()
+                        } catch (_: Exception) {
+                            probe.availableAf = null; probe.availableAe = null; probe.availableStabilization = null
+                        }
                         probe.logicalId = logicalId
                         probe.physicalIds = if (Build.VERSION.SDK_INT >= 28) try {
                             context.getSystemService(CameraManager::class.java).getCameraCharacteristics(logicalId).physicalCameraIds.sorted()

@@ -21,7 +21,7 @@ class AndroidLiveBackend(context: Context, initialThreads: Int = 2) : LiveBacken
                 PostprocessConfig(confidenceThreshold = confidence))
             return LiveInference(result.detections.map { it.toDetection(result.imageWidth, result.imageHeight) },
                 result.imageWidth, result.imageHeight, result.inferenceMs,
-                frame.conversionMs, result.preprocessMs, result.postprocessMs)
+                frame.conversionMs, result.preprocessMs, result.postprocessMs, active.inputSize)
         } catch (e: Exception) {
             Log.e("LiveDetection", "Frame inference failed", e)
             throw e

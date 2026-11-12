@@ -102,7 +102,7 @@ private fun StringBuilder.appendTracking(snapshot: TrackingSnapshot, durationNs:
     append("]}")
 }
 
-private fun StringBuilder.appendTrackingSample(offsetMs: Double, signal: TrackingSignal) {
+internal fun StringBuilder.appendTrackingSample(offsetMs: Double, signal: TrackingSignal) {
     val o = signal.observation
     val box = signal.box
     val quality = o.estimate?.quality

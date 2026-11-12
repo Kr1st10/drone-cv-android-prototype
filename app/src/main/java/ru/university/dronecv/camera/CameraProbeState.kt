@@ -20,6 +20,15 @@ internal class CameraProbeState {
     var actualZoom by mutableStateOf<Float?>(null)
     // Camera2 result metadata, separate from CameraX ZoomState; never optical-lens evidence.
     var captureZoom by mutableStateOf<Float?>(null)
+    var requestedAf: Int? by mutableStateOf(null)
+    var requestedAe: Int? by mutableStateOf(null)
+    var requestedStabilization: Int? by mutableStateOf(null)
+    var actualAf: Int? by mutableStateOf(null)
+    var actualAe: Int? by mutableStateOf(null)
+    var actualStabilization: Int? by mutableStateOf(null)
+    var availableAf: List<Int>? by mutableStateOf(null)
+    var availableAe: List<Int>? by mutableStateOf(null)
+    var availableStabilization: List<Int>? by mutableStateOf(null)
     var loading by mutableStateOf(false)
     var warning by mutableStateOf<String?>(null)
 

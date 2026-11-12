@@ -93,7 +93,7 @@
       while(gapIndex<missingIds.length && missingIds[gapIndex]<f.frame_id) gapIndex++;
       const gap=gapIndex<missingIds.length && missingIds[gapIndex]<n.frame_id;
       const c=matched(f), following=matched(n);
-      const known=!gap && compatible(f) && compatible(n) && following.step_id>=c.step_id && b-a<=MAX_GAP_NS;
+      const known=!journal.truncated && !gap && compatible(f) && compatible(n) && following.step_id>=c.step_id && b-a<=MAX_GAP_NS;
       while(pi<pubs.length && pubs[pi].published_ns<=a) active=pubs[pi++];
       let t=a;
       while(t<b) {
@@ -157,8 +157,70 @@
     else if(!boundaries) decision_reason='Нет подтверждения начальной и конечной пустых фаз.';
     else if(reversed) decision_reason='Нарушен порядок меток сценария.';
     else if(uncertainLoss) decision_reason='Неизвестный участок может скрывать длинный провал.';
-    return {run_id:run.run_id,mode:run.mode,criterion_version:'motion-retention-v3',decision_reason,clock,timing_status:timingStatus,offset_lower_ms:finite(lo)?lo/1e6:null,offset_upper_ms:finite(hi)?hi/1e6:null,total_frames:allFrames.length,matched_frames:matchedFrames,missing_markers:missing,unmatched_markers:other,marker_order_invalid:reversed,alignment_invalid:alignmentInvalid,unknown_may_hide_long_failure:uncertainLoss,coverage,expected_ms:expected/1e6,evaluated_ms:evaluated/1e6,good_ms:good/1e6,bad_ms:bad/1e6,unknown_ms:unknown/1e6,good_fraction:ratio,good_fraction_lower:lower,good_fraction_upper:upper,longest_failure_ms:longest/1e6,longest_possible_failure_ms:longestPossible/1e6,blank_evaluated_ms:blank/1e6,false_box_blank_ms:falseBlank/1e6,false_box_blank_intervals:falseBlankIntervals,capture_latency_ms:capture?(capture.published_ns-first.capture_ns)/1e6:null,capture_frame_id:capture?.frame_id??null,sufficient,pass};
+    return {run_id:run.run_id,mode:run.mode,criterion_version:'motion-retention-v3',decision_reason,clock,timing_status:timingStatus,offset_lower_ms:finite(lo)?lo/1e6:null,offset_upper_ms:finite(hi)?hi/1e6:null,total_frames:allFrames.length,matched_frames:matchedFrames,missing_markers:missing,unmatched_markers:other,marker_order_invalid:reversed,alignment_invalid:alignmentInvalid,unknown_may_hide_long_failure:uncertainLoss,coverage,expected_ms:expected/1e6,evaluated_ms:evaluated/1e6,good_ms:good/1e6,bad_ms:bad/1e6,unknown_ms:unknown/1e6,good_fraction:ratio,good_fraction_lower:lower,good_fraction_upper:upper,longest_failure_ms:longest/1e6,longest_possible_failure_ms:longestPossible/1e6,blank_evaluated_ms:blank/1e6,false_box_blank_ms:falseBlank/1e6,false_box_blank_intervals:falseBlankIntervals,capture_latency_ms:capture?(capture.published_ns-first.capture_ns)/1e6:null,capture_frame_id:capture?(frameById.get(capture.frame_id)?.original_frame_id??capture.frame_id):null,recording_complete:journal.recording_complete??null,experiment_status:journal.experiment_status??null,sufficient,pass};
   }
+
+  // Long timestamps are subtracted as BigInt before converting to Number. Frame
+  // IDs remain available as strings; the legacy evaluator uses dense indices.
+  function timelineImporter() {
+    let start=null, session=null, lastId=null, footer=null, broken=false, latest=0, accepted=0n, missing=0n, firstMissing=null, lastMissing=null;
+    const j={schema:'dronecv-motion-android-1',frames:[],detections:[],publications:[],complete:false,truncated:true};
+    const ids=new Map();
+    const integer=(v,name)=>{if(typeof v!=='string'||!/^\d+$/.test(v)) throw Error(`Некорректное поле ${name}.`);return BigInt(v);};
+    const relative=(v,name)=>{if(v==null)return null;const n=integer(v,name)-start;if(n < -BigInt(Number.MAX_SAFE_INTEGER)||n > BigInt(Number.MAX_SAFE_INTEGER)) throw Error('Длительность превышает точный диапазон JavaScript.');return Number(n);};
+    function push(row) {
+      if(row?.schema!=='dronecv-session-timeline-1') throw Error(`Неподдерживаемая версия журнала: ${row?.schema}`);
+      if(!row.data || typeof row.data!=='object'||typeof row.session_id!=='string') throw Error('Некорректная запись журнала.');
+      const id=integer(row.event_id,'event_id'); integer(row.event_ns,'event_ns');
+      if(session===null) session=row.session_id;
+      if(session!==row.session_id||footer || (lastId===null && id!==1n)) broken=true;
+      if(lastId!==null && id!==lastId+1n) {broken=true;if(id>lastId+1n){missing+=id-lastId-1n;firstMissing??=lastId+1n;lastMissing=id-1n;}}
+      lastId=id; const d=row.data;
+      if(start!==null) latest=Math.max(latest,relative(row.event_ns,'event_ns'));
+      if(row.type==='state' && start!==null) latest=Math.max(latest,relative(d.publication_ns,'publication_ns'));
+      if(row.type!=='session_end' && row.type!=='recording_failure') accepted++;
+      if(row.type==='header') { if(start!==null) throw Error('Повторный заголовок.');start=integer(d.start_ns,'start_ns');j.mode=d.mode; }
+      else if(start===null) throw Error('Отсутствует заголовок.');
+      else if(row.type==='metadata') { if(d.geometry)j.geometry=d.geometry;if(d.calibration_image)j.calibration_image=d.calibration_image; }
+      else if(row.type==='frame') {
+        integer(d.frame_id,'frame_id'); if(ids.has(d.frame_id)) throw Error('Повторный номер кадра.');
+        const dense=j.frames.length+1;ids.set(d.frame_id,dense);
+        const entry=relative(d.analyzer_entry_ns,'analyzer_entry_ns');
+        const raw=d.capture_ns==null?null:relative(d.capture_ns,'capture_ns');
+        const capture=d.timebase==='elapsed_realtime' && d.capture_ns!==null && integer(d.capture_ns,'capture_ns')>0n && raw<=entry ? raw:null;
+        j.frames.push({frame_id:dense,original_frame_id:d.frame_id,analyzer_ns:entry,capture_ns:capture,marker:d.marker});
+      } else if(row.type==='detection') {
+        j.detections.push({original_frame_id:d.frame_id,published_ns:relative(d.published_ns,'published_ns'),bbox:d.bbox,confidence:d.confidence});
+      } else if(row.type==='publication') {
+        j.publications.push({original_frame_id:d.frame_id,published_ns:relative(d.published_ns,'published_ns'),bbox:d.bbox,source:d.source});
+      } else if(row.type==='session_end') {footer=d;try {j.stop_ns=relative(d.stop_ns,'stop_ns');} catch (_) {broken=true;footer=null;}}
+      else if(row.type==='recording_failure') broken=true;
+      else if(!['state','resource','diagnostic_frame','tracking','frame_geometry','stale_discard','discard'].includes(row.type)) throw Error(`Неизвестная запись: ${row.type}`);
+    }
+    function finish(partial=false) {
+      if(start===null) throw Error('Отсутствует заголовок.');
+      let incomplete=partial || broken || !footer;
+      if(footer) try {
+        const dropped=integer(footer.dropped_count,'dropped_count');
+        const recorded=integer(footer.accepted_count,'accepted_count');
+        const written=integer(footer.written_count,'written_count');
+        const bounds=firstMissing===null ? footer.missing_first_event_id==null && footer.missing_last_event_id==null :
+          footer.missing_first_event_id===String(firstMissing) && footer.missing_last_event_id===String(lastMissing);
+        incomplete ||= footer.recording_complete!==true || dropped!==0n || dropped!==missing || recorded!==accepted || written!==accepted || !bounds;
+      } catch (_) {incomplete=true;}
+      for(const p of [...j.detections,...j.publications]) {
+        p.frame_id=p.original_frame_id===null?null:ids.get(p.original_frame_id);
+        if(p.frame_id===undefined) {if(!incomplete)throw Error('Ссылка на отсутствующий кадр.');p.frame_id=null;}
+      }
+      if(incomplete) j.detections=j.detections.filter(d=>d.frame_id!==null);
+      if(!footer) j.stop_ns=latest;
+      j.complete=!incomplete && footer.interrupted===false;j.truncated=incomplete;
+      j.recording_complete=!incomplete;j.experiment_status=footer?.experiment_status??'unknown';j.session_id=session;
+      return j;
+    }
+    return {push,finish};
+  }
+
   function maxima(items) {
     // Object key order in imported JSON does not change the experimental conditions.
     const canonical = value => Array.isArray(value) ? value.map(canonical) :
@@ -187,5 +249,5 @@
         run_ids:winner ? [...new Set(winner[1].map(e=>e.run_id))] : []};
     });
   }
-  return {homography,iou,analyze,maxima,MAX_GAP_NS,MIN_COVERAGE};
+  return {homography,iou,analyze,maxima,timelineImporter,MAX_GAP_NS,MIN_COVERAGE};
 });

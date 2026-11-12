@@ -52,6 +52,7 @@ data class TrackingSnapshot(
 
 /** Bounded, synchronized storage. Old session tokens can never publish into a new session. */
 class DiagnosticFrames(private val capacity: Int = 100_000, private val trackingCapacity: Int = 10_000) {
+    var timeline: ((String, String, Long) -> Unit)? = null
     init { require(capacity > 0 && trackingCapacity > 0) }
     private val lock = Any()
     private var generation = 0L
@@ -91,6 +92,9 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
         recording = true
         generation
     }
+    fun event(token: Long?, type: String, payloadJson: String, time: Long) = synchronized(lock) {
+        if (recording && token != null && token == generation) timeline?.invoke(type, payloadJson, time)
+    }
     fun currentToken(): Long? = synchronized(lock) { generation.takeIf { recording } }
     fun received(token: Long) = synchronized(lock) { if (recording && token == generation) received++ }
     fun input(token: Long, event: CameraInputEvent, copyMs: Double = 0.0) = synchronized(lock) {
@@ -105,6 +109,7 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
             preprocessMs.isFinite() && preprocessMs >= 0 && inferenceMs.isFinite() && inferenceMs >= 0 &&
             postprocessMs.isFinite() && postprocessMs >= 0 && pipelineMs.isFinite() && pipelineMs >= 0)
         completed++
+        timeline?.invoke("diagnostic_frame", "{\"completed_ns\":\"$endNanos\",\"offset_ns\":\"${endNanos-startNanos}\",\"conversion_ms\":$conversionMs,\"preprocess_ms\":$preprocessMs,\"ort_ms\":$inferenceMs,\"postprocess_ms\":$postprocessMs,\"pipeline_ms\":$pipelineMs,\"detection_count\":$detectionCount}", endNanos)
         if (frames.size < capacity) frames.add(FrameMeasurement(endNanos - startNanos, conversionMs,
             preprocessMs, inferenceMs, postprocessMs, pipelineMs, targetSignal, detectionCount)) else truncated++
     }
@@ -120,6 +125,11 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
                 previous.key.source == signal.observation.key.source) lossEvents++
         } else corrections++
         lastTrackingSignal = signal
+        val payload = buildString { appendTrackingSample((endNanos-startNanos) / 1e6, signal) }
+            .replace(Regex("\"(sequence|generation|source_id|track_id|capture_ns|analyzer_entry_ns|signal_dispatch_ns)\":(-?[0-9]+)")) {
+                "\"${it.groupValues[1]}\":\"${it.groupValues[2]}\""
+            }
+        timeline?.invoke("tracking", payload, endNanos)
         if (trackingSamples.size < trackingCapacity) trackingSamples.add(TrackingMeasurement(endNanos - startNanos, signal))
         else unstoredSamples++
     }

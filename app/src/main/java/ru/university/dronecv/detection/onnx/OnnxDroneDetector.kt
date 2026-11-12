@@ -29,6 +29,7 @@ class OnnxDroneDetector private constructor(private val engine: YoloOnnxEngine) 
 
     /** Метки классов модели (для текущей модели — `["drone"]`). */
     val labels: List<String> get() = engine.spec.labels
+    val inputSize: Int get() = engine.spec.inputSize
 
     override fun detect(frame: Bitmap, rotationDegrees: Int): List<Detection> {
         val result = detectDetailed(frame, rotationDegrees)

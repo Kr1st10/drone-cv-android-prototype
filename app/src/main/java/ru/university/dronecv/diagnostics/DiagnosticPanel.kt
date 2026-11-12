@@ -14,10 +14,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 
 @Composable
-fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: Float, threads: Int, warmupFrames: Long) {
+fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: Float, threads: Int, warmupFrames: Long, onStart: () -> Unit = { model.start(confidence, threads, warmupFrames) }) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) model.export(uri)
+        if (uri != null) model.export(uri) else model.cancelExport()
     }
     Text("Диагностика", style = MaterialTheme.typography.titleSmall)
     Text("Прогрев до записи: $warmupFrames обработанных кадров; сессия начинается вручную.", style = MaterialTheme.typography.bodySmall)
@@ -25,7 +25,7 @@ fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: 
         Text("Сессия: ${ui.elapsedSeconds} с. При фоне или выключении экрана она будет помечена прерванной.", style = MaterialTheme.typography.bodySmall)
         Button(onClick = { model.stop() }, modifier = Modifier.fillMaxWidth().testTag("diagnostic-stop")) { Text("Завершить сессию") }
     } else {
-        Button(onClick = { model.start(confidence, threads, warmupFrames) }, enabled = liveReady,
+        Button(onClick = onStart, enabled = liveReady,
             modifier = Modifier.fillMaxWidth().testTag("diagnostic-start")) { Text("Начать сессию") }
         if (!liveReady) Text("Сначала запустите детекцию и дождитесь кадра.", style = MaterialTheme.typography.bodySmall)
     }
@@ -39,8 +39,8 @@ fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: 
                 style = MaterialTheme.typography.bodySmall)
         }
         ui.ort?.let { Text("ORT: среднее ${fmt(it.mean)}, медиана ${fmt(it.median)} мс", style = MaterialTheme.typography.bodySmall) }
-        Button(onClick = { save.launch("drone-performance-${report.startEpochMs}.json") },
-            modifier = Modifier.fillMaxWidth().testTag("diagnostic-export")) { Text("Экспорт JSON") }
+        Button(onClick = { model.prepareExport(); save.launch("drone-performance-${report.startEpochMs}.ndjson") },
+            modifier = Modifier.fillMaxWidth().testTag("diagnostic-export")) { Text("Экспорт NDJSON") }
     }
     ui.exportStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }

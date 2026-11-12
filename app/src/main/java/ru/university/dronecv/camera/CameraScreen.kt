@@ -68,9 +68,10 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
         }
         LiveController(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads,
             eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking, motion = motion,
-            motionFrame = { frame, token, stamp -> recordMotionFrame(motion, frame, token, stamp) })
+            motionFrame = { frame, token, stamp -> recordMotionFrame(motion, frame, token, stamp) },
+            onFailure = { diagnostics.stop(true, "Detector error: $it") })
     }
-    DisposableEffect(controller) { onDispose { diagnostics.stop(true, "Camera screen disposed"); controller.close() } }
+    DisposableEffect(controller) { onDispose { controller.close(); diagnostics.stop(true, "Camera screen disposed") } }
     val liveState by controller.state.collectAsStateWithLifecycle()
     val threadState by controller.threadConfiguration.collectAsStateWithLifecycle()
     LaunchedEffect(threadState.threads) { onThreadsChanged(threadState.threads) }
@@ -106,7 +107,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
             hasPermission = granted
             if (granted) permanentlyDenied = false
         }
-        onPauseOrDispose { diagnostics.stop(true, "Activity paused or screen turned off"); motion.stop("Activity paused") }
+        onPauseOrDispose { controller.configure(false, confidence, "activity_paused"); diagnostics.stop(true, "Activity paused or screen turned off"); motion.stop("Activity paused") }
     }
 
     LaunchedEffect(Unit) {
@@ -150,12 +151,12 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
                     running = running,
                     confidence = confidence,
                     onRunningChange = {
-                        if (!it) { diagnostics.stop(true, "Detection stopped"); controller.configure(false, confidence) }
+                        if (!it) { controller.configure(false, confidence); diagnostics.stop(true, "Detection stopped") }
                         running = it
                     },
-                    onConfidenceChange = { diagnostics.stop(true, "Confidence changed"); controller.updateThreshold(it); onConfidenceChange(it) },
+                    onConfidenceChange = { controller.updateThreshold(it); diagnostics.stop(true, "Confidence changed"); onConfidenceChange(it) },
                     recoverableIssue = recoverableIssue?.let { recoverableIssueText(it) },
-                    onCameraError = { diagnostics.stop(true, "Camera error: ${it.message}"); controller.configure(false, confidence); cameraError = it },
+                    onCameraError = { controller.configure(false, confidence, "camera_error"); diagnostics.stop(true, "Camera error: ${it.message}"); cameraError = it },
                     onCameraIssue = { recoverableIssue = it },
                 )
             }

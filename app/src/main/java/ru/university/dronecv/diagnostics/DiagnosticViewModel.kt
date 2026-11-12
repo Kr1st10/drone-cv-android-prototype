@@ -8,6 +8,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.Debug
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import ru.university.dronecv.BuildConfig
+import ru.university.dronecv.timeline.TimelineWriter
+import ru.university.dronecv.timeline.quote
+import java.io.File
+import java.util.UUID
 
 /** Activity-scoped: an interrupted report survives tab switches and Activity recreation. */
 class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) {
@@ -31,29 +36,39 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     private val resources = ArrayList<ResourceSample>()
     private var sampler: Job? = null
     private var report: DiagnosticReport? = null
+    private var timeline: TimelineWriter? = null
+    private var pendingExport: TimelineWriter? = null
     private val mutableUi = MutableStateFlow(DiagnosticUi())
     val ui = mutableUi.asStateFlow()
-    private val exporter = DiagnosticExporter<Uri>(lock, viewModelScope, Dispatchers.IO,
-        currentReport = { report },
-        status = { mutableUi.value = mutableUi.value.copy(exportStatus = it) },
-        write = { saved, uri ->
-            val stream = app.contentResolver.openOutputStream(uri) ?: error("Не удалось открыть файл")
-            stream.bufferedWriter(Charsets.UTF_8).use { it.write(saved.toJson()) }
-        })
 
     fun start(confidence: Float, threads: Int = 2, warmupCompletedFrames: Long = 0) = synchronized(lock) {
         if (token != null) return@synchronized
+        if (timeline?.isFinished() == false) { mutableUi.value = mutableUi.value.copy(exportStatus = "Ожидание завершения предыдущей записи"); return@synchronized }
         require(threads in setOf(1, 2, 4) && warmupCompletedFrames >= 0)
         startedNs = System.nanoTime(); startedEpochMs = System.currentTimeMillis(); threshold = confidence
         intraThreads = threads; warmupFrames = warmupCompletedFrames
         val id = frames.start(startedNs); token = id; resources.clear(); report = null
         mutableUi.value = DiagnosticUi(recording = true)
+        val timelineStartNs = SystemClock.elapsedRealtimeNanos()
+        val writer = try {
+            TimelineWriter(File(app.filesDir, "diagnostic-${UUID.randomUUID()}.ndjson"), SystemClock::elapsedRealtimeNanos, onIssue = { issue -> mutableUi.value = mutableUi.value.copy(exportStatus = issue) })
+        } catch (e: Exception) {
+            frames.stop(id, System.nanoTime(), true, "Cannot create recording")
+            token = null
+            mutableUi.value = DiagnosticUi(exportStatus = "Ошибка создания записи: ${e.message ?: e.javaClass.simpleName}")
+            return@synchronized
+        }
+        timeline = writer
+        writer.record("header", "{\"start_ns\":\"$timelineStartNs\",\"started_epoch_ms\":\"$startedEpochMs\",\"clock\":\"elapsed_realtime_ns\",\"measurement_clock\":\"monotonic_nano_time\",\"device\":${quote("${Build.MANUFACTURER} ${Build.MODEL}")},\"android_release\":${quote(Build.VERSION.RELEASE)},\"app_version\":${quote(BuildConfig.VERSION_NAME)},\"model_asset\":${quote(BuildConfig.DRONE_MODEL_ASSET)},\"model_sha256\":${quote(BuildConfig.DRONE_MODEL_SHA256)},\"confidence\":$confidence,\"intra_op_threads\":$threads}", timelineStartNs)
+        frames.timeline = { type, data, _ -> writer.record(type, data, SystemClock.elapsedRealtimeNanos()) }
         sampler = viewModelScope.launch(Dispatchers.Default) {
             while (true) {
                 val sample = sampleResources(startedNs)
                 synchronized(lock) {
                     if (token == id) {
+                        if (resources.size == 720) resources.removeAt(0)
                         resources.add(sample)
+                        timeline?.record("resource", "{\"offset_ns\":\"${sample.offsetNanos}\",\"pss_kb\":${sample.pssKb},\"thermal_status\":${sample.thermalStatus},\"battery_percent\":${sample.batteryPercent}}", SystemClock.elapsedRealtimeNanos())
                         mutableUi.value = mutableUi.value.copy(elapsedSeconds = sample.offsetNanos / 1_000_000_000L)
                     }
                 }
@@ -64,12 +79,15 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     fun stop(interrupted: Boolean = false, reason: String? = null) = synchronized(lock) {
         val id = token ?: return@synchronized
         token = null; sampler?.cancel(); sampler = null
-        val snapshot = frames.stop(id, System.nanoTime(), interrupted, reason) ?: return@synchronized
+        val stopNs = System.nanoTime()
+        val snapshot = frames.stop(id, stopNs, interrupted, reason) ?: return@synchronized
+        frames.timeline = null
+        timeline?.finish(SystemClock.elapsedRealtimeNanos(), interrupted, reason)
         val result = DiagnosticReport(startedEpochMs, "${Build.MANUFACTURER} ${Build.MODEL}", Build.VERSION.RELEASE,
             Build.VERSION.SDK_INT, BuildConfig.VERSION_NAME, BuildConfig.DRONE_MODEL_ASSET, BuildConfig.DRONE_MODEL_SHA256, threshold,
             snapshot, resources.toList(), intraThreads, BuildConfig.BUILD_TYPE, warmupFrames)
         report = result
-        mutableUi.value = DiagnosticUi(recording = false, report = result)
+        mutableUi.value = DiagnosticUi(recording = false, report = result, exportStatus = mutableUi.value.exportStatus)
         viewModelScope.launch(Dispatchers.Default) {
             val pipeline = durationSummary(snapshot.frames.map { it.pipelineMs })
             val ort = durationSummary(snapshot.frames.map { it.inferenceMs })
@@ -78,8 +96,20 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             }
         }
     }
+    fun prepareExport() = synchronized(lock) { pendingExport = timeline }
+    fun cancelExport() = synchronized(lock) { pendingExport = null }
     fun export(uri: Uri) {
-        exporter.export(uri)
+        val saved = synchronized(lock) { pendingExport.also { pendingExport = null } } ?: return
+        mutableUi.value = mutableUi.value.copy(exportStatus = "Сохранение…")
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = try {
+                saved.awaitFinished()
+                app.contentResolver.openOutputStream(uri)?.use { output -> saved.copyTo(output) }
+                    ?: error("Не удалось открыть файл")
+                saved.error()?.let { "Запись неполна: $it" } ?: "Отчёт сохранён"
+            } catch (e: Exception) { "Ошибка экспорта: ${e.message ?: e.javaClass.simpleName}" }
+            synchronized(lock) { if (timeline === saved) mutableUi.value = mutableUi.value.copy(exportStatus = result) }
+        }
     }
     private fun sampleResources(start: Long): ResourceSample {
         val now = System.nanoTime()

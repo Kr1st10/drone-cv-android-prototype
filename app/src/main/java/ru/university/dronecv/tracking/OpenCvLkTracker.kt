@@ -20,6 +20,21 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
+object LkParameters {
+    const val MAX_POINTS = 32
+    const val CORNER_QUALITY = .02
+    const val CORNER_DISTANCE = 2.0
+    const val WINDOW = 15.0
+    const val PYRAMID_LEVELS = 2
+    const val ITERATIONS = 20
+    const val EPSILON = .03
+    const val FORWARD_BACK_ERROR = 1.0
+    const val INLIER_DISTANCE = 1.5
+    const val RETAINED_FRACTION = .5
+    const val MIN_CORRELATION = .6
+    const val MIN_POINTS = 4
+}
+
 /** Translation-only LK prototype. Native state is confined to its owner; never invoke on the UI thread. */
 class OpenCvLkTracker : VisualTracker {
     private var previous: Mat? = null
@@ -44,9 +59,9 @@ class OpenCvLkTracker : VisualTracker {
             val roi = mask.submat(ceil(box.top + 1).toInt(), floor(box.bottom - 1).toInt(),
                 ceil(box.left + 1).toInt(), floor(box.right - 1).toInt())
             try { roi.setTo(Scalar(255.0)) } finally { roi.release() }
-            Imgproc.goodFeaturesToTrack(image, corners, 32, .02, 2.0, mask, 3)
+            Imgproc.goodFeaturesToTrack(image, corners, LkParameters.MAX_POINTS, LkParameters.CORNER_QUALITY, LkParameters.CORNER_DISTANCE, mask, 3)
             val found = corners.toList()
-            if (found.size < MIN_POINTS) return null
+            if (found.size < LkParameters.MIN_POINTS) return null
             previous = mats.take(image)
             points = found
             initialPoints = found.size
@@ -84,33 +99,33 @@ class OpenCvLkTracker : VisualTracker {
             val backwardStatus = mats.own(MatOfByte())
             val forwardError = mats.own(MatOfFloat())
             val backwardError = mats.own(MatOfFloat())
-            val window = Size(15.0, 15.0)
-            val criteria = TermCriteria(TermCriteria.COUNT or TermCriteria.EPS, 20, .03)
+            val window = Size(LkParameters.WINDOW, LkParameters.WINDOW)
+            val criteria = TermCriteria(TermCriteria.COUNT or TermCriteria.EPS, LkParameters.ITERATIONS, LkParameters.EPSILON)
             Video.calcOpticalFlowPyrLK(checkNotNull(previous), image, old, next, forwardStatus,
-                forwardError, window, 2, criteria)
+                forwardError, window, LkParameters.PYRAMID_LEVELS, criteria)
             Video.calcOpticalFlowPyrLK(image, checkNotNull(previous), next, back, backwardStatus,
-                backwardError, window, 2, criteria)
+                backwardError, window, LkParameters.PYRAMID_LEVELS, criteria)
             val candidates = next.toList()
             val returned = back.toList()
             val ok = forwardStatus.toArray()
             val backOk = backwardStatus.toArray()
             val errors = points.indices.map { i -> hypot(points[i].x - returned[i].x, points[i].y - returned[i].y) }
             val valid = points.indices.filter { i ->
-                ok[i].toInt() != 0 && backOk[i].toInt() != 0 && errors[i].isFinite() && errors[i] <= 1.0 &&
+                ok[i].toInt() != 0 && backOk[i].toInt() != 0 && errors[i].isFinite() && errors[i] <= LkParameters.FORWARD_BACK_ERROR &&
                     candidates[i].x in 0.0..(frame.width - 1).toDouble() &&
                     candidates[i].y in 0.0..(frame.height - 1).toDouble()
             }
-            if (valid.size < MIN_POINTS) { close(); return null }
+            if (valid.size < LkParameters.MIN_POINTS) { close(); return null }
             val dx = median(valid.map { candidates[it].x - points[it].x })
             val dy = median(valid.map { candidates[it].y - points[it].y })
             val inliers = valid.filter { i -> hypot(candidates[i].x - points[i].x - dx,
-                candidates[i].y - points[i].y - dy) <= 1.5 }
-            if (inliers.size < max(MIN_POINTS, ceil(initialPoints * .5).toInt())) { close(); return null }
+                candidates[i].y - points[i].y - dy) <= LkParameters.INLIER_DISTANCE }
+            if (inliers.size < max(LkParameters.MIN_POINTS, ceil(initialPoints * LkParameters.RETAINED_FRACTION).toInt())) { close(); return null }
             val moved = oldBox.translated(dx, dy, frame.width, frame.height)
             if (moved == null) { close(); return null }
             val patch = patch(frame, moved)
             val correlation = patch?.let { correlation(checkNotNull(template), it) }
-            if (correlation == null || correlation < .6) { close(); return null }
+            if (correlation == null || correlation < LkParameters.MIN_CORRELATION) { close(); return null }
             val quality = TrackQuality(inliers.size, initialPoints, median(inliers.map { errors[it] }), correlation)
             previous?.release()
             previous = mats.take(image)
@@ -169,7 +184,6 @@ class OpenCvLkTracker : VisualTracker {
     }
 
     companion object {
-        private const val MIN_POINTS = 4
     }
 }
 
