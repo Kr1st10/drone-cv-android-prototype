@@ -1,5 +1,6 @@
 package ru.university.dronecv.camera
 
+import android.app.Application
 import android.Manifest
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -15,6 +16,12 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -22,6 +29,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.io.FileInputStream
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -29,6 +37,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import ru.university.dronecv.MainActivity
 import ru.university.dronecv.detection.DetectorWorker
+import ru.university.dronecv.diagnostics.DiagnosticViewModel
+import ru.university.dronecv.journals.JournalArchives
+import ru.university.dronecv.journals.JournalArchiveViewModel
+import ru.university.dronecv.journals.JournalKind
+import ru.university.dronecv.journals.JournalState
 
 /** Real app UI -> CameraX RGBA -> local model -> rendered result, with no fake detections.
  * Emulator results cover integration, not real-drone quality, physical alignment, or phone speed.
@@ -127,13 +140,50 @@ class LiveCameraInstrumentedTest {
 
     @Test fun diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable() {
         openAndStart()
+        val diagnostics = compose.runOnIdle {
+            ViewModelProvider(compose.activity)[DiagnosticViewModel::class.java]
+        }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val archive = JournalArchives.get(context.applicationContext as Application)
+        // Read on the instrumentation thread, not Main. File IDs are independent of UI session IDs.
+        val previousIds = archive.inventory().entries.map { it.id }.toSet()
         compose.onNodeWithTag("diagnostic-start").performScrollTo().performClick()
+        compose.waitUntil(15_000) {
+            val state = diagnostics.ui.value
+            assertNull("Diagnostic start failed: ${state.exportStatus}", state.exportStatus)
+            assertNull("Diagnostic writer failed: ${state.recordingIssue}", state.recordingIssue)
+            compose.onAllNodesWithTag("diagnostic-stop").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithTag("diagnostic-stop").assertExists()
+        val newRecords = archive.inventory().entries.filter {
+            it.kind == JournalKind.DIAGNOSTIC && it.id !in previousIds
+        }
+        assertEquals("Exactly one diagnostic file must belong to this start", 1, newRecords.size)
+        val archiveId = newRecords.single().id
+        assertEquals(JournalState.RECORDING, newRecords.single().state)
+
         compose.onNodeWithText("Фото").performClick()
         drainNativeWork()
+        compose.onNodeWithTag("live-frame-ready").assertDoesNotExist()
         compose.onNodeWithText("Камера").performClick()
-        compose.onNodeWithTag("diagnostic-export").performScrollTo().assertExists()
-        compose.onNodeWithText("Прервана:", substring = true).assertExists()
+        compose.onNodeWithText("Прервана:", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("diagnostic-stop").assertDoesNotExist()
+
+        compose.onNodeWithText("Журналы").performClick()
+        val archiveModel = compose.runOnIdle {
+            ViewModelProvider(compose.activity)[JournalArchiveViewModel::class.java]
+        }
+        compose.waitUntil(15_000) {
+            val state = archiveModel.ui.value
+            assertNull("Archive refresh failed: ${state.loadError}", state.loadError)
+            val entry = state.inventory?.entries?.singleOrNull { it.id == archiveId }
+            entry != null && entry.state !in setOf(JournalState.RECORDING, JournalState.FINISHING)
+        }
+        val saved = archiveModel.ui.value.inventory!!.entries.single { it.id == archiveId }
+        assertEquals("Writer must finish this interrupted session without recording damage", JournalState.COMPLETE, saved.state)
+        val exportTag = "archive-export-$archiveId"
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag(exportTag))
+        compose.onNodeWithTag(exportTag).assertIsDisplayed().assertIsEnabled()
     }
 
     @Test fun backgroundRecreationAndBothLandscapeDirectionsResumeInference() {
