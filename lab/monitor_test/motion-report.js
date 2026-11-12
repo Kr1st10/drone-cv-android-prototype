@@ -98,7 +98,7 @@
       let t=a;
       while(t<b) {
         const end=Math.min(b,pi<pubs.length?pubs[pi].published_ns:b);
-        if(end>t) spans.push({a:t,b:end,known,box:active?.bbox??null});
+        if(end>t) spans.push({a:t,b:end,known:known && (!journal.state_contract || active!==null) && active?.state_known!==false,box:active?.bbox??null});
         t=end;
         while(pi<pubs.length && pubs[pi].published_ns<=t) active=pubs[pi++];
       }
@@ -165,7 +165,8 @@
   function timelineImporter() {
     let start=null, session=null, lastId=null, footer=null, broken=false, latest=0, accepted=0n, missing=0n, firstMissing=null, lastMissing=null;
     const j={schema:'dronecv-motion-android-1',frames:[],detections:[],publications:[],complete:false,truncated:true};
-    const ids=new Map();
+    const ids=new Map(), states=[];
+    j.state_contract=true;
     const integer=(v,name)=>{if(typeof v!=='string'||!/^\d+$/.test(v)) throw Error(`Некорректное поле ${name}.`);return BigInt(v);};
     const relative=(v,name)=>{if(v==null)return null;const n=integer(v,name)-start;if(n < -BigInt(Number.MAX_SAFE_INTEGER)||n > BigInt(Number.MAX_SAFE_INTEGER)) throw Error('Длительность превышает точный диапазон JavaScript.');return Number(n);};
     function push(row) {
@@ -186,13 +187,19 @@
         integer(d.frame_id,'frame_id'); if(ids.has(d.frame_id)) throw Error('Повторный номер кадра.');
         const dense=j.frames.length+1;ids.set(d.frame_id,dense);
         const entry=relative(d.analyzer_entry_ns,'analyzer_entry_ns');
-        const raw=d.capture_ns==null?null:relative(d.capture_ns,'capture_ns');
-        const capture=d.timebase==='elapsed_realtime' && d.capture_ns!==null && integer(d.capture_ns,'capture_ns')>0n && raw<=entry ? raw:null;
-        j.frames.push({frame_id:dense,original_frame_id:d.frame_id,analyzer_ns:entry,capture_ns:capture,marker:d.marker});
+        const usable=d.timebase==='elapsed_realtime' && typeof d.capture_ns==='string' && /^\d+$/.test(d.capture_ns) && BigInt(d.capture_ns)>0n && BigInt(d.capture_ns)<=integer(d.analyzer_entry_ns,'analyzer_entry_ns');
+        const capture=usable ? relative(d.capture_ns,'capture_ns') : null;
+        j.frames.push({frame_id:dense,original_frame_id:d.frame_id,analyzer_ns:entry,capture_ns:capture,raw_capture_ns:d.capture_ns??null,timebase:d.timebase,marker:d.marker});
       } else if(row.type==='detection') {
         j.detections.push({original_frame_id:d.frame_id,published_ns:relative(d.published_ns,'published_ns'),bbox:d.bbox,confidence:d.confidence});
       } else if(row.type==='publication') {
         j.publications.push({original_frame_id:d.frame_id,published_ns:relative(d.published_ns,'published_ns'),bbox:d.bbox,source:d.source});
+      } else if(row.type==='state') {
+        const initial=d.reason==='initial_snapshot';
+        states.push({original_frame_id:initial?null:d.motion_frame_id??null,controller_frame_id:d.frame_id??null,
+          published_ns:relative(d.publication_ns,'publication_ns'),bbox:d.box??null,
+          source:d.box==null?'clear':d.result_source==='yolo'?'yolo':'lk',
+          state_known:Object.hasOwn(d,'box'),initial_snapshot:initial});
       } else if(row.type==='session_end') {footer=d;try {j.stop_ns=relative(d.stop_ns,'stop_ns');} catch (_) {broken=true;footer=null;}}
       else if(row.type==='recording_failure') broken=true;
       else if(!['state','resource','diagnostic_frame','tracking','frame_geometry','stale_discard','discard'].includes(row.type)) throw Error(`Неизвестная запись: ${row.type}`);
@@ -208,9 +215,17 @@
           footer.missing_first_event_id===String(firstMissing) && footer.missing_last_event_id===String(lastMissing);
         incomplete ||= footer.recording_complete!==true || dropped!==0n || dropped!==missing || recorded!==accepted || written!==accepted || !bounds;
       } catch (_) {incomplete=true;}
+      // State is authoritative for coordinate transitions. The legacy publication
+      // emitted at the same instant is one observation, not a second transition.
+      const keys=new Set(states.map(p=>JSON.stringify([p.published_ns,p.bbox])));
+      j.publications=j.publications.filter(p=>!keys.has(JSON.stringify([p.published_ns,p.bbox]))).concat(states);
       for(const p of [...j.detections,...j.publications]) {
         p.frame_id=p.original_frame_id===null?null:ids.get(p.original_frame_id);
-        if(p.frame_id===undefined) {if(!incomplete)throw Error('Ссылка на отсутствующий кадр.');p.frame_id=null;}
+        if(p.frame_id===undefined) {
+          // A state can originate from work started before this recording.
+          if(!Object.hasOwn(p,'controller_frame_id') && !incomplete)throw Error('Ссылка на отсутствующий кадр.');
+          p.frame_id=null;p.frame_reference='outside_recording';
+        } else if(p.frame_id===null) p.frame_reference='unavailable';
       }
       if(incomplete) j.detections=j.detections.filter(d=>d.frame_id!==null);
       if(!footer) j.stop_ns=latest;

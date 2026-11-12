@@ -122,3 +122,8 @@ internal fun StringBuilder.appendTrackingSample(offsetMs: Double, signal: Tracki
     append("\"timing_issue\":${signal.timingIssue?.let(::q) ?: "null"},\"capture_to_signal_ms\":${signal.captureToSignalMs},")
     append("\"capture_to_analyzer_ms\":${signal.captureToAnalyzerMs},\"analyzer_to_signal_ms\":${signal.analyzerToSignalMs}}")
 }
+
+/** Streaming resource payload; unavailable measurements remain JSON null. */
+fun ResourceSample.toTimelineJson(): String =
+    "{\"offset_ns\":\"$offsetNanos\",\"pss_kb\":$pssKb,\"thermal_status\":$thermalStatus," +
+        "\"battery_percent\":$batteryPercent,\"battery_status\":$batteryStatus,\"battery_temperature_c\":$batteryTemperatureC}"

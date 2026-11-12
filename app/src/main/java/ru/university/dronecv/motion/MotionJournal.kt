@@ -2,17 +2,21 @@ package ru.university.dronecv.motion
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import ru.university.dronecv.camera.CaptureTimebase
 import ru.university.dronecv.camera.FrameStamp
 import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.detection.NormalizedBox
 import java.io.File
+import ru.university.dronecv.timeline.updateForSession
 import ru.university.dronecv.timeline.TimelineWriter
 import ru.university.dronecv.timeline.quote
 
 /** Bounded, session-tokened journal. Calls may arrive from UI, vision and ML workers. */
 class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_000,
-                    private val fileFactory: (() -> File)? = null) {
+                    private val fileFactory: (() -> File)? = null,
+                    private val writerFactory: (File, () -> Long, (String) -> Unit) -> TimelineWriter =
+                        { file, time, issue -> TimelineWriter(file, time, onIssue = issue) }) {
     private var writer: TimelineWriter? = null
     private var exportWriter: TimelineWriter? = null
     @Synchronized fun exportFile(): File? = writer?.file
@@ -25,7 +29,7 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
     @Synchronized fun event(token: Long?, type: String, payloadJson: String) {
         if (token != null && valid(token)) writer?.record(type, payloadJson)
     }
-    data class Ui(val mode: String = "yolo_lk", val recording: Boolean = false, val report: String? = null, val issue: String? = null)
+    data class Ui(val mode: String = "yolo_lk", val recording: Boolean = false, val report: String? = null, val issue: String? = null, val sessionId: Long = 0)
     private val mutableUi = MutableStateFlow(Ui())
     val ui = mutableUi.asStateFlow()
     private var epoch = 0L
@@ -41,17 +45,18 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
     @Synchronized fun mode(mode: String): Boolean {
         require(mode in setOf("yolo", "yolo_lk"))
         if (mutableUi.value.recording) return false
-        mutableUi.value = mutableUi.value.copy(mode = mode)
+        mutableUi.update { it.copy(mode = mode) }
         return true
     }
     @Synchronized fun start() {
         if (mutableUi.value.recording) return
-        if (writer?.isFinished() == false) { mutableUi.value = mutableUi.value.copy(issue = "Ожидание завершения предыдущей записи"); return }
+        if (writer?.isFinished() == false) { mutableUi.update { it.copy(issue = "Ожидание завершения предыдущей записи") }; return }
         epoch++; start = clock(); geometry = null; image = null; fileFrameId = 0
         frames.clear(); detections.clear(); publications.clear(); truncated = false
-        mutableUi.value = mutableUi.value.copy(recording = true, report = null, issue = null)
+        val sessionId = epoch
+        mutableUi.value = mutableUi.value.copy(recording = true, report = null, issue = null, sessionId = sessionId)
         writer = try {
-            fileFactory?.invoke()?.let { file -> TimelineWriter(file, clock, onIssue = { issue -> mutableUi.value = mutableUi.value.copy(issue = issue) }) }
+            fileFactory?.invoke()?.let { file -> writerFactory(file, clock) { issue -> mutableUi.updateForSession(sessionId, { it.sessionId }) { it.copy(issue = issue) } } }
         } catch (e: Exception) {
             mutableUi.value = mutableUi.value.copy(recording = false, issue = "Ошибка создания записи: ${e.message ?: e.javaClass.simpleName}")
             return
@@ -98,7 +103,7 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
         if (writer != null) {
             writer?.finish(now, reason != null, reason)
             epoch++
-            mutableUi.value = mutableUi.value.copy(recording = false, report = "file")
+            mutableUi.update { it.copy(recording = false, report = "file") }
             return
         }
         val g = geometry?.let { "{\"width\":${it.first},\"height\":${it.second}}" } ?: "null"
@@ -106,7 +111,7 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
         val safeReason = reason?.let(::escapeJson)
         val report = "{\"schema\":\"dronecv-motion-android-1\",\"mode\":\"${mutableUi.value.mode}\",\"complete\":${reason == null && !truncated},\"abort_reason\":${safeReason?.let { "\"$it\"" } ?: "null"},\"truncated\":$truncated,\"stop_ns\":${now-start},\"geometry\":$g,\"calibration_image\":$cal,\"frames\":[${frames.joinToString()}],\"detections\":[${detections.joinToString()}],\"publications\":[${publications.joinToString()}]}"
         epoch++
-        mutableUi.value = mutableUi.value.copy(recording = false, report = report)
+        mutableUi.update { it.copy(recording = false, report = report) }
     }
     private fun valid(token: Long) = mutableUi.value.recording && token == epoch
     private fun add(list: MutableList<String>, item: String) { if (list.size < limit) list += item else truncated = true }

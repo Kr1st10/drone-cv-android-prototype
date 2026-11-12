@@ -1,5 +1,12 @@
 # PROJECT_STATE.md
 
+## Исправления ревью PR №35 — 2026-11-12
+
+- Проверена база `3a52d3b` и удалённая ветка `codex/diagnostic-timeline`: на момент начала они совпадали. Исправлены все шесть замечаний: импорт начального и отдельного `state`, атомарный UI с защитой сессии, аварийный хвост и полный SHA-256, полный набор ресурсов, отдельное предупреждение целостности и проверка временной базы до вычислений. Параметры YOLO/LK и критерий движения не менялись; контракт уточнён в [модели данных](docs/reference/data-model.md#поток-диагностической-сессии-dronecv-session-timeline-1).
+- JBR 21 / SDK 35: `assembleDebug testDebugUnitTest assembleDebugAndroidTest lintDebug` прошли. Повторный JVM-прогон: 195 passed, 2 parity skipped (локальных Python fixtures нет), 0 failures/errors. Device-тесты только скомпилированы. Реальный аварийный `TimelineWriter.copyTo()` прочитан Python внутри JVM-теста; гонки проверены latch без sleep.
+- Изолированный pytest-набор (`test_timeline_analysis`, `test_target_signals`, `test_tracking_reports`, `test_analyze_android_sessions`, стенд `test_motion`): 39 passed и 4 subtests passed, без пропусков; включая Chrome smoke с импортом NDJSON. Node: `timeline_import_test.mjs` с заново созданными Kotlin fixtures, `motion_report_test.mjs`, `motion_test.mjs` прошли. Системный Python не имел pytest; для проверки создано временное окружение в `/private/tmp`, зависимости проекта не менялись. Подробности запуска интеграционного теста — [testing](docs/development/testing.md).
+- На Xiaomi не проверены длительность записи, нагрев и влияние журналирования на задержку; нужны аппаратный длительный прогон и сравнение с выключенной записью. Синтетические журналы не подтверждают физическую точность сопровождения. GitHub API (`gh`) вернул 401; состояние ветки проверено через `git ls-remote`, результаты GitHub Actions не заявляются.
+
 _Обновлено: 2026-11-10. Подготовлена диагностика эксперимента 1×/5× на базе main @ f9e7101; физическая камера Xiaomi не проверена._
 
 ## Диагностическая временная шкала — 2026-11-12

@@ -53,16 +53,26 @@ class TimelineWriter(
 
     fun awaitFinished() { finished.await() }
     fun error(): String? = failure
+    @Synchronized fun integrityIssue(): String? = failure?.let { "Ошибка записи: $it" }
+        ?: if (dropped > 0) "Пропущено событий: $dropped" else null
     fun isFinished(): Boolean = finished.count == 0L
     internal fun queuedCount(): Int = queue.size
 
     fun copyTo(output: java.io.OutputStream) {
         awaitFinished()
-        file.inputStream().use { it.copyTo(output) }
+        var lastByte = -1
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val size = input.read(buffer)
+                if (size < 0) break
+                if (size > 0) { output.write(buffer, 0, size); lastByte = buffer[size - 1].toInt() }
+            }
+        }
         val issue = failure
         if (issue != null) {
             val record = synchronized(this) { Entry(++nextId, clock(), "recording_failure", "{\"reason\":${quote(issue)}}") }
-            output.write("\n".toByteArray(Charsets.UTF_8))
+            if (lastByte != -1 && lastByte != 10) output.write("\n".toByteArray(Charsets.UTF_8))
             output.write(line(record).toByteArray(Charsets.UTF_8))
         }
     }

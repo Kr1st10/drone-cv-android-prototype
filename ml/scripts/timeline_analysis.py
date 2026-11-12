@@ -21,6 +21,7 @@ def read_timeline(path):
     current = None
     last_time = None
     failure = False
+    damaged = False
     session_id = None
     gaps = []
     records_before_end = 0
@@ -29,18 +30,31 @@ def read_timeline(path):
             digest.update(raw)
             if not raw.endswith(b'\n'):
                 errors.append(f'truncated line {line_no}')
-                break
+                damaged = True
+                continue
             try:
                 row = json.loads(raw, parse_constant=lambda x: (_ for _ in ()).throw(ValueError('non-finite JSON')))
             except (ValueError, UnicodeDecodeError):
                 errors.append(f'invalid line {line_no}')
-                break
+                damaged = True
+                continue
+            if not isinstance(row, dict):
+                errors.append(f'invalid envelope on line {line_no}')
+                damaged = True
+                continue
             if row.get('schema') != SCHEMA:
                 raise ValueError(f'unsupported timeline schema: {row.get("schema")}')
             if not isinstance(row.get('data'), dict) or not isinstance(row.get('session_id'), str):
-                raise ValueError(f'invalid envelope on line {line_no}')
-            eid = integer(row.get('event_id'), 'event_id')
-            t = integer(row.get('event_ns'), 'event_ns')
+                errors.append(f'invalid envelope on line {line_no}')
+                damaged = True
+                continue
+            try:
+                eid = integer(row.get('event_id'), 'event_id')
+                t = integer(row.get('event_ns'), 'event_ns')
+            except ValueError as exc:
+                errors.append(f'invalid envelope on line {line_no}: {exc}')
+                damaged = True
+                continue
             if session_id is None: session_id = row['session_id']
             if row['session_id'] != session_id: errors.append('mixed session IDs')
             if previous_id is None and eid != 1: errors.append('first event ID is not 1')
@@ -52,7 +66,7 @@ def read_timeline(path):
             kind, data = row.get('type'), row['data']
             counts[kind] = counts.get(kind, 0) + 1
             if kind not in ('session_end', 'recording_failure'): records_before_end += 1
-            if end is not None: errors.append('record after session_end')
+            if end is not None and kind != 'recording_failure': errors.append('record after session_end')
             if kind == 'header':
                 if header is not None or line_no != 1: errors.append('duplicate or misplaced header')
                 header = data
@@ -106,13 +120,13 @@ def read_timeline(path):
     # Lost records can contain state changes, and their event clocks need not be
     # ordered. Without trustworthy transition bounds, none of the carried boxes
     # can be asserted for the exported interval.
-    uncertain = bool(gaps or failure or (end and end.get('dropped_count') not in (None, '0', 0)))
+    uncertain = bool(errors or damaged or gaps or failure or (end and end.get('dropped_count') not in (None, '0', 0)))
     for interval in intervals:
         if uncertain:
             interval['observed_box'] = interval.get('box')
             interval['box'] = None
             interval['state_known'] = False
-            interval['uncertainty'] = 'missing events; transition bounds unknown'
+            interval['uncertainty'] = 'damaged or missing events; transition bounds unknown'
         else:
             interval['state_known'] = interval.get('reason') != 'initial_unknown'
         for key in ('start_ns', 'end_ns', 'duration_ns'):

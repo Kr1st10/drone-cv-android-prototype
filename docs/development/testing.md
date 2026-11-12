@@ -47,6 +47,8 @@ python3 -m unittest discover -s ml/tests -p test_timeline_analysis.py -v
 node lab/monitor_test/tests/timeline_import_test.mjs
 ```
 
+`TimelineWriterTest.closeFailureInvalidatesExportedFooter` вызывает настоящий `copyTo()` после искусственной ошибки `close()` и передаёт его результат Python-анализатору через `python3` (stdlib, без дополнительных пакетов). Проверяются причина отказа, SHA-256 всего файла, неизвестные интервалы и ресурсные значения, включая `null`. Python должен быть доступен в PATH JVM-теста. `SessionUpdatesTest` управляет порядком чтения UI, Stop и callback через latch; `MotionJournalTest.overflowAndStopDoNotInvertJournalAndWriterLocks` одновременно удерживает путь переполнения и останавливает журнал при заблокированном диске, затем проверяет повторный экспорт. Случайные задержки `sleep` не используются.
+
 В Android `TargetSignalTest` проверяет независимый выбор максимального confidence, пустой кадр, временные базы, invalidation и закрытие кадров. `TargetReportTest` и device JSON test `TargetSignalJsonInstrumentedTest` проверяют serializer, null и долю доступных меток. Синтетические рамки и часы проверяют контракт, но не являются аппаратными измерениями задержки. Python-тесты читают payload v1/v2 и отчёты без сигнала; ручные проверки — [задержка и координаты](../guides/latency-and-prediction.md).
 
 В подготовленном Python-окружении с зависимостями [ML README](../../ml/README.md):

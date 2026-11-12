@@ -100,3 +100,31 @@ class TimelineAnalysisTest(unittest.TestCase):
             path.write_text(json.dumps({'schema': 'dronecv-session-timeline-2'})+'\n')
             with self.assertRaisesRegex(ValueError, 'unsupported timeline schema'):
                 read_timeline(path)
+
+    def test_corrupt_lines_and_gaps_hash_whole_file_and_hide_coordinates(self):
+        import hashlib
+        def row(i, kind, data):
+            return json.dumps(dict(schema='dronecv-session-timeline-1', session_id='s',
+                                   event_id=str(i), event_ns=str(100+i), type=kind, data=data))+'\n'
+        header = row(1, 'header', {'start_ns':'100'})
+        state = row(2, 'state', {'publication_ns':'102','box':[0,0,1,1],'reason':'initial_snapshot'})
+        end = row(3, 'session_end', {'stop_ns':'200','recording_complete':True,'dropped_count':'0',
+                                    'accepted_count':'2','written_count':'2','interrupted':False})
+        cases = {
+            'truncated': header+state+end[:-3],
+            'corrupt_middle': header+'broken JSON\n'+state+end,
+            'blank_before_failure': header+state+end+'\n'+row(4,'recording_failure',{'reason':'close failed'}),
+            'gap': header+state+end.replace('"event_id": "3"','"event_id": "4"'),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'damaged.ndjson'
+            for name, text in cases.items():
+                with self.subTest(name=name):
+                    path.write_bytes(text.encode())
+                    result = read_timeline(path)
+                    self.assertFalse(result['recording_complete'])
+                    self.assertTrue(result['errors'])
+                    self.assertEqual(result['sha256'],hashlib.sha256(path.read_bytes()).hexdigest())
+                    self.assertTrue(all(not i['state_known'] and i['box'] is None for i in result['intervals']))
+                    if name == 'blank_before_failure':
+                        self.assertIn('recording failure: close failed',result['errors'])

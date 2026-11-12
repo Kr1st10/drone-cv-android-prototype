@@ -42,6 +42,7 @@ fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: 
         Button(onClick = { model.prepareExport(); save.launch("drone-performance-${report.startEpochMs}.ndjson") },
             modifier = Modifier.fillMaxWidth().testTag("diagnostic-export")) { Text("Экспорт NDJSON") }
     }
+    ui.recordingIssue?.let { Text("Запись неполна: $it", style = MaterialTheme.typography.bodySmall) }
     ui.exportStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }
 

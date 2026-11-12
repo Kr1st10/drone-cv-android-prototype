@@ -7,6 +7,8 @@ import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import ru.university.dronecv.diagnostics.DiagnosticFrames
+import ru.university.dronecv.diagnostics.ResourceSample
+import ru.university.dronecv.diagnostics.toTimelineJson
 import ru.university.dronecv.camera.CaptureTimebase
 import ru.university.dronecv.camera.FrameStamp
 import ru.university.dronecv.camera.TrackingSampleKind
@@ -108,7 +110,10 @@ class TimelineWriterTest {
                     override fun close() { super.close(); throw IOException("close failed") }
                 }
             })
-            writer.record("header", "{}", 1)
+            writer.record("header", "{\"start_ns\":\"1\"}", 1)
+            writer.record("state", "{\"publication_ns\":\"1\",\"reason\":\"initial_snapshot\",\"box\":[0,0,1,1]}", 1)
+            writer.record("resource", ResourceSample(1, 123, 2, 80, 3, 37.5).toTimelineJson(), 1)
+            writer.record("resource", ResourceSample(2, null, null, null, null, null).toTimelineJson(), 1)
             writer.finish(2, false, null)
             val export = java.io.ByteArrayOutputStream()
             writer.copyTo(export)
@@ -116,6 +121,31 @@ class TimelineWriterTest {
             assertTrue(text.contains("\"recording_complete\":true"))
             assertTrue(text.contains("\"type\":\"recording_failure\""))
             assertTrue(text.contains("close failed"))
+            assertFalse(text.contains("\n\n"))
+            val exported = File.createTempFile("timeline-close-export", ".ndjson")
+            try {
+                exported.writeBytes(export.toByteArray())
+                val script = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+                    .map { File(it, "ml/scripts/timeline_analysis.py") }.first { it.isFile }
+                val python = """
+                    import sys, json, hashlib
+                    from pathlib import Path
+                    sys.path.insert(0, sys.argv[1])
+                    from timeline_analysis import read_timeline
+                    p = Path(sys.argv[2])
+                    result = read_timeline(p)
+                    assert result['recording_complete'] is False, result
+                    assert 'recording failure: close failed' in result['errors'], result
+                    assert result['sha256'] == hashlib.sha256(p.read_bytes()).hexdigest()
+                    assert all(not i['state_known'] and i['box'] is None for i in result['intervals'])
+                    resources = [json.loads(line)['data'] for line in p.read_text().splitlines() if json.loads(line)['type'] == 'resource']
+                    assert resources[0]['battery_status'] == 3 and resources[0]['battery_temperature_c'] == 37.5
+                    assert resources[1]['battery_status'] is None and resources[1]['battery_temperature_c'] is None
+                """.trimIndent()
+                val process = ProcessBuilder("python3", "-c", python, script.parent, exported.path).redirectErrorStream(true).start()
+                assertTrue("Python parser timed out", process.waitFor(10, TimeUnit.SECONDS))
+                assertEquals(process.inputStream.bufferedReader().readText(), 0, process.exitValue())
+            } finally { exported.delete() }
         } finally { file.delete() }
     }
 
