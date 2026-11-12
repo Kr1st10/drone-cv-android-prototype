@@ -28,9 +28,12 @@ class JournalQuotaException : IllegalStateException("Недостаточно м
  * export leases and deletion share one monitor. No frame callback accesses this store.
  * Legacy files without trustworthy service metadata remain visible with unknown status.
  */
-class JournalArchive(private val root: File, val policy: JournalPolicy = JournalPolicy(),
+class JournalArchive(private val rootLocation: () -> File, val policy: JournalPolicy = JournalPolicy(),
                      private val epochMillis: () -> Long = System::currentTimeMillis) {
-    private val metadata = File(root, "journal-metadata")
+    constructor(root: File, policy: JournalPolicy = JournalPolicy(), epochMillis: () -> Long = System::currentTimeMillis)
+        : this({ root }, policy, epochMillis)
+    private val root by lazy(rootLocation)
+    private val metadata by lazy { File(root, "journal-metadata") }
     private val recordings = java.util.concurrent.ConcurrentHashMap<String, JournalState>()
     private val exports = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private val name = Regex("(diagnostic|motion)-[A-Za-z0-9_-]+\\.ndjson")

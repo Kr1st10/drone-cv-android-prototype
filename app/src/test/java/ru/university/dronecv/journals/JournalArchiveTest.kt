@@ -33,6 +33,18 @@ class JournalArchiveTest {
         try { action(); fail("Operation should be refused") } catch (_: IllegalStateException) { }
     }
 
+    @Test fun constructionDefersDirectoryResolutionUntilAnIoOperation() {
+        val root=root()
+        try {
+            var resolutions=0
+            val store=JournalArchive({ resolutions++;root })
+            assertEquals(0,resolutions)
+            assertEquals(30,store.policy.maxRecords)
+            store.inventory()
+            assertEquals(1,resolutions)
+        } finally {root.deleteRecursively()}
+    }
+
     @Test fun discoversLegacyBothKindsAndIgnoresUnrelatedFiles() {
         val root = root()
         try {

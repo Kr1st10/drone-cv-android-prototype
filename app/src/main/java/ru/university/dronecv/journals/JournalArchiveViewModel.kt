@@ -18,7 +18,7 @@ import kotlin.coroutines.coroutineContext
 object JournalArchives {
     @Volatile private var instance: JournalArchive? = null
     fun get(app: Application): JournalArchive = instance ?: synchronized(this) {
-        instance ?: JournalArchive(app.filesDir).also { instance = it }
+        instance ?: JournalArchive({ app.filesDir }).also { instance = it }
     }
 }
 
