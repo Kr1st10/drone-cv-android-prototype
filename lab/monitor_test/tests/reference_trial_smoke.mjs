@@ -19,16 +19,31 @@ for(const id of ['cabinet_front','cabinet_oblique_candidate','cabinet_top']){
  await page.waitForFunction(()=>document.getElementById('referenceDisplay').complete&&!document.getElementById('referenceDisplay').classList.contains('hidden'));
  await page.fill('#referenceScaleNumber','20'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
  const a=await snap(); assert.ok(a.equivalent_distance_m>0,JSON.stringify(a));
- await page.fill('#referenceScaleNumber','10'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
+ assert.ok(await page.isHidden('#referenceRangeMode'));
+ assert.match(await page.getAttribute('#referencePhotoSource a','href'),/cabinet\/IMG_27\d{2}\.jpg$/);
+ await page.locator('#referenceSegmentReview').evaluate(e=>e.open=true);
+ await page.check('#referenceSegmentToggle');
+ const drawnCssPx=await page.locator('#referenceSegmentOverlay line').evaluate(line=>{
+  const transform=line.getScreenCTM();
+  const start=new DOMPoint(line.x1.baseVal.value,line.y1.baseVal.value).matrixTransform(transform);
+  const end=new DOMPoint(line.x2.baseVal.value,line.y2.baseVal.value).matrixTransform(transform);
+  return Math.hypot(end.x-start.x,end.y-start.y);
+ });
+ assert.ok(Math.abs(drawnCssPx*0.25-a.display_axis_cm*10)<0.005);
+ await page.uncheck('#referenceSegmentToggle');
+ await page.locator('#referenceSegmentReview').evaluate(e=>e.open=false);
+ await page.click('#referenceHalf'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
  assert.equal((await snap()).equivalent_distance_m,a.equivalent_distance_m*2);
- assert.match(await page.textContent('#referenceAssumption'),/Предварительная оценка/);
+ assert.match(await page.textContent('#referenceAssumption'),id==='cabinet_oblique_candidate'?/Предварительная оценка/:/Измеренный отрезок/);
+ assert.match(await page.textContent('#referenceReadout'),/≈ [\d\s]+,\d{2} м/);
+ await page.fill('#referenceTarget','100,00'); await page.click('#referenceApplyTarget');
+ assert.ok(Math.abs((await snap()).equivalent_distance_m-100)<0.2);
 }
-// Synthetic 500mm width, distance 50cm, display 2.5mm -> 100m.
-await page.evaluate(()=>DroneReferences.profiles[0].photos[2].projection_width_mm=500);
+// Top-view diagonal: 428 mm at 50 cm gives 100 m at 2.14 mm on screen.
 await page.fill('#distance','50');
 await page.fill('#referenceTarget','100,00'); await page.click('#referenceApplyTarget');
 assert.ok(Math.abs((await snap()).equivalent_distance_m-100)<0.2);
-assert.ok(Math.abs((await snap()).display_width_cm-0.25)<0.001);
+assert.ok(Math.abs((await snap()).display_axis_cm-0.214)<0.001);
 const before=await snap();
 await page.selectOption('#referenceCamera','1'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
 assert.equal((await snap()).equivalent_distance_m,before.equivalent_distance_m);
