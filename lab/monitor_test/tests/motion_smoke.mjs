@@ -74,6 +74,27 @@ await page.click('#reportCalculate');
 assert.match(await page.textContent('#reportOutput'),/Результаты по прогонам/);
 assert.match(await page.textContent('#reportOutput'),/критерий: пройден/);
 const report=await exportJson('#reportExport');assert.equal(report.runs[0].capture_latency_ms,100);assert.equal(report.runs[0].pass,true);
+// Exercise the streamed NDJSON file input with exact Long values beyond 2^53.
+const origin=90071992547409930n, frameOrigin=90071992547419930n, timeline=[];
+function timelineRow(type,data,time) {timeline.push({schema:'dronecv-session-timeline-1',session_id:'synthetic',event_id:String(timeline.length+1),event_ns:String(origin+BigInt(time)),type,data});}
+timelineRow('header',{start_ns:String(origin),clock:'elapsed_realtime_ns',mode:'yolo'},0);
+timelineRow('metadata',{geometry:syntheticJournal.geometry,calibration_image:syntheticJournal.calibration_image},0);
+for(const f of syntheticJournal.frames) timelineRow('frame',{frame_id:String(frameOrigin+BigInt(f.frame_id)),analyzer_entry_ns:String(origin+BigInt(f.analyzer_ns)),capture_ns:String(origin+BigInt(f.capture_ns)),timebase:'elapsed_realtime',marker:f.marker},f.analyzer_ns);
+for(const d of syntheticJournal.detections) timelineRow('detection',{frame_id:String(frameOrigin+BigInt(d.frame_id)),published_ns:String(origin+BigInt(d.published_ns)),bbox:d.bbox},d.published_ns);
+for(const p of syntheticJournal.publications) timelineRow('publication',{frame_id:p.frame_id===null?null:String(frameOrigin+BigInt(p.frame_id)),published_ns:String(origin+BigInt(p.published_ns)),bbox:p.bbox,source:p.source},p.published_ns);
+const accepted=String(timeline.length);
+timelineRow('session_end',{stop_ns:String(origin+3000000000n),recording_complete:true,experiment_status:'not_observed',interrupted:false,accepted_count:accepted,written_count:accepted,dropped_count:'0',missing_first_event_id:null,missing_last_event_id:null},3000000000);
+await page.setInputFiles('#reportJournals',{name:'synthetic-timeline.ndjson',mimeType:'application/x-ndjson',buffer:Buffer.from(timeline.map(r=>JSON.stringify(r)).join('\n')+'\n')});
+await page.waitForFunction(()=>document.getElementById('reportCanvas').width===100 && /Отмечено точек: 0/.test(document.getElementById('reportStatus').textContent), null, {polling:100});
+for(const [x,y] of [[10,10],[90,10],[90,90],[10,90]]) await page.locator('#reportCanvas').click({position:{x,y}});
+await page.click('#reportCalculate');
+assert.match(await page.textContent('#reportOutput'),/критерий: пройден/);
+const timelineReport=await exportJson('#reportExport');
+assert.equal(timelineReport.runs[0].criterion_version,'motion-retention-v3');
+assert.equal(timelineReport.runs[0].capture_latency_ms,100);
+assert.equal(timelineReport.runs[0].capture_frame_id,String(frameOrigin+5n));
+assert.equal(timelineReport.runs[0].pass,true);
+assert.equal(timelineReport.runs[0].good_fraction_lower,report.runs[0].good_fraction_lower);
 // Synthetic multiple conditions and uncertain observation must agree in UI and export.
 const runs=[]; const journals=[];
 for (const [id,speed,accel,missing] of [['a1',100,200,false],['a2',100,200,false],['b1',300,600,false],['b2',300,600,false],['u1',100,300,true]]) {

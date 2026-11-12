@@ -14,6 +14,17 @@ val droneModel = (JsonSlurper().parse(rootProject.file("ml/model_manifest.json")
 val droneModelAsset: String = droneModel.getValue("asset_path")
 val droneModelSha256: String = droneModel.getValue("onnx_sha256")
 
+// Captured at configuration time and packaged in this APK; never inspect a repository on device.
+val buildGitSha = providers.exec {
+    commandLine("git", "rev-parse", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.get().trim().ifEmpty { "unknown" }
+val buildGitStatus = providers.exec {
+    commandLine("git", "status", "--porcelain", "--untracked-files=normal")
+    isIgnoreExitValue = true
+}.standardOutput.asText.get()
+
+
 android {
     namespace = "ru.university.dronecv"
     compileSdk = 35
@@ -26,6 +37,8 @@ android {
         versionName = "0.5.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "BUILD_GIT_SHA", "\"$buildGitSha\"")
+        buildConfigField("boolean", "BUILD_GIT_DIRTY", buildGitStatus.isNotBlank().toString())
         buildConfigField("String", "DRONE_MODEL_ASSET", "\"$droneModelAsset\"")
         buildConfigField("String", "DRONE_MODEL_SHA256", "\"$droneModelSha256\"")
 

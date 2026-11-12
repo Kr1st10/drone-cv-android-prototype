@@ -41,6 +41,121 @@ class LiveControllerTest {
         override fun close() { events += "close" }
     }
 
+    @Test fun exportedTimelinePreservesSearchLossRecoveryAndSessionIdentity() {
+        val first = kotlin.io.path.createTempFile("timeline-sequence", ".ndjson").toFile()
+        val second = kotlin.io.path.createTempFile("timeline-source", ".ndjson").toFile()
+        val files = ArrayDeque(listOf(first, second))
+        var now = 1_000_000_000L
+        val worker = Worker()
+        val backend = Backend()
+        val journal = MotionJournal(clock = { now }, fileFactory = { files.removeFirst() })
+        assertTrue(journal.mode("yolo"))
+        val controller = LiveController(backend, worker, eventTime = { now }, motion = journal, nanoTime = { now })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        controller.startRecording()
+        fun frame() {
+            val stamp = FrameStamp(now, CaptureTimebase.ELAPSED_REALTIME, now)
+            val token = controller.beginFrame(source, stamp)!!
+            controller.offerFrame(Frame(), token, stamp, 0.0)
+            worker.drain()
+            now += 100_000_000L
+        }
+        frame()
+        val positive = backend.result
+        backend.result = positive.copy(detections = emptyList())
+        frame()
+        backend.result = positive
+        frame()
+        val stale = FrameStamp(now - 500_000_000L, CaptureTimebase.ELAPSED_REALTIME, now)
+        assertNull(controller.beginFrame(source, stale))
+        val revision = controller.state.value.revision
+        now += 2_000_000_000L
+        controller.expire(revision)
+        controller.expire(revision)
+        frame()
+        val stateAtStop = controller.state.value
+        journal.stop()
+        assertEquals(stateAtStop, controller.state.value)
+        journal.awaitFinished(first)
+        val records = first.readLines()
+        val states = records.filter { it.contains("\"type\":\"state\"") }
+        assertEquals(1, records.count { it.contains("\"type\":\"discard\"") })
+        assertEquals(6, states.size)
+        assertTrue(states[0].contains("\"reason\":\"initial_snapshot\""))
+        assertTrue(states[0].contains("\"box\":null"))
+        assertTrue(states[1].contains("\"last_yolo_frame_id\":\"1\""))
+        assertTrue(states[2].contains("\"reason\":\"no_detection\""))
+        assertTrue(states[2].contains("\"last_yolo_frame_id\":\"1\""))
+        assertTrue(states[2].contains("\"last_yolo_capture_ns\":\"1000000000\""))
+        assertTrue(states[4].contains("\"reason\":\"no_update_timeout\""))
+        assertTrue(states.last().contains("\"box\":["))
+        assertTrue(records.last().contains("\"type\":\"session_end\""))
+        controller.configure(false, .5f)
+        val newSource = controller.newSource()
+        controller.configure(true, .5f)
+        controller.startRecording()
+        journal.stop()
+        journal.awaitFinished(second)
+        val snapshot = second.readLines().first { it.contains("initial_snapshot") }
+        assertTrue(snapshot.contains("\"source_id\":\"$newSource\""))
+        assertTrue(snapshot.contains("\"generation\":\"3\""))
+        assertTrue(snapshot.contains("\"frame_id\":null"))
+        assertTrue(snapshot.contains("\"box\":null"))
+        System.getenv("DRONE_TIMELINE_FIXTURE")?.let { first.copyTo(java.io.File(it), overwrite = true) }
+        first.delete(); second.delete()
+    }
+
+    @Test fun recordingStartedWhileFrameQueuedIncludesItsLaterPublication() {
+        val file = kotlin.io.path.createTempFile("motion-inflight", ".ndjson").toFile()
+        val now = 1_000_000_000L
+        val worker = Worker()
+        val journal = MotionJournal(clock = { now }, fileFactory = { file })
+        assertTrue(journal.mode("yolo"))
+        val controller = LiveController(Backend(), worker, eventTime = { now }, motion = journal, nanoTime = { now })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        val stamp = FrameStamp(now, CaptureTimebase.ELAPSED_REALTIME, now)
+        val token = controller.beginFrame(source, stamp)!!
+        controller.offerFrame(Frame(), token, stamp, 0.0)
+        controller.startRecording()
+        worker.drain()
+        journal.stop()
+        journal.awaitFinished(file)
+        val text = file.readText()
+        assertTrue(text.contains("initial_snapshot"))
+        assertTrue(text.contains("\"result_source\":\"yolo\""))
+        file.delete()
+    }
+
+    @Test fun recordingSnapshotAndTimerClearSurviveExport() {
+        val file = kotlin.io.path.createTempFile("motion-timeline", ".ndjson").toFile()
+        var now = 1_000_000_000L
+        val worker = Worker()
+        val journal = MotionJournal(clock = { now }, fileFactory = { file })
+        assertTrue(journal.mode("yolo"))
+        val controller = LiveController(Backend(), worker, eventTime = { now }, motion = journal, nanoTime = { now })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        val stamp = FrameStamp(now, CaptureTimebase.ELAPSED_REALTIME, now)
+        val token = controller.beginFrame(source, stamp)!!
+        controller.offerFrame(Frame(), token, stamp, 0.0)
+        worker.drain()
+        val revision = controller.state.value.revision
+        controller.startRecording()
+        assertEquals(revision, controller.state.value.revision)
+        now += 2_000_000_000L
+        controller.expire(revision)
+        controller.expire(revision)
+        journal.stop()
+        journal.awaitFinished(file)
+        val text = file.readText()
+        assertTrue(text.contains("initial_snapshot"))
+        assertEquals(1, Regex("no_update_timeout").findAll(text).count())
+        assertTrue(text.contains("\"frame_id\":null"))
+        file.delete()
+    }
+
     @Test fun recreatedControllerUsesRetainedYoloOnlyMode() {
         val worker = Worker()
         val journal = MotionJournal(clock = { 100L })

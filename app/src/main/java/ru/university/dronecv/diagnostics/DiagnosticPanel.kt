@@ -1,7 +1,5 @@
 package ru.university.dronecv.diagnostics
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -14,18 +12,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 
 @Composable
-fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: Float, threads: Int, warmupFrames: Long) {
+fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: Float, threads: Int, warmupFrames: Long, onStart: () -> Unit = { model.start(confidence, threads, warmupFrames) }) {
     val ui by model.ui.collectAsStateWithLifecycle()
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) model.export(uri)
-    }
     Text("Диагностика", style = MaterialTheme.typography.titleSmall)
     Text("Прогрев до записи: $warmupFrames обработанных кадров; сессия начинается вручную.", style = MaterialTheme.typography.bodySmall)
     if (ui.recording) {
         Text("Сессия: ${ui.elapsedSeconds} с. При фоне или выключении экрана она будет помечена прерванной.", style = MaterialTheme.typography.bodySmall)
         Button(onClick = { model.stop() }, modifier = Modifier.fillMaxWidth().testTag("diagnostic-stop")) { Text("Завершить сессию") }
     } else {
-        Button(onClick = { model.start(confidence, threads, warmupFrames) }, enabled = liveReady,
+        Button(onClick = onStart, enabled = liveReady && !ui.starting,
             modifier = Modifier.fillMaxWidth().testTag("diagnostic-start")) { Text("Начать сессию") }
         if (!liveReady) Text("Сначала запустите детекцию и дождитесь кадра.", style = MaterialTheme.typography.bodySmall)
     }
@@ -39,9 +34,10 @@ fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: 
                 style = MaterialTheme.typography.bodySmall)
         }
         ui.ort?.let { Text("ORT: среднее ${fmt(it.mean)}, медиана ${fmt(it.median)} мс", style = MaterialTheme.typography.bodySmall) }
-        Button(onClick = { save.launch("drone-performance-${report.startEpochMs}.json") },
-            modifier = Modifier.fillMaxWidth().testTag("diagnostic-export")) { Text("Экспорт JSON") }
+
     }
+    if (ui.starting) Text("Подготовка записи…", style = MaterialTheme.typography.bodySmall)
+    ui.recordingIssue?.let { Text("Запись неполна: $it", style = MaterialTheme.typography.bodySmall) }
     ui.exportStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }
 

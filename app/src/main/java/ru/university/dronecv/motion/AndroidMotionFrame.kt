@@ -21,5 +21,7 @@ fun recordMotionFrame(journal: MotionJournal, frame: CameraFrameSnapshot, token:
             "data:image/jpeg;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
         } finally { bitmap.recycle() }
     } else null
-    return journal.frame(token, stamp, uprightWidth, uprightHeight, marker, calibration)
+    val id = journal.frame(token, stamp, uprightWidth, uprightHeight, marker, calibration)
+    if (id != null) journal.event(token, "frame_geometry", "{\"frame_id\":\"$id\",\"source_width\":${frame.sourceWidth},\"source_height\":${frame.sourceHeight},\"crop\":[${frame.cropLeft},${frame.cropTop},${frame.cropRight},${frame.cropBottom}],\"rotation_degrees\":${frame.rotationDegrees}}")
+    return id
 }

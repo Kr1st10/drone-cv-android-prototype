@@ -1,11 +1,5 @@
 package ru.university.dronecv.camera
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +51,7 @@ internal fun LiveCameraContent(
     probe: CameraProbeState,
     diagnostics: DiagnosticViewModel,
     motionModel: MotionViewModel,
+    onOpenJournals: () -> Unit,
     running: Boolean,
     confidence: Float,
     onRunningChange: (Boolean) -> Unit,
@@ -92,7 +87,7 @@ internal fun LiveCameraContent(
         }
         val controls: @Composable (Modifier) -> Unit = { modifier ->
             LiveControls(state, running, confidence, onRunningChange, onConfidenceChange,
-                recoverableIssue, diagnostics, motionModel, threadState, controller::requestThreads, probe, controller, modifier)
+                recoverableIssue, diagnostics, motionModel, onOpenJournals, threadState, controller::requestThreads, probe, controller, modifier)
         }
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
@@ -112,27 +107,14 @@ internal fun LiveCameraContent(
 private fun LiveControls(
     state: LiveState, running: Boolean, confidence: Float,
     onRunningChange: (Boolean) -> Unit, onConfidenceChange: (Float) -> Unit,
-    issue: String?, diagnostics: DiagnosticViewModel, motionModel: MotionViewModel, threadState: ThreadConfiguration,
+    issue: String?, diagnostics: DiagnosticViewModel, motionModel: MotionViewModel, onOpenJournals: () -> Unit, threadState: ThreadConfiguration,
     onThreadsChange: (Int) -> Boolean, probe: CameraProbeState, controller: LiveController<CameraFrameSnapshot>, modifier: Modifier,
 ) {
     val diagnosticUi by diagnostics.ui.collectAsStateWithLifecycle()
     val motion = checkNotNull(controller.motion)
     val motionUi by motion.ui.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var exportStatus by remember { mutableStateOf<String?>(null) }
-    val saveMotion = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        val report = motionModel.pendingExport
-        if (uri != null && report != null) scope.launch {
-            exportStatus = try {
-                withContext(Dispatchers.IO) {
-                    checkNotNull(context.contentResolver.openOutputStream(uri)).use { it.write(report.toByteArray(Charsets.UTF_8)) }
-                }
-                "Журнал сохранён"
-            } catch (e: Exception) { "Не удалось сохранить журнал: ${e.message ?: e.javaClass.simpleName}" }
-        }
-        motionModel.pendingExport = null
-    }
+    val motionStarting by motionModel.starting.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
+    val motionStartIssue by motionModel.issue.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     val input by controller.input.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     Column(modifier.background(MaterialTheme.colorScheme.surface).verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -210,21 +192,25 @@ private fun LiveControls(
         Text("Режим: ${if (motionUi.mode == "yolo") "A: YOLO" else "B: YOLO + LK"}", style = MaterialTheme.typography.bodySmall)
         if (motionUi.recording) Button(onClick = { motion.stop() }, modifier = Modifier.fillMaxWidth()) { Text("Завершить запись стенда") }
         else {
-            Button(onClick = { diagnostics.stop(true, "Motion recording started"); controller.configure(false, confidence); motion.start(); controller.configure(true, confidence) }, enabled = running && state.phase == LivePhase.RUNNING,
+            Button(onClick = { motionModel.start { diagnostics.stop(true, "Motion recording started"); controller.startRecording(cameraContext(probe)) } }, enabled = running && state.phase == LivePhase.RUNNING && !motionStarting,
                 modifier = Modifier.fillMaxWidth()) { Text("Начать запись стенда") }
-            if (motionUi.report != null) Button(onClick = { motionModel.pendingExport = motionUi.report; saveMotion.launch("drone-motion.json") }, modifier = Modifier.fillMaxWidth()) { Text("Экспорт стенда JSON") }
         }
-        exportStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        motionUi.issue?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        if (motionStarting) Text("Подготовка записи…", style = MaterialTheme.typography.bodySmall)
+        motionStartIssue?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Button(onClick = onOpenJournals, modifier = Modifier.fillMaxWidth().testTag("open-journals")) { Text("Открыть журналы") }
         DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING && !threadState.switching,
-            confidence, threadState.threads, state.completedFrames)
+            confidence, threadState.threads, state.completedFrames,
+            onStart = { diagnostics.start(confidence, threadState.threads, state.completedFrames,
+                activate = { start -> controller.startDiagnostics(cameraContext(probe), start) }) })
         Text("Камера ID: ${probe.logicalId ?: "неизвестно"}; физический запрос: ${probe.physicalId ?: "авто"} · запрошено ${probe.requestedZoom}× · текущий zoomRatio ${probe.actualZoom ?: "неизвестен"}", style = MaterialTheme.typography.bodySmall)
         Text("Последний Camera2 zoomRatio: ${probe.captureZoom ?: "не сообщён"} (не оптическая кратность)",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("camera-capture-zoom"))
         Text(sensorEvidence(probe.activePhysicalId, probe.physicalIds.toSet()), style = MaterialTheme.typography.bodySmall)
         Text("Физический ID не доказывает тип объектива; 5× может быть цифровым.", style = MaterialTheme.typography.bodySmall)
         fun change(zoom: Float, physical: String?) {
+            controller.configure(false, confidence, "camera_configuration_changed")
             diagnostics.stop(true, "Camera zoom or physical camera changed")
-            controller.configure(false, confidence)
             probe.activePhysicalId = null; probe.actualZoom = null; probe.captureZoom = null; probe.warning = null; probe.loading = true
             probe.physicalId = physical; probe.requestedZoom = zoom; probe.selectionEpoch++
         }
@@ -273,3 +259,14 @@ private fun LiveOverlay(state: LiveState, yoloOnly: Boolean, modifier: Modifier)
 }
 
 private fun format(value: Double) = String.format(Locale.US, "%.1f", value)
+
+private fun cameraContext(probe: CameraProbeState): String {
+    fun q(value: String?): String = value?.let { ru.university.dronecv.timeline.quote(it) } ?: "null"
+    return "{\"logical_id\":${q(probe.logicalId)},\"requested_physical_id\":${q(probe.physicalId)}," +
+        "\"latest_active_physical_id\":${q(probe.activePhysicalId)},\"requested_zoom\":${probe.requestedZoom}," +
+        "\"confirmed_zoom\":${probe.actualZoom},\"latest_capture_zoom\":${probe.captureZoom}," +
+        "\"scope\":\"latest_context_not_frame_bound\",\"requested_af\":${probe.requestedAf},\"actual_af\":${probe.actualAf},\"available_af\":${probe.availableAf},\"requested_ae\":${probe.requestedAe},\"actual_ae\":${probe.actualAe},\"available_ae\":${probe.availableAe},\"requested_stabilization\":${probe.requestedStabilization},\"actual_stabilization\":${probe.actualStabilization},\"available_stabilization\":${probe.availableStabilization}, " +
+        "\"git_sha\":${q(ru.university.dronecv.BuildConfig.BUILD_GIT_SHA)},\"git_dirty\":${ru.university.dronecv.BuildConfig.BUILD_GIT_DIRTY}," +
+        "\"app_version\":${q(ru.university.dronecv.BuildConfig.VERSION_NAME)},\"model_asset\":${q(ru.university.dronecv.BuildConfig.DRONE_MODEL_ASSET)}," +
+        "\"model_sha256\":${q(ru.university.dronecv.BuildConfig.DRONE_MODEL_SHA256)},\"device\":${q(android.os.Build.MODEL)},\"android_release\":${q(android.os.Build.VERSION.RELEASE)}}"
+}

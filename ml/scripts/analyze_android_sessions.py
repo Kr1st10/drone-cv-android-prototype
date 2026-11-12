@@ -340,11 +340,31 @@ def thread_comparison_key(run):
 
 
 def main():
+    from timeline_analysis import read_timeline
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('inputs', nargs='+', type=Path)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--compare-threads', action='store_true', help='allow only explicit 1/2/4 intra-op differences in 5.3 reports')
     args = p.parse_args()
+    # Timeline is a distinct versioned streaming format, not schema_version=1.
+    timeline_flags = []
+    for path in args.inputs:
+        with path.open('rb') as stream:
+            first = stream.readline()
+        try:
+            probe = json.loads(first)
+        except (ValueError, UnicodeDecodeError):
+            probe = None
+        timeline_flags.append(isinstance(probe, dict) and isinstance(probe.get('schema'), str) and probe['schema'].startswith('dronecv-session-timeline-'))
+    if any(timeline_flags):
+        if not all(timeline_flags) or args.compare_threads:
+            raise ValueError('timeline cannot be mixed with legacy reports or compared by threads')
+        timelines = [read_timeline(path) for path in args.inputs]
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps({'schema': 'dronecv-timeline-analysis-1', 'sessions': timelines}, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
+        if any(not r['recording_complete'] for r in timelines):
+            raise SystemExit('Incomplete timeline; see output')
+        return
     runs = []
     for path in args.inputs:
         raw = path.read_bytes()

@@ -18,6 +18,8 @@ data class TrackingObservation(
     val lastYoloConfidence: Float?,
     val lastYoloStamp: FrameStamp?,
     val reason: String?,
+    val lastYoloKey: FrameKey? = null,
+    val lastYoloAcceptedNs: Long? = null,
 ) {
     /** Absolute age is unavailable for UNKNOWN Camera2 clocks, even if the visual track is good. */
     fun confirmationAgeMs(nowElapsedNs: Long): Double? = lastYoloStamp?.ageAt(nowElapsedNs)
@@ -83,9 +85,9 @@ class ReplayedCorrection internal constructor(
  */
 class TrackingSession(
     private val factory: () -> VisualTracker,
-    private val yoloPeriodNs: Long = 500_000_000L,
-    private val confirmationTtlNs: Long = 1_000_000_000L,
-    private val retryNs: Long = 100_000_000L,
+    val yoloPeriodNs: Long = 500_000_000L,
+    val confirmationTtlNs: Long = 1_000_000_000L,
+    val retryNs: Long = 100_000_000L,
 ) : AutoCloseable {
     init { require(yoloPeriodNs > 0 && confirmationTtlNs > yoloPeriodNs && retryNs > 0) }
     private val history = GrayHistory()
@@ -101,6 +103,8 @@ class TrackingSession(
     private var phase = VisualPhase.SEARCHING
     private var confirmation = ClassConfirmation.NONE
     private var lastYolo: FrameStamp? = null
+    private var lastYoloKey: FrameKey? = null
+    private var lastYoloAcceptedNs: Long? = null
     private var confidence: Float? = null
     private var lastRequestNs: Long? = null
     private var inFlight: YoloRequest? = null
@@ -118,6 +122,8 @@ class TrackingSession(
         lastSeenEntryNs = -1L
         lastRequestNs = null
         lastYolo = null
+        lastYoloKey = null
+        lastYoloAcceptedNs = null
         confidence = null
         confirmation = ClassConfirmation.NONE
         phase = VisualPhase.SEARCHING
@@ -223,6 +229,8 @@ class TrackingSession(
             if (trackId == null) trackId = ++nextTrackId
             phase = VisualPhase.TRACKING
             lastYolo = request.anchor.stamp
+            lastYoloKey = request.anchor.key
+            lastYoloAcceptedNs = nowElapsedNs
             confidence = correction.plan.detection.confidence
             confirmation = ClassConfirmation.CONFIRMED
             reason = null
@@ -250,7 +258,7 @@ class TrackingSession(
         request.anchor.key.generation == generation && request.anchor.key.source == source
 
     private fun observation(frame: GrayFrame) = TrackingObservation(frame.key, frame.stamp, phase, trackId, estimate,
-        confirmation, confidence, lastYolo, reason)
+        confirmation, confidence, lastYolo, reason, lastYoloKey, lastYoloAcceptedNs)
 
     private fun lose(why: String) {
         phase = VisualPhase.LOST

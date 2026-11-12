@@ -28,7 +28,7 @@ class AndroidFrameSnapshotter(private val pool: CameraFramePool = CameraFramePoo
                 Log.i("CameraInput", geometry)
                 lastGeometry = geometry
             }
-            return PreparedLiveFrame(CameraFrameSnapshot(image, rotation, elapsed, lease), elapsed)
+            return PreparedLiveFrame(CameraFrameSnapshot(image, rotation, elapsed, lease, frame.width, frame.height, crop.left, crop.top, crop.right, crop.bottom), elapsed)
         } catch (e: Throwable) {
             lease.close()
             throw e

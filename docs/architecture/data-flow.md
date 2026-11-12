@@ -24,18 +24,27 @@ flowchart TD
     Gray --> Correct
     Correct --> Track
     Track --> Camera[Пиксели upright crop в общий FILL_CENTER ViewPort]
-    Track --> Signal[LiveState.tracking и JSON диагностики]
+    Track --> Signal[LiveState.tracking]
     Norm --> Baseline[Выбор рамки в режиме YOLO]
     Baseline --> Camera
     A2 -.-> Marker[Чтение метки при записи стенда]
     Marker --> MotionLog[Журнал движения]
     Track -.-> MotionLog
     Baseline -.-> MotionLog
+    Signal -.-> Timeline[Ограниченная очередь записи]
+    Baseline -.-> Timeline
+    MotionLog -.-> Timeline
+    Timeline --> Writer[Фоновая запись NDJSON]
+    Archive[JournalArchive: допуск и резервация файла] --> Writer
+    Writer --> Stored[Приватный NDJSON и метаданные]
+    Stored --> Export[Выбранный экспорт под защитой архива]
     Photo --> Draw[Рисование рамок]
     Camera --> Draw
 ```
 
-Рисунок 2. Входные ветви сходятся в одном Kotlin-движке. Для фото поворот равен 0: EXIF уже применён. Для камеры `ImageInfo.rotationDegrees` применяется к raw crop в preprocessing, без повторного поворота рамок.
+Рисунок 2. Диагностическая запись и журнал стенда используют отдельные сессии с ограниченной очередью и файловой записью вне пути камеры; формат и признаки неполноты приведены в [модели данных](../reference/data-model.md#поток-диагностической-сессии-dronecv-session-timeline-1). Входные ветви сходятся в одном Kotlin-движке. Для фото поворот равен 0: EXIF уже применён. Для камеры `ImageInfo.rotationDegrees` применяется к raw crop в preprocessing, без повторного поворота рамок.
+
+Управление сохранёнными файлами и системным экспортом описано в [архиве журналов](../guides/journal-archive.md); оно не меняет координаты и временные базы.
 
 ## Пространства координат
 

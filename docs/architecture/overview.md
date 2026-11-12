@@ -33,6 +33,12 @@ flowchart LR
         Model --> Engine
         Live --> Diag
         Diag --> UI
+        Archive[JournalArchive: квоты и защита файлов]
+        Motion[MotionJournal: стенд движения]
+        Diag --> Archive
+        Motion --> Archive
+        UI --> Archive
+        Archive --> Documents
     end
     Picker --> Photo
     Camera --> Live
@@ -53,6 +59,7 @@ flowchart LR
 | Детектор | [OnnxDroneDetector](../../app/src/main/java/ru/university/dronecv/detection/onnx/OnnxDroneDetector.kt), [YoloOnnxEngine](../../app/src/main/java/ru/university/dronecv/detection/onnx/YoloOnnxEngine.kt) | Android-адаптер, общий JVM/Android ORT-движок, валидация тензоров, сессия |
 | Чистые алгоритмы | [detection/yolo](../../app/src/main/java/ru/university/dronecv/detection/yolo) | Поворот, letterbox, RGB-тензор, декодирование и NMS без Android SDK |
 | Диагностика | [diagnostics](../../app/src/main/java/ru/university/dronecv/diagnostics) | Измерения кадров/ресурсов, статистика, последний отчёт в Activity ViewModel, экспорт |
+| Архив журналов | [journals](../../app/src/main/java/ru/university/dronecv/journals) | Общие квоты диагностики/стенда, восстановление файлов и подтверждения экспорта, защита writer/экспорта; [контракт](../guides/journal-archive.md) |
 | Камеры и зум | [CameraInventory](../../app/src/main/java/ru/university/dronecv/camera/CameraInventory.kt), [CameraProbeState](../../app/src/main/java/ru/university/dronecv/camera/CameraProbeState.kt) | Метаданные Camera2/CameraX, запрос зума/физического ID и состояние rebind |
 
 Инварианты потоков и ресурсов описаны в [жизненном цикле](../internals/detection-lifecycle.md), координаты — в [потоках данных](data-flow.md), параметры — в [конфигурации](../reference/configuration.md).
@@ -67,6 +74,6 @@ ONNX из assets проверяется по SHA-256 и устанавливае
 
 ## Ограничения и проверка
 
-ViewModel сохраняет фото/отчёт при обычном пересоздании Activity, но не после уничтожения процесса. Рамки относятся к последнему обработанному кадру. `LiveController` на том же worker выбирает максимальный confidence текущего кадра и публикует центр с задержкой; без обнаружений координаты пусты. [Контракт и ограничения](../guides/latency-and-prediction.md). Камеры и зум зависят от Android/OEM; 5× не подтверждает оптический объектив.
+ViewModel сохраняет фото/отчёт в памяти при обычном пересоздании Activity, но не после уничтожения процесса. Сохранённые файлы журналов доступны после перезапуска через [архив](../guides/journal-archive.md). Рамки относятся к последнему обработанному кадру. `LiveController` на том же worker выбирает максимальный confidence текущего кадра и публикует центр с задержкой; без обнаружений координаты пусты. [Контракт и ограничения](../guides/latency-and-prediction.md). Камеры и зум зависят от Android/OEM; 5× не подтверждает оптический объектив.
 
 Исторического ADR с подтверждёнными альтернативами и участниками нет. Документ фиксирует устройство кода, не приписывая команде незафиксированные причины выбора. Проверяйте схему по таблице исходников и тестам из [карты кода](../development/codebase.md).

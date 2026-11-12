@@ -9,6 +9,7 @@ import ru.university.dronecv.diagnostics.DiagnosticFrames
 import ru.university.dronecv.diagnostics.DiagnosticReport
 import ru.university.dronecv.diagnostics.toJson
 import ru.university.dronecv.tracking.*
+import ru.university.dronecv.motion.MotionJournal
 
 class LiveTrackingIntegrationTest {
     private class Queue : Executor {
@@ -46,7 +47,7 @@ class LiveTrackingIntegrationTest {
         }
     }
 
-    private class Fixture(trackingCapacity: Int = 10_000) {
+    private class Fixture(trackingCapacity: Int = 10_000, journal: MotionJournal? = null) {
         val vision = Queue()
         val ml = Queue()
         val diagnostic = DiagnosticFrames(trackingCapacity = trackingCapacity)
@@ -70,7 +71,7 @@ class LiveTrackingIntegrationTest {
         val controller = LiveController(detector, ml, diagnostic, eventTime = { now },
             tracking = LiveTracking(vision, TrackingSession({ Flow().also { flows += it } })) { _, key, stamp ->
                 GrayFrame.copyOf(key, stamp, 100, 100, ByteArray(10000))
-            }, nanoTime = { now })
+            }, motion = journal, nanoTime = { now })
 
         fun start() {
             sources = controller.newSource()
@@ -108,6 +109,28 @@ class LiveTrackingIntegrationTest {
             assertEquals(71.0, signal.confirmationAgeMs!!, 0.0001)
             assertEquals(5.0, signal.captureToSignalMs!!, 0.0001)
         }
+    }
+
+    @Test fun `exported delayed correction keeps detector and coordinate frame times separate`() {
+        val file = kotlin.io.path.createTempFile("timeline-correction", ".ndjson").toFile()
+        var clock = 1_000_000_000L
+        val journal = MotionJournal(clock = { clock }, fileFactory = { file })
+        val f = Fixture(journal = journal)
+        f.start()
+        f.controller.startRecording()
+        f.acquire()
+        clock = f.now
+        journal.stop()
+        journal.awaitFinished(file)
+        val correction = file.readLines().first { it.contains("\"result_source\":\"correction\"") }
+        assertTrue(correction.contains("\"frame_id\":\"3\""))
+        assertTrue(correction.contains("\"detector_frame_id\":\"1\""))
+        assertTrue(correction.contains("\"last_yolo_frame_id\":\"1\""))
+        assertTrue(correction.contains("\"capture_ns\":\"1061000000\""))
+        assertTrue(correction.contains("\"last_yolo_capture_ns\":\"995000000\""))
+        assertTrue(correction.contains("\"last_yolo_accepted_ns\":\"1066000000\""))
+        System.getenv("DRONE_CORRECTION_FIXTURE")?.let { file.copyTo(java.io.File(it), overwrite = true) }
+        file.delete()
     }
 
     @Test fun `new camera frames publish during a queued detector call and export distinct metrics`() {

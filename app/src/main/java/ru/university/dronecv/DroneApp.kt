@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.university.dronecv.journals.JournalArchiveScreen
+import ru.university.dronecv.journals.JournalArchiveViewModel
 import ru.university.dronecv.camera.CameraScreen
 import ru.university.dronecv.photo.PhotoScreen
 import ru.university.dronecv.photo.PhotoViewModel
@@ -30,6 +32,7 @@ fun DroneApp() {
     var cameraConfidence by rememberSaveable { mutableFloatStateOf(0.5f) }
     var cameraThreads by rememberSaveable { mutableIntStateOf(2) }
     val photos: PhotoViewModel = viewModel()
+    val archive: JournalArchiveViewModel = viewModel()
     Scaffold(topBar = {
         Column(Modifier.statusBarsPadding()) {
             Text(stringResource(R.string.app_name), Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -37,11 +40,17 @@ fun DroneApp() {
             TabRow(selectedTabIndex = mode) {
                 Tab(selected = mode == 0, onClick = { mode = 0 }, text = { Text(stringResource(R.string.mode_photo)) })
                 Tab(selected = mode == 1, onClick = { mode = 1 }, text = { Text(stringResource(R.string.mode_camera)) })
+                Tab(selected = mode == 2, onClick = { mode = 2 }, text = { Text("Журналы") })
             }
         }
     }) { insets ->
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets)) {
-            if (mode == 0) PhotoScreen(photos) else CameraScreen(cameraConfidence, cameraThreads, { cameraThreads = it }) { cameraConfidence = it }
+            when (mode) {
+                0 -> PhotoScreen(photos)
+                1 -> CameraScreen(cameraConfidence, cameraThreads, { cameraThreads = it },
+                    onOpenJournals = { mode = 2 }) { cameraConfidence = it }
+                else -> JournalArchiveScreen(archive)
+            }
         }
     }
 }

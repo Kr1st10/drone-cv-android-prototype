@@ -54,4 +54,59 @@ class MotionJournalTest {
         assertFalse(journal.ui.value.recording)
         assertTrue(journal.ui.value.report!!.contains("\"abort_reason\":\"Geometry changed\""))
     }
+
+    @Test fun overflowAndStopDoNotInvertJournalAndWriterLocks() {
+        val file = java.io.File.createTempFile("motion-race", ".ndjson")
+        val diskEntered = java.util.concurrent.CountDownLatch(1)
+        val diskRelease = java.util.concurrent.CountDownLatch(1)
+        val issueEntered = java.util.concurrent.CountDownLatch(1)
+        val issueRelease = java.util.concurrent.CountDownLatch(1)
+        val stopping = java.util.concurrent.CountDownLatch(1)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        lateinit var writer: ru.university.dronecv.timeline.TimelineWriter
+        try {
+            val journal = MotionJournal({ 100L }, fileFactory = { file }, writerFactory = { path, clock, callback ->
+                ru.university.dronecv.timeline.TimelineWriter(path, clock, capacity = 1, open = {
+                    diskEntered.countDown()
+                    check(diskRelease.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                    it.outputStream()
+                }, onIssue = {
+                    issueEntered.countDown()
+                    check(issueRelease.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                    callback(it)
+                }).also { writer = it }
+            })
+            journal.start() // Header fills the queue while disk open is blocked.
+            assertTrue(diskEntered.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            val overflow = pool.submit { writer.record("state", "{}") }
+            assertTrue(issueEntered.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            val stop = pool.submit {
+                synchronized(journal) { stopping.countDown(); journal.stop() }
+            }
+            assertTrue(stopping.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            issueRelease.countDown()
+            overflow.get(2, java.util.concurrent.TimeUnit.SECONDS)
+            stop.get(2, java.util.concurrent.TimeUnit.SECONDS)
+            assertFalse(journal.ui.value.recording)
+            assertEquals("file", journal.ui.value.report)
+            assertNotNull(journal.ui.value.issue)
+            diskRelease.countDown()
+            writer.awaitFinished()
+            repeat(2) {
+                journal.selectExport()
+                val out = java.io.ByteArrayOutputStream()
+                journal.copyExport(file, out)
+                assertTrue(out.toString("UTF-8").contains("\"recording_complete\":false"))
+                assertTrue(out.toString("UTF-8").contains("\"dropped_count\":\"1\""))
+                assertNotNull(journal.ui.value.issue)
+            }
+            journal.start()
+            assertTrue(journal.ui.value.recording)
+            assertNull(journal.ui.value.issue)
+            journal.stop()
+            writer.awaitFinished()
+        } finally {
+            issueRelease.countDown(); diskRelease.countDown(); pool.shutdownNow(); file.delete()
+        }
+    }
 }

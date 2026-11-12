@@ -137,7 +137,7 @@
     <button id="motionExportLast">Экспорт последнего запуска JSON</button><button id="motionExport">Экспорт серии JSON</button>
     <h4>Отчёт по журналам Android</h4>
     <label>Эталон прогона или серии <input id="reportReference" type="file" accept="application/json,.json"></label>
-    <label>Журналы Android <input id="reportJournals" type="file" accept="application/json,.json" multiple></label>
+    <label>Журналы Android <input id="reportJournals" type="file" accept="application/json,.json,.ndjson,.jsonl,application/x-ndjson" multiple></label>
     <label>Журнал для калибровки <select id="reportSelect"></select></label>
     <p>На первом сохранённом повёрнутом кадре нажмите центры меток по порядку: TL, TR, BR, BL. Для каждого журнала отметьте точки заново.</p>
     <canvas id="reportCanvas" style="display:block;max-width:100%;height:auto;cursor:crosshair"></canvas>
