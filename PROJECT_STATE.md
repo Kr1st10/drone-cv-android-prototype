@@ -1,5 +1,18 @@
 # PROJECT_STATE.md
 
+## Доставка исправления инструментального теста — 2026-11-13
+
+- Установлено по GitHub API и логу CI: PR №35 уже объединён в `main` @ `e937d54`; последующий push `f3cd0ce` в его ветку не обновил `main` и PR №38. В запуске PR №38 `43278410019` на `1d3dac1` выполнялся старый тест, падение — `diagnostic-stop`, строка 131. Создана отдельная ветка от актуальной main с переносом только исправления теста и записи проверок.
+- Изменения теста идентичны локально проверенному `f3cd0ce`: целевой тест 1/1, полный набор 20/20 без ошибок/пропусков на эмуляторе API 36. Это предыдущие локальные проверки; для новых веток результаты CI учитываются отдельно. Открыт [PR №39](https://github.com/Kr1st10/drone-cv-android-prototype/pull/39) в main; его исправление перенесено в ветку PR №38. Конфликт затронул только этот журнал состояния: сохранены записи обеих веток. Основная рабочая папка с локальными заметками не затрагивается.
+
+## Инструментальный сценарий диагностики и архива PR №35 — 2026-11-12
+
+- Проверена актуальная `origin/codex/diagnostic-timeline` @ `ae6aaaf34b531f44211bb2dcdc1758224eaa5632`. Работа ведётся в существующей отдельной рабочей копии `/private/tmp/dronecv-journal-archive`, переключённой на эту ветку; основная папка с веткой PR №38 и прежними локальными правками сохранена. Первоначально исправление оставлено без коммита; по последующему запросу пользователя подготовлено к публикации в ветке PR №35.
+- Изменён только `LiveCameraInstrumentedTest.diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable`: ограниченное ожидание асинхронного старта с немедленной ошибкой при неудаче; ID нового файла по разнице архива до/после старта; прежнее прерывание на вкладке «Фото» и завершение native work; проверка прерывания, финализации именно этого файла и доступной кнопки экспорта во вкладке «Журналы» с прокруткой. UI session ID не используется как имя файла. Приложение, модель и CameraX не подменялись; произвольных sleep и подавления исключений не добавлено.
+- Локально JBR 21 / SDK 35: `./gradlew assembleDebug assembleDebugAndroidTest lintDebug --offline` прошёл. `connectedDebugAndroidTest` с фильтром целевого метода прерван до выполнения тестов: Gradle ожидал TLS-загрузку зависимостей runner. Те же APK установлены на `emulator-5554` (Medium Phone API 36.1, Android 16/API 36, arm64, задняя камера emulated); выполнение через `adb shell am instrument -w -r`, как в `scripts/run-device-tests.sh`, с проверкой терминального результата, а не только exit code.
+- Целевой запуск с `-e class ru.university.dronecv.camera.LiveCameraInstrumentedTest#diagnosticSessionIsInterruptedOnTabSwitchAndReportRemainsAvailable`: `OK (1 test)`, 0 failed/ignored, 52,044 с. Полный запуск без фильтра: `OK (20 tests)`, 20 passed, 0 failed/ignored/skipped, 493,929 с; этот же сценарий повторно прошёл при наличии журнала от предыдущего запуска. Терминальный результат и все 20 успешных status code проверены. `git diff --check` прошёл. Логи: `/private/tmp/dronecv-pr35-target-runner.txt`, `/private/tmp/dronecv-pr35-all-runner.txt`; сборка: `/private/tmp/dronecv-pr35-instrument-build-final.log`. GitHub Actions не перезапускались; Xiaomi/физический дрон не проверялись.
+
+
 ## Исправление initial_snapshot в PR №38 — 2026-11-12
 
 - Проверен открытый PR №38: head `c35828859c5f9eba4fcfe1e8ffa824ce615a7ff8`, ветка `codex/timeline-continuity`. В `_series()` флаг первого наблюдения теперь определяется происхождением `initial_snapshot`, без требования совпадения публикации с началом записи. Добавлены четыре регрессионных теста; другие расчёты и Android не менялись.
