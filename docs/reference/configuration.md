@@ -4,6 +4,8 @@
 
 ## Версии и платформа
 
+Параметры отдельного офлайн-анализатора координат (`--max-coordinate-age-ms`, `--output`, `--episodes-csv`) приведены в [руководстве расчёта](../guides/timeline-continuity.md#запуск). Порог свежести обязателен и не меняет настройки Android.
+
 Канонические источники — [Version Catalog](../../gradle/libs.versions.toml), [app/build.gradle.kts](../../app/build.gradle.kts), [Wrapper](../../gradle/wrapper/gradle-wrapper.properties). Значения на дату проверки:
 
 | Зависимость/параметр | Значение |
