@@ -21,6 +21,7 @@
     .actions { display: flex; gap: .5rem; margin: 1rem 0; }
     #status { font-weight: 600; }
   </style>
+  <script defer src="timeline.js"></script>
   <script defer src="pilot.js"></script>
   <script defer src="pilot-ui.js"></script>
 </head>
@@ -35,7 +36,7 @@
       <fieldset>
         <legend>Запись</legend>
         <div class="fields">
-          <label>Диагностический JSON Android <input type="file" name="report" accept=".json,application/json" required></label>
+          <label>Диагностика Android (JSON или NDJSON) <input type="file" name="report" accept=".json,.ndjson,application/json,application/x-ndjson" required></label>
           <label>Начало от старта записи, с <input type="number" name="start" min="0" step="any" value="0" required></label>
         </div>
       </fieldset>
@@ -48,7 +49,7 @@
           <label>От объектива до экрана, см <input type="number" name="monitor_distance_cm" min="0" step="any" required></label>
           <label>Фон <input name="background" required></label>
           <label>Камера / зум <input name="camera" required></label>
-          <label>Порог confidence, % (если его нет в JSON)
+          <label>Порог confidence, % (если его нет в журнале)
             <input type="number" name="threshold_pct" min="0" max="100" step="any">
           </label>
         </div>
@@ -65,7 +66,7 @@
       <p>Кадры одной видеосессии коррелированы. Даже полная серия из 20 кадров не образует 20 независимых испытаний.</p>
       <div class="table-scroll">
         <table aria-label="Отобранные инференсы" id="attempts">
-          <thead><tr><th scope="col">№</th><th scope="col">Завершение, с от старта</th><th scope="col">Кадр</th>
+          <thead><tr><th scope="col">№</th><th scope="col">Время, с от старта</th><th scope="col">Кадр</th>
             <th scope="col">Кандидат YOLO</th><th scope="col">Confidence</th></tr></thead>
           <tbody></tbody>
         </table>

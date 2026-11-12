@@ -7,6 +7,17 @@ const table = document.querySelector('#attempts');
 const body = table.tBodies[0];
 const percent = new Intl.NumberFormat('ru', { style: 'percent', maximumFractionDigits: 2 });
 const seconds = new Intl.NumberFormat('ru', { maximumFractionDigits: 3 });
+const integrityLabels = {
+  invalid_line: 'повреждённая строка',
+  invalid_event: 'некорректное событие',
+  mixed_sessions: 'смешаны разные сессии',
+  event_id_gap_or_repeat: 'разрыв или повтор event_id',
+  repeated_header: 'повтор заголовка',
+  missing_or_invalid_end: 'нет корректного завершения записи',
+  recording_failure: 'ошибка записи',
+  reported_loss: 'журнал сообщает о потерях',
+  inconsistent_counts: 'расхождение счётчиков',
+};
 let result = null;
 let revision = 0;
 
@@ -37,9 +48,9 @@ form.addEventListener('submit', async event => {
     }
     if (threshold !== '') conditions.confidence_threshold = Number(threshold) / 100;
     statusLine.textContent = 'Читаю журнал…';
-    const report = JSON.parse(await file.text());
+    const text = await file.text();
     if (submitted !== revision) return;
-    result = YoloPilot.analyze(report, Number(start) * 1000, conditions, file.name);
+    result = YoloPilot.analyzeText(text, start, conditions, file.name);
     render(result);
   } catch (error) {
     if (submitted === revision) statusLine.textContent = 'Импорт не выполнен. ' + error.message;
@@ -48,7 +59,10 @@ form.addEventListener('submit', async event => {
 
 function render(run) {
   const { summary, source, selection, input_rows: rows } = run;
-  statusLine.textContent = `${summary.complete ? 'Полная' : 'Неполная'} серия · ${summary.checked} из ${selection.target}`;
+  const fromTimeline = rows.diagnostic_frames_unlinked !== null;
+  const status = summary.complete ? 'Полная серия' : fromTimeline && summary.checked === selection.target
+    ? 'Полнота серии не подтверждена' : 'Неполная серия';
+  statusLine.textContent = `${status} · ${summary.checked} из ${selection.target}`;
   const share = summary.candidate_fraction === null ? '—' : percent.format(summary.candidate_fraction);
   document.querySelector('#summary').textContent =
     `Проверено ${summary.checked}. С кандидатом ${summary.with_candidate}, без кандидата ${summary.without_candidate}. Доля с кандидатом ${share}.`;
@@ -56,9 +70,21 @@ function render(run) {
   const thresholdSource = run.conditions.confidence_threshold_source === 'android' ? 'журнал' : 'ввод оператора';
   const details = [
     threshold === null ? 'Порог confidence неизвестен.' : `Порог confidence ${percent.format(threshold)} (${thresholdSource}).`,
-    `Строк без подтверждённого исхода YOLO или идентификатора исходного кадра: ${rows.insufficient_evidence} из ${rows.total}.`,
+    `Результатов с недостаточными или противоречивыми данными: ${rows.insufficient_evidence}.`,
     `Повторных строк: ${rows.duplicates}.`,
   ];
+  if (fromTimeline) {
+    details.push(`NDJSON · режим ${source.mode ?? 'неизвестен'}. Время отсчитывается до публикации результата YOLO.`);
+    details.push(`Строк diagnostic_frame без доказанной связи с результатом: ${rows.diagnostic_frames_unlinked}.`);
+    details.push('Доля относится к отобранным публикациям state. Полноту серии по журналу завершений подтвердить нельзя.');
+    if (source.integrity_issues.length) {
+      details.push('Проблемы целостности — ' + source.integrity_issues.map(issue => integrityLabels[issue]).join(', ') + '.');
+    }
+    if (source.threshold_conflict) details.push('Журнал содержит разные пороги confidence.');
+    if (!source.mode_confirmed) details.push('Чистый режим YOLO не подтверждён.');
+  } else {
+    details.push('Время отсчитывается до завершения инференса YOLO.');
+  }
   if (rows.stopped_on_source_change) details.push('Отбор завершён при смене источника камеры.');
   if (source.interrupted) details.push('Android отметил запись как прерванную.');
   if (source.unstored_frames > 0) details.push(`В журнал не вошло инференсов: ${source.unstored_frames}.`);
