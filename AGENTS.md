@@ -6,7 +6,7 @@
 Целевое устройство — Xiaomi 17 Pro; пока тестируем на обычных Android-устройствах.
 
 ## Архитектура и модули
-Один модуль `:app`, режимы «Фото» и «Камера», без DI и сложных слоёв.
+Один модуль `:app`, режимы «Фото» и «Камера», вкладка «Журналы», без DI и сложных слоёв.
 - `app/src/main/java/ru/university/dronecv/MainActivity.kt` — вход, edge-to-edge, Compose; `DroneApp.kt` — переключение режимов.
 - `photo/` — Photo Picker, ограниченное декодирование/EXIF, Activity-scoped ViewModel и последовательный фоновый контроллер; общая геометрия Fit для фото и рамок.
 - `camera/CameraScreen.kt` — разрешение CAMERA, состояния экрана, ошибки.
@@ -17,6 +17,7 @@
 - `detection/DetectorWorker.kt` — единственный process-wide ML-worker для фото и видео; ORT CPU sequential/2 потока без spinning.
 - `detection/ObjectDetector.kt` — контракт детектора (`ObjectDetector`, `Detection`, `NormalizedBox`).
 - `detection/onnx/` — Android-адаптер, проверка файла и общий JVM/Android ORT-движок; `detection/yolo/` — чистые Kotlin pre/postprocessing.
+- `journals/` — общий process-wide архив диагностики/стенда: квоты допуска, резервации writer и удержание выбранного экспорта; файловые операции только на IO. Контракт — `docs/guides/journal-archive.md`.
 - `app/src/test/` — Kotlin/JVM-тесты; `app/src/androidTest/` — инструментальный smoke-тест.
 - `ui/theme/Theme.kt` — тема Material 3.
 - Версии зависимостей — только в `gradle/libs.versions.toml`. CI — `.github/workflows/android-build.yml`.
