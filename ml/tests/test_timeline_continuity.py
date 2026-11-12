@@ -84,6 +84,64 @@ class ContinuityTest(unittest.TestCase):
             self.assertEqual(r[key]['first_observation']['observed_wait_ns'],1000*MS)
             self.assertTrue(r[key]['first_observation']['wait_right_censored'])
 
+    def test_delayed_initial_snapshot_preserves_provenance_and_image_age(self):
+        self.write([(1010*MS, BOX, 950*MS,
+                     {'reason': 'initial_snapshot', 'analyzer_entry_ns': str(970*MS)})],
+                   stop=1200*MS)
+        r = self.analyze()
+        self.assertTrue(r['recording_complete'])
+        self.assertEqual(r['integrity_errors'], [])
+        self.assertEqual(r['interval']['duration_ns'], 200*MS)
+        self.assertEqual(r['metrics']['duration_ns'],
+                         dict(present=190*MS, absent=0, unknown=10*MS,
+                              fresh=140*MS, stale=50*MS, age_unknown=0))
+        for key in ('coordinate_gaps', 'fresh_coordinate_gaps'):
+            with self.subTest(series=key):
+                self.assertEqual(r[key]['first_observation'],
+                                 dict(time_ns=1010*MS, in_initial_snapshot=True,
+                                      observed_wait_ns=10*MS, wait_uncertain=True,
+                                      wait_right_censored=False))
+        self.assertEqual(r['coordinate_gaps']['episodes'], [])
+        episodes = r['fresh_coordinate_gaps']['episodes']
+        self.assertEqual(len(episodes), 1)
+        self.assertEqual((episodes[0]['start_ns'], episodes[0]['end_ns'],
+                          episodes[0]['duration_ns']), (1150*MS, 1200*MS, 50*MS))
+        self.assertTrue(episodes[0]['right_censored'])
+        self.assertFalse(episodes[0]['recovered'])
+        self.assertIsNone(episodes[0]['recovery_ns'])
+
+    def test_initial_snapshot_at_start_has_zero_wait_in_both_series(self):
+        self.write([(1000*MS, BOX, 950*MS, {'reason': 'initial_snapshot'})],
+                   stop=1100*MS)
+        r = self.analyze()
+        for key in ('coordinate_gaps', 'fresh_coordinate_gaps'):
+            self.assertEqual(r[key]['first_observation'],
+                             dict(time_ns=1000*MS, in_initial_snapshot=True,
+                                  observed_wait_ns=0, wait_uncertain=False,
+                                  wait_right_censored=False))
+
+    def test_first_update_is_not_initial_snapshot(self):
+        self.write([(1010*MS, BOX, 950*MS, {'reason': 'update'})], stop=1100*MS)
+        r = self.analyze()
+        for key in ('coordinate_gaps', 'fresh_coordinate_gaps'):
+            self.assertEqual(r[key]['first_observation'],
+                             dict(time_ns=1010*MS, in_initial_snapshot=False,
+                                  observed_wait_ns=10*MS, wait_uncertain=True,
+                                  wait_right_censored=False))
+
+    def test_stale_initial_snapshot_and_first_fresh_update_have_distinct_origins(self):
+        self.write([(1010*MS, BOX, 800*MS, {'reason': 'initial_snapshot'}),
+                    (1100*MS, BOX, 1090*MS, {'reason': 'update'})], stop=1200*MS)
+        r = self.analyze()
+        self.assertEqual(r['coordinate_gaps']['first_observation'],
+                         dict(time_ns=1010*MS, in_initial_snapshot=True,
+                              observed_wait_ns=10*MS, wait_uncertain=True,
+                              wait_right_censored=False))
+        self.assertEqual(r['fresh_coordinate_gaps']['first_observation'],
+                         dict(time_ns=1100*MS, in_initial_snapshot=False,
+                              observed_wait_ns=100*MS, wait_uncertain=True,
+                              wait_right_censored=False))
+
     def test_end_does_not_clear_and_expiry_without_events(self):
         self.write([(1000*MS,BOX,1000*MS)])
         r=self.analyze()

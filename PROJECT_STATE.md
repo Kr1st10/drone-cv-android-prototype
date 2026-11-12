@@ -1,5 +1,11 @@
 # PROJECT_STATE.md
 
+## Исправление initial_snapshot в PR №38 — 2026-11-12
+
+- Проверен открытый PR №38: head `c35828859c5f9eba4fcfe1e8ffa824ce615a7ff8`, ветка `codex/timeline-continuity`. В `_series()` флаг первого наблюдения теперь определяется происхождением `initial_snapshot`, без требования совпадения публикации с началом записи. Добавлены четыре регрессионных теста; другие расчёты и Android не менялись.
+- До исправления основной новый тест воспроизвёл ошибку: 1 test, 2 failures в двух рядах только по `in_initial_snapshot`. После исправления `python3 -m unittest discover -s ml/tests -p 'test_timeline_continuity.py' -v` — 18 passed; `python3 -m unittest discover -s ml/tests -p 'test_timeline_analysis.py' -v` — 8 passed. Всего 26 passed, 0 skipped; существующие локальные Kotlin/controller NDJSON-фикстуры доступны, заново не генерировались. `git diff --check` прошёл.
+- Синтетический пример: запись 200 мс, present 190, unknown 10, fresh 140, stale 50, absent/age_unknown 0 мс. Оба первых наблюдения в 1010 мс имеют `in_initial_snapshot=true`, ожидание 10 мс и `wait_uncertain=true`. Свежесть истекает в 1150 мс, разрыв до 1200 мс цензурирован; эпизодов отсутствия координат нет. При старом начальном изображении и более позднем свежем update происхождение двух рядов различается. Физическое качество сопровождения и испытания телефона этим этапом не проверялись.
+
 ## Анализ непрерывности координат — 2026-11-12
 
 - Анализатор опубликован коммитом `bf623b7` в `origin/codex/timeline-continuity`. Создание PR через `gh pr create` заблокировано ответом GitHub HTTP 401; PR не создан, main не менялась.

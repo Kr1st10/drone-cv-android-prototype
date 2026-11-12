@@ -242,7 +242,7 @@ def _series(segments, good, bad, start, stop):
                    max_fully_observed_completed_duration_ns=max(fully_completed, default=None),
                    mean_fully_observed_recovery_ns=sum(fully_completed)/len(fully_completed) if fully_completed else None)
     first_info = dict(time_ns=first['start_ns'] if first else None,
-                      in_initial_snapshot=bool(first and first['initial_snapshot'] and first['start_ns'] == start),
+                      in_initial_snapshot=bool(first and first['initial_snapshot']),
                       observed_wait_ns=(first['start_ns'] if first else stop)-start,
                       wait_right_censored=first is None,
                       wait_uncertain=any(s['status'] not in good | bad for s in segments
