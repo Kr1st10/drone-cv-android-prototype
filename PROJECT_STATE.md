@@ -2,6 +2,8 @@
 
 ## Анализ непрерывности координат — 2026-11-12
 
+- Анализатор опубликован коммитом `bf623b7` в `origin/codex/timeline-continuity`. Создание PR через `gh pr create` заблокировано ответом GitHub HTTP 401; PR не создан, main не менялась.
+
 - От базы PR №35 `5081522` создана ветка `codex/timeline-continuity`: удалённые main=`b5ec2f7`, PR head и diagnostic-timeline=`5081522`, то есть main ещё не содержит PR. GitHub API вернул 401; статус merge через API не подтверждён.
 - Поверх существующего `read_timeline()` добавлены полные длительности/границы доступности, аналитическая свежесть с обязательным порогом, два ряда разрывов, начальное ожидание, неизвестность и цензурирование. Выходы: детерминированный JSON с SHA-256, CSV и консоль; прежний CLI сохранён. Определения и запуск: [руководство](docs/guides/timeline-continuity.md).
 - Проверено: `/private/tmp/dronecv-pr35-venv/bin/pytest ml/tests/test_timeline_analysis.py ml/tests/test_timeline_continuity.py ml/tests/test_target_signals.py ml/tests/test_tracking_reports.py ml/tests/test_analyze_android_sessions.py -q` — 51 passed, 9 subtests passed, без пропусков. В том числе 14 новых синтетических тестов, заданный пример 600/400 мс наличия/отсутствия и 200/400 мс свежести/устаревания, большие ns, повреждения, interruption и CLI/CSV. Системный Python не содержит pytest; использовано существующее временное окружение.
