@@ -44,6 +44,7 @@ adb devices
 ```bash
 python3 -m unittest discover -s ml/tests -p test_target_signals.py -v
 python3 -m unittest discover -s ml/tests -p test_timeline_analysis.py -v
+python3 -m unittest discover -s ml/tests -p test_timeline_continuity.py -v
 node lab/monitor_test/tests/timeline_import_test.mjs
 ```
 
