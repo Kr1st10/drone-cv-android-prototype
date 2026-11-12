@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Пилот YOLO · Лабораторный стенд</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px/1.5 system-ui, sans-serif; }
+    body { max-width: 55rem; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: clamp(1.7rem, 5vw, 2.4rem); line-height: 1.15; }
+    fieldset { margin: 1rem 0; padding: 1rem; border: 1px solid GrayText; border-radius: .5rem; }
+    .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .7rem 1rem; }
+    label { display: grid; gap: .2rem; align-content: start; }
+    input, button { font: inherit; padding: .35rem .55rem; }
+    input { min-width: 0; }
+    button { cursor: pointer; }
+    button[type="submit"] { background: #155c51; color: white; border: 1px solid transparent; border-radius: .3rem; }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { text-align: left; padding: .4rem; border-bottom: 1px solid GrayText; }
+    .actions { display: flex; gap: .5rem; margin: 1rem 0; }
+    #status { font-weight: 600; }
+  </style>
+  <script defer src="timeline.js"></script>
+  <script defer src="pilot.js"></script>
+  <script defer src="pilot-ui.js"></script>
+</head>
+<body>
+  <nav><a href="../gallery.html">Лабораторный стенд</a> · <a href="README.md">Инструкция</a></nav>
+  <main>
+    <h1>Пилот YOLO на неподвижной фотографии</h1>
+    <p>Удерживайте одну фотографию, дальность и настройки камеры на протяжении записи в режиме «YOLO».
+      Укажите начало заранее. Анализатор берёт первый пригодный инференс с этого момента и каждый следующий
+      не раньше чем через секунду после предыдущего, до 20 кадров.</p>
+    <form id="pilot">
+      <fieldset>
+        <legend>Запись</legend>
+        <div class="fields">
+          <label>Диагностика Android (JSON или NDJSON) <input type="file" name="report" accept=".json,.ndjson,application/json,application/x-ndjson" required></label>
+          <label>Начало от старта записи, с <input type="number" name="start" min="0" step="any" value="0" required></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Условия серии</legend>
+        <div class="fields">
+          <label>Эталон / фотография <input name="reference" required></label>
+          <label>Ракурс <input name="view" required></label>
+          <label>Эквивалентная дальность, м <input type="number" name="equivalent_range_m" min="0" step="any" required></label>
+          <label>От объектива до экрана, см <input type="number" name="monitor_distance_cm" min="0" step="any" required></label>
+          <label>Фон <input name="background" required></label>
+          <label>Камера / зум <input name="camera" required></label>
+          <label>Порог confidence, % (если его нет в журнале)
+            <input type="number" name="threshold_pct" min="0" max="100" step="any">
+          </label>
+        </div>
+      </fieldset>
+      <button type="submit">Проанализировать</button>
+    </form>
+    <p id="status" role="status"></p>
+    <section id="result" hidden>
+      <h2>Результат серии</h2>
+      <p id="summary"></p>
+      <p id="details"></p>
+      <p>Кандидат означает срабатывание YOLO. Для TP, FN, FP и подтверждённого Recall нужны проверенная разметка,
+        фактический кадр и рамки YOLO в той же системе координат. Успешная дальность по этому журналу не вычисляется.</p>
+      <p>Кадры одной видеосессии коррелированы. Даже полная серия из 20 кадров не образует 20 независимых испытаний.</p>
+      <div class="table-scroll">
+        <table aria-label="Отобранные инференсы" id="attempts">
+          <thead><tr><th scope="col">№</th><th scope="col">Время, с от старта</th><th scope="col">Кадр</th>
+            <th scope="col">Кандидат YOLO</th><th scope="col">Confidence</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="actions"><button id="csv">Скачать CSV</button><button id="json">Скачать JSON</button></div>
+    </section>
+  </main>
+</body>
+</html>
