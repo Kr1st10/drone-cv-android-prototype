@@ -1,0 +1,639 @@
+{
+  "manifest_sha256": "69e57a9213deff3b25aa2bc215edd336fc0b1d33c497bd2cc11fbd8a5a6a0119",
+  "classifier_sha256": "64ad35ab0e7bc49653e9a0c6bd2516ffe5a5fcf91547b68e0754ce42faf43bc9",
+  "yolo_sha256": "b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7",
+  "candidate_conf": 0.05,
+  "nms_iou": 0.7,
+  "top_k": 8,
+  "thresholds": {
+    "all_fp": 0.0775960491982417,
+    "negative_fp": 0.03357309900131611
+  },
+  "validation_budget": {
+    "all_fp": 209,
+    "negative_fp": 92
+  },
+  "baseline": {
+    "threshold": 0.5,
+    "iou50": {
+      "frames": 299,
+      "gt": 190,
+      "tp": 8,
+      "fp": 209,
+      "fn": 182,
+      "fp_on_negative": 92,
+      "negative_fp_near_airplane": 28,
+      "negative_fp_near_bird": 8,
+      "duplicate_fp": 0,
+      "localization_fp": 104,
+      "unmatched_fp_on_positive": 13,
+      "negative_fp_near_helicopter": 55,
+      "negative_fp_near_background": 1,
+      "recall": 0.042105263157894736,
+      "precision": 0.03686635944700461,
+      "fp_per_100_frames": 69.89966555183946,
+      "median_matched_iou": 0.5507312712298282,
+      "recall_by_size640": {
+        "<8": {
+          "found": 0,
+          "gt": 0,
+          "recall": null
+        },
+        "8-<16": {
+          "found": 0,
+          "gt": 6,
+          "recall": 0.0
+        },
+        "16-<24": {
+          "found": 1,
+          "gt": 91,
+          "recall": 0.01098901098901099
+        },
+        "24-<30": {
+          "found": 5,
+          "gt": 39,
+          "recall": 0.1282051282051282
+        },
+        ">=30": {
+          "found": 2,
+          "gt": 54,
+          "recall": 0.037037037037037035
+        }
+      },
+      "drone_free_by_frame_category": {
+        "airplane": {
+          "frames": 33,
+          "fp_boxes": 28,
+          "fp_frames": 28,
+          "fp_frame_share": 0.8484848484848485
+        },
+        "bird": {
+          "frames": 10,
+          "fp_boxes": 8,
+          "fp_frames": 8,
+          "fp_frame_share": 0.8
+        },
+        "helicopter": {
+          "frames": 66,
+          "fp_boxes": 56,
+          "fp_frames": 56,
+          "fp_frame_share": 0.8484848484848485
+        }
+      }
+    },
+    "iou30": {
+      "frames": 299,
+      "gt": 190,
+      "tp": 49,
+      "fp": 168,
+      "fn": 141,
+      "fp_on_negative": 92,
+      "negative_fp_near_airplane": 28,
+      "negative_fp_near_bird": 8,
+      "duplicate_fp": 0,
+      "localization_fp": 63,
+      "unmatched_fp_on_positive": 13,
+      "negative_fp_near_helicopter": 55,
+      "negative_fp_near_background": 1,
+      "recall": 0.2578947368421053,
+      "precision": 0.22580645161290322,
+      "fp_per_100_frames": 56.187290969899664,
+      "median_matched_iou": 0.38561508771811676,
+      "recall_by_size640": {
+        "<8": {
+          "found": 0,
+          "gt": 0,
+          "recall": null
+        },
+        "8-<16": {
+          "found": 0,
+          "gt": 6,
+          "recall": 0.0
+        },
+        "16-<24": {
+          "found": 11,
+          "gt": 91,
+          "recall": 0.12087912087912088
+        },
+        "24-<30": {
+          "found": 11,
+          "gt": 39,
+          "recall": 0.28205128205128205
+        },
+        ">=30": {
+          "found": 27,
+          "gt": 54,
+          "recall": 0.5
+        }
+      },
+      "drone_free_by_frame_category": {
+        "airplane": {
+          "frames": 33,
+          "fp_boxes": 28,
+          "fp_frames": 28,
+          "fp_frame_share": 0.8484848484848485
+        },
+        "bird": {
+          "frames": 10,
+          "fp_boxes": 8,
+          "fp_frames": 8,
+          "fp_frame_share": 0.8
+        },
+        "helicopter": {
+          "frames": 66,
+          "fp_boxes": 56,
+          "fp_frames": 56,
+          "fp_frame_share": 0.8484848484848485
+        }
+      }
+    },
+    "by_dataset_iou50": {
+      "halmstad": {
+        "frames": 299,
+        "gt": 190,
+        "tp": 8,
+        "fp": 209,
+        "fn": 182,
+        "fp_on_negative": 92,
+        "negative_fp_near_airplane": 28,
+        "negative_fp_near_bird": 8,
+        "duplicate_fp": 0,
+        "localization_fp": 104,
+        "unmatched_fp_on_positive": 13,
+        "negative_fp_near_helicopter": 55,
+        "negative_fp_near_background": 1,
+        "recall": 0.042105263157894736,
+        "precision": 0.03686635944700461,
+        "fp_per_100_frames": 69.89966555183946,
+        "median_matched_iou": 0.5507312712298282,
+        "recall_by_size640": {
+          "<8": {
+            "found": 0,
+            "gt": 0,
+            "recall": null
+          },
+          "8-<16": {
+            "found": 0,
+            "gt": 6,
+            "recall": 0.0
+          },
+          "16-<24": {
+            "found": 1,
+            "gt": 91,
+            "recall": 0.01098901098901099
+          },
+          "24-<30": {
+            "found": 5,
+            "gt": 39,
+            "recall": 0.1282051282051282
+          },
+          ">=30": {
+            "found": 2,
+            "gt": 54,
+            "recall": 0.037037037037037035
+          }
+        },
+        "drone_free_by_frame_category": {
+          "airplane": {
+            "frames": 33,
+            "fp_boxes": 28,
+            "fp_frames": 28,
+            "fp_frame_share": 0.8484848484848485
+          },
+          "bird": {
+            "frames": 10,
+            "fp_boxes": 8,
+            "fp_frames": 8,
+            "fp_frame_share": 0.8
+          },
+          "helicopter": {
+            "frames": 66,
+            "fp_boxes": 56,
+            "fp_frames": 56,
+            "fp_frame_share": 0.8484848484848485
+          }
+        }
+      }
+    }
+  },
+  "cascade": {
+    "all_fp": {
+      "threshold": 0.0775960491982417,
+      "iou50": {
+        "frames": 299,
+        "gt": 190,
+        "tp": 8,
+        "fp": 209,
+        "fn": 182,
+        "fp_on_negative": 57,
+        "negative_fp_near_airplane": 25,
+        "negative_fp_near_bird": 5,
+        "duplicate_fp": 0,
+        "localization_fp": 121,
+        "unmatched_fp_on_positive": 31,
+        "negative_fp_near_helicopter": 25,
+        "negative_fp_near_background": 2,
+        "recall": 0.042105263157894736,
+        "precision": 0.03686635944700461,
+        "fp_per_100_frames": 69.89966555183946,
+        "median_matched_iou": 0.5507312712298282,
+        "recall_by_size640": {
+          "<8": {
+            "found": 0,
+            "gt": 0,
+            "recall": null
+          },
+          "8-<16": {
+            "found": 0,
+            "gt": 6,
+            "recall": 0.0
+          },
+          "16-<24": {
+            "found": 1,
+            "gt": 91,
+            "recall": 0.01098901098901099
+          },
+          "24-<30": {
+            "found": 5,
+            "gt": 39,
+            "recall": 0.1282051282051282
+          },
+          ">=30": {
+            "found": 2,
+            "gt": 54,
+            "recall": 0.037037037037037035
+          }
+        },
+        "drone_free_by_frame_category": {
+          "airplane": {
+            "frames": 33,
+            "fp_boxes": 25,
+            "fp_frames": 22,
+            "fp_frame_share": 0.6666666666666666
+          },
+          "bird": {
+            "frames": 10,
+            "fp_boxes": 5,
+            "fp_frames": 5,
+            "fp_frame_share": 0.5
+          },
+          "helicopter": {
+            "frames": 66,
+            "fp_boxes": 27,
+            "fp_frames": 25,
+            "fp_frame_share": 0.3787878787878788
+          }
+        }
+      },
+      "iou30": {
+        "frames": 299,
+        "gt": 190,
+        "tp": 49,
+        "fp": 168,
+        "fn": 141,
+        "fp_on_negative": 57,
+        "negative_fp_near_airplane": 25,
+        "negative_fp_near_bird": 5,
+        "duplicate_fp": 0,
+        "localization_fp": 80,
+        "unmatched_fp_on_positive": 31,
+        "negative_fp_near_helicopter": 25,
+        "negative_fp_near_background": 2,
+        "recall": 0.2578947368421053,
+        "precision": 0.22580645161290322,
+        "fp_per_100_frames": 56.187290969899664,
+        "median_matched_iou": 0.40377274140715597,
+        "recall_by_size640": {
+          "<8": {
+            "found": 0,
+            "gt": 0,
+            "recall": null
+          },
+          "8-<16": {
+            "found": 0,
+            "gt": 6,
+            "recall": 0.0
+          },
+          "16-<24": {
+            "found": 9,
+            "gt": 91,
+            "recall": 0.0989010989010989
+          },
+          "24-<30": {
+            "found": 13,
+            "gt": 39,
+            "recall": 0.3333333333333333
+          },
+          ">=30": {
+            "found": 27,
+            "gt": 54,
+            "recall": 0.5
+          }
+        },
+        "drone_free_by_frame_category": {
+          "airplane": {
+            "frames": 33,
+            "fp_boxes": 25,
+            "fp_frames": 22,
+            "fp_frame_share": 0.6666666666666666
+          },
+          "bird": {
+            "frames": 10,
+            "fp_boxes": 5,
+            "fp_frames": 5,
+            "fp_frame_share": 0.5
+          },
+          "helicopter": {
+            "frames": 66,
+            "fp_boxes": 27,
+            "fp_frames": 25,
+            "fp_frame_share": 0.3787878787878788
+          }
+        }
+      },
+      "by_dataset_iou50": {
+        "halmstad": {
+          "frames": 299,
+          "gt": 190,
+          "tp": 8,
+          "fp": 209,
+          "fn": 182,
+          "fp_on_negative": 57,
+          "negative_fp_near_airplane": 25,
+          "negative_fp_near_bird": 5,
+          "duplicate_fp": 0,
+          "localization_fp": 121,
+          "unmatched_fp_on_positive": 31,
+          "negative_fp_near_helicopter": 25,
+          "negative_fp_near_background": 2,
+          "recall": 0.042105263157894736,
+          "precision": 0.03686635944700461,
+          "fp_per_100_frames": 69.89966555183946,
+          "median_matched_iou": 0.5507312712298282,
+          "recall_by_size640": {
+            "<8": {
+              "found": 0,
+              "gt": 0,
+              "recall": null
+            },
+            "8-<16": {
+              "found": 0,
+              "gt": 6,
+              "recall": 0.0
+            },
+            "16-<24": {
+              "found": 1,
+              "gt": 91,
+              "recall": 0.01098901098901099
+            },
+            "24-<30": {
+              "found": 5,
+              "gt": 39,
+              "recall": 0.1282051282051282
+            },
+            ">=30": {
+              "found": 2,
+              "gt": 54,
+              "recall": 0.037037037037037035
+            }
+          },
+          "drone_free_by_frame_category": {
+            "airplane": {
+              "frames": 33,
+              "fp_boxes": 25,
+              "fp_frames": 22,
+              "fp_frame_share": 0.6666666666666666
+            },
+            "bird": {
+              "frames": 10,
+              "fp_boxes": 5,
+              "fp_frames": 5,
+              "fp_frame_share": 0.5
+            },
+            "helicopter": {
+              "frames": 66,
+              "fp_boxes": 27,
+              "fp_frames": 25,
+              "fp_frame_share": 0.3787878787878788
+            }
+          }
+        }
+      }
+    },
+    "negative_fp": {
+      "threshold": 0.03357309900131611,
+      "iou50": {
+        "frames": 299,
+        "gt": 190,
+        "tp": 11,
+        "fp": 300,
+        "fn": 179,
+        "fp_on_negative": 92,
+        "negative_fp_near_airplane": 29,
+        "negative_fp_near_bird": 9,
+        "duplicate_fp": 1,
+        "localization_fp": 150,
+        "unmatched_fp_on_positive": 57,
+        "negative_fp_near_helicopter": 50,
+        "negative_fp_near_background": 4,
+        "recall": 0.05789473684210526,
+        "precision": 0.03536977491961415,
+        "fp_per_100_frames": 100.33444816053512,
+        "median_matched_iou": 0.5478511010885548,
+        "recall_by_size640": {
+          "<8": {
+            "found": 0,
+            "gt": 0,
+            "recall": null
+          },
+          "8-<16": {
+            "found": 0,
+            "gt": 6,
+            "recall": 0.0
+          },
+          "16-<24": {
+            "found": 1,
+            "gt": 91,
+            "recall": 0.01098901098901099
+          },
+          "24-<30": {
+            "found": 7,
+            "gt": 39,
+            "recall": 0.1794871794871795
+          },
+          ">=30": {
+            "found": 3,
+            "gt": 54,
+            "recall": 0.05555555555555555
+          }
+        },
+        "drone_free_by_frame_category": {
+          "airplane": {
+            "frames": 33,
+            "fp_boxes": 29,
+            "fp_frames": 22,
+            "fp_frame_share": 0.6666666666666666
+          },
+          "bird": {
+            "frames": 10,
+            "fp_boxes": 9,
+            "fp_frames": 7,
+            "fp_frame_share": 0.7
+          },
+          "helicopter": {
+            "frames": 66,
+            "fp_boxes": 54,
+            "fp_frames": 49,
+            "fp_frame_share": 0.7424242424242424
+          }
+        }
+      },
+      "iou30": {
+        "frames": 299,
+        "gt": 190,
+        "tp": 55,
+        "fp": 256,
+        "fn": 135,
+        "fp_on_negative": 92,
+        "negative_fp_near_airplane": 29,
+        "negative_fp_near_bird": 9,
+        "duplicate_fp": 5,
+        "localization_fp": 102,
+        "unmatched_fp_on_positive": 57,
+        "negative_fp_near_helicopter": 50,
+        "negative_fp_near_background": 4,
+        "recall": 0.2894736842105263,
+        "precision": 0.17684887459807075,
+        "fp_per_100_frames": 85.61872909698997,
+        "median_matched_iou": 0.3922757859981717,
+        "recall_by_size640": {
+          "<8": {
+            "found": 0,
+            "gt": 0,
+            "recall": null
+          },
+          "8-<16": {
+            "found": 0,
+            "gt": 6,
+            "recall": 0.0
+          },
+          "16-<24": {
+            "found": 12,
+            "gt": 91,
+            "recall": 0.13186813186813187
+          },
+          "24-<30": {
+            "found": 14,
+            "gt": 39,
+            "recall": 0.358974358974359
+          },
+          ">=30": {
+            "found": 29,
+            "gt": 54,
+            "recall": 0.5370370370370371
+          }
+        },
+        "drone_free_by_frame_category": {
+          "airplane": {
+            "frames": 33,
+            "fp_boxes": 29,
+            "fp_frames": 22,
+            "fp_frame_share": 0.6666666666666666
+          },
+          "bird": {
+            "frames": 10,
+            "fp_boxes": 9,
+            "fp_frames": 7,
+            "fp_frame_share": 0.7
+          },
+          "helicopter": {
+            "frames": 66,
+            "fp_boxes": 54,
+            "fp_frames": 49,
+            "fp_frame_share": 0.7424242424242424
+          }
+        }
+      },
+      "by_dataset_iou50": {
+        "halmstad": {
+          "frames": 299,
+          "gt": 190,
+          "tp": 11,
+          "fp": 300,
+          "fn": 179,
+          "fp_on_negative": 92,
+          "negative_fp_near_airplane": 29,
+          "negative_fp_near_bird": 9,
+          "duplicate_fp": 1,
+          "localization_fp": 150,
+          "unmatched_fp_on_positive": 57,
+          "negative_fp_near_helicopter": 50,
+          "negative_fp_near_background": 4,
+          "recall": 0.05789473684210526,
+          "precision": 0.03536977491961415,
+          "fp_per_100_frames": 100.33444816053512,
+          "median_matched_iou": 0.5478511010885548,
+          "recall_by_size640": {
+            "<8": {
+              "found": 0,
+              "gt": 0,
+              "recall": null
+            },
+            "8-<16": {
+              "found": 0,
+              "gt": 6,
+              "recall": 0.0
+            },
+            "16-<24": {
+              "found": 1,
+              "gt": 91,
+              "recall": 0.01098901098901099
+            },
+            "24-<30": {
+              "found": 7,
+              "gt": 39,
+              "recall": 0.1794871794871795
+            },
+            ">=30": {
+              "found": 3,
+              "gt": 54,
+              "recall": 0.05555555555555555
+            }
+          },
+          "drone_free_by_frame_category": {
+            "airplane": {
+              "frames": 33,
+              "fp_boxes": 29,
+              "fp_frames": 22,
+              "fp_frame_share": 0.6666666666666666
+            },
+            "bird": {
+              "frames": 10,
+              "fp_boxes": 9,
+              "fp_frames": 7,
+              "fp_frame_share": 0.7
+            },
+            "helicopter": {
+              "frames": 66,
+              "fp_boxes": 54,
+              "fp_frames": 49,
+              "fp_frame_share": 0.7424242424242424
+            }
+          }
+        }
+      }
+    }
+  },
+  "validation_groups": [
+    "halmstad:V_AIRPLANE_003",
+    "halmstad:V_AIRPLANE_019",
+    "halmstad:V_AIRPLANE_051",
+    "halmstad:V_BIRD_046",
+    "halmstad:V_DRONE_045",
+    "halmstad:V_DRONE_049",
+    "halmstad:V_DRONE_069",
+    "halmstad:V_HELICOPTER_005",
+    "halmstad:V_HELICOPTER_007",
+    "halmstad:V_HELICOPTER_018"
+  ]
+}

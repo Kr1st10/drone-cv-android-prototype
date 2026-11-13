@@ -39,6 +39,7 @@
 | Intake/provenance/review/group splits/frozen test | [ml/dataset45](../../ml/dataset45), [руководство](../../ml/results/dataset45/README.md), [протокол](../../ml/results/dataset45/PROTOCOL.md) |
 | SAHI / разрешение / AOD | [SAHI](../../ml/results/sahi/REPORT.md), [разрешение](../../ml/results/resolution/REPORT.md), [independent](../../ml/results/independent/REPORT.md), [AOD audit](../../ml/results/aod_audit/REPORT.md); соответствующие `ml/scripts/*` |
 | Подготовка обучения и эксперименты 6.2–6.5 | [training62](../../ml/results/training62/README.md), [DUT](../../ml/results/dut63/README.md), [real64](../../ml/results/real64/README.md), [data65](../../ml/results/data65/README.md) |
+| Офлайн-каскад YOLO11s и классификатора кропов | [Протокол, результаты и запуск](../../ml/results/crop-cascade/protocol.md), `python -m ml.cascade.run` |
 | Офлайн-стенд | [lab/monitor_test](../../lab/monitor_test/README.md): gallery.html, manifest.json, fetch_images.py, build_manifest.py, CSV и tests |
 
 Изображения/веса находятся в исключённых каталогах. Не запускайте скачивание, экспорт, обучение и оценку всего датасета ради небольшого изменения документации. Кандидат обучения в каталоге результатов не означает смену Android-модели; источником её файла служит манифест.
