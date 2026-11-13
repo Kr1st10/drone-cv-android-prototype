@@ -25,6 +25,118 @@
     const intersection=area(p), union=area(poly)+(box[2]-box[0])*(box[3]-box[1])-intersection;
     return union>0 ? intersection/union : 0;
   }
+
+  function centerError(ordered, spans, transform, journal, lo, hi, timingStatus, expected) {
+    const width=journal.geometry?.width, height=journal.geometry?.height;
+    const reasons={};
+    let evaluated=0, absent=0, unknown=0, weighted=0, maximum=null;
+    const distribution=new Map();
+    const geometryIssue=!(finite(width)&&width>0&&finite(height)&&height>0) ? 'missing_frame_dimensions' :
+      journal.geometry_conflict || (journal.metadata_records||[]).some(r=>{
+        const d=r.data;
+        if(r.type!=='frame_geometry' || !Array.isArray(d.crop) || d.crop.length!==4 || !d.crop.every(finite) || !finite(d.rotation_degrees)) return false;
+        const w=d.crop[2]-d.crop[0], h=d.crop[3]-d.crop[1];
+        return d.rotation_degrees%180===0 ? w!==width || h!==height : h!==width || w!==height;
+      }) || journal.frames.some(f=>
+        (f.width!=null && f.width!==width)||(f.height!=null && f.height!==height)) ? 'conflicting_frame_geometry' : null;
+    const addUnknown=(reason,d)=>{unknown+=d;reasons[reason]=(reasons[reason]||0)+d;};
+    // Merge before expanding by clock uncertainty: extra identical publications
+    // must not create extra ambiguous time around artificial boundaries.
+    const merged=[];
+    for(const span of spans) {
+      const last=merged.at(-1);
+      if(last && last.b===span.a && last.known===span.known && JSON.stringify(last.box)===JSON.stringify(span.box)) last.b=span.b;
+      else merged.push({...span});
+    }
+    let first=0;
+    for(let k=0;k+1<ordered.length;k++) {
+      const s=ordered[k];
+      if(!s.visible || !['accelerate','cruise','brake'].includes(s.phase)) continue;
+      const a=s.elapsed_ms*1e6, b=ordered[k+1].elapsed_ms*1e6;
+      if(geometryIssue || timingStatus!=='compatible') {addUnknown(geometryIssue||timingStatus,b-a);continue;}
+      let poly;
+      try {
+        const box=s.bbox_screen_px;
+        if(!Array.isArray(box)||box.length!==4||!box.every(finite)||box[0]>=box[2]||box[1]>=box[3]) throw Error();
+        poly=projected(box,transform);
+        if(!poly.every(p=>p.every(finite)) || area(poly)<=0) throw Error();
+      } catch (_) {addUnknown('invalid_reference_geometry',b-a);continue;}
+      const xs=poly.map(p=>p[0]), ys=poly.map(p=>p[1]);
+      const cx=(Math.min(...xs)+Math.max(...xs))/2*width;
+      const cy=(Math.min(...ys)+Math.max(...ys))/2*height;
+      const events=[[a,null,0],[b,null,0]];
+      while(first<merged.length && merged[first].b-lo<=a) first++;
+      for(let i=first;i<merged.length && merged[i].a-hi<b;i++) {
+        const span=merged[i], start=Math.max(a,span.a-hi), end=Math.min(b,span.b-lo);
+        if(end<=start) continue;
+        const value=!span.known || b-a>MAX_GAP_NS ? 'untrusted_interval' : span.box===null ? 'absent' :
+          Math.hypot((span.box[0]+span.box[2])/2*width-cx,(span.box[1]+span.box[3])/2*height-cy);
+        events.push([start,value,1],[end,value,-1]);
+      }
+      if(merged.length) {
+        const left=Math.min(b,merged[0].a-lo), right=Math.max(a,merged.at(-1).b-hi);
+        if(left>a) events.push([a,'outside_capture_coverage',1],[left,'outside_capture_coverage',-1]);
+        if(right<b) events.push([right,'outside_capture_coverage',1],[b,'outside_capture_coverage',-1]);
+      }
+      events.sort((x,y)=>x[0]-y[0]);
+      const active=new Map(); let previous=a, index=0;
+      while(index<events.length) {
+        const time=events[index][0], d=time-previous;
+        if(d>0) {
+          const values=[...active.keys()];
+          if(values.length===1 && typeof values[0]==='number') {
+            const value=values[0]; evaluated+=d;weighted+=value*d;
+            distribution.set(value,(distribution.get(value)||0)+d);maximum=maximum===null?value:Math.max(maximum,value);
+          } else if(values.length===1 && values[0]==='absent') absent+=d;
+          else addUnknown(values.length===1?values[0]:values.length?'offset_ambiguity':'outside_capture_coverage',d);
+        }
+        while(index<events.length && events[index][0]===time) {
+          const [,value,delta]=events[index++]; if(!delta) continue;
+          const n=(active.get(value)||0)+delta;if(n)active.set(value,n);else active.delete(value);
+        }
+        previous=time;
+      }
+    }
+    const sorted=[...distribution].sort((a,b)=>a[0]-b[0]);
+    const quantile=q=>{let cumulative=0;for(const [value,d] of sorted){cumulative+=d;if(cumulative>=q*evaluated)return value;}return null;};
+    return {version:'motion-center-error-v1',coordinate_space:'upright_crop',units:'camera_px',
+      reference_center:'center_of_aabb_of_four_projected_corners',domain:'visible_accelerate_cruise_brake',
+      weighting:'duration_ns',quantile:'inverse_weighted_cdf',uncertainty_method:'invariant_over_all_common_offsets',
+      statistics_scope:'conditional_on_evaluated_time',expected_ms:expected/1e6,evaluated_ms:evaluated/1e6,
+      absent_ms:absent/1e6,unknown_ms:unknown/1e6,coverage:expected?evaluated/expected:0,
+      mean_px:evaluated?weighted/evaluated:null,p50_px:quantile(.5),p95_px:quantile(.95),max_observed_px:maximum,
+      whole_run_statistics:unknown||absent?null:{mean_px:evaluated?weighted/evaluated:null,p50_px:quantile(.5),p95_px:quantile(.95),max_observed_px:maximum},
+      unavailable_reason:evaluated?null:geometryIssue||'no_unambiguous_coordinates',
+      unknown_reasons_ms:Object.fromEntries(Object.entries(reasons).map(([reason,d])=>[reason,d/1e6]))};
+  }
+
+  function reportMetadata(run, journal, points) {
+    const records=journal.metadata_records || [{type:'legacy_journal',data:Object.fromEntries(
+      Object.entries(journal).filter(([key])=>!['frames','publications','detections','calibration_image'].includes(key)))}];
+    const fields=['git_sha','git_dirty','app_version','model_asset','model_sha256','model_name','mode','confidence','nms_iou','nms_max_detections','model_input_size',
+      'backend','intra_op_threads','inter_op_threads','execution_mode','execution_provider','lk','yolo_period_ns','confirmation_ttl_ns','retry_ns','coordinate_timeout_ns',
+      'device','android_release','android_sdk','camera_context'];
+    const values=Object.fromEntries(fields.map(key=>[key,[]]));
+    const canonical=v=>JSON.stringify(v,(_,x)=>x && !Array.isArray(x) && typeof x==='object' ?
+      Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);
+    for(const record of [{type:'journal',data:{mode:journal.mode}},...records]) {
+      const d=record.data;
+      for(const key of fields) for(const source of [d,d?.metadata,d?.camera_context,d?.metadata?.camera_context,
+        d?.model && {model_asset:d.model.asset,model_sha256:d.model.sha256,model_name:d.model.name,confidence:d.model.confidence,
+          nms_iou:d.model.nms_iou,backend:d.model.backend,intra_op_threads:d.model.intra_op_threads,
+          inter_op_threads:d.model.inter_op_threads,execution_mode:d.model.execution_mode,execution_provider:d.model.execution_provider}]) {
+        if(source?.[key]!=null && !values[key].some(v=>canonical(v.value)===canonical(source[key])))
+          values[key].push({value:source[key],source_type:record.type,event_id:record.event_id??null});
+      }
+    }
+    return {android:{fields:Object.fromEntries(fields.map(key=>[key,values[key].length===1?values[key][0].value:null])),
+      conflicts:Object.fromEntries(fields.filter(key=>values[key].length>1).map(key=>[key,values[key]])),records,
+      camera_context_scope:'latest_context_not_frame_bound'},
+      source:{journal_schema:journal.source_schema??journal.schema,session_id:journal.session_id??null,run_id:run.run_id,
+        series_id:run.series_id??null,pair_index:run.pair_index??null,slot:run.slot??null,order:run.order??null},
+      geometry:journal.geometry??null,calibration:{screen_points:run.calibration_points,camera_normalized_points:points},
+      scenario:run.scenario??null,conditions:run.conditions??null,photo:run.photo??null};
+  }
   function analyze(run, journal, points) {
     if(run?.schema!=='dronecv-motion-run-1' || journal?.schema!=='dronecv-motion-android-1') throw Error('Неподдерживаемый формат JSON.');
     if(!Array.isArray(run.samples)||!Array.isArray(journal.frames)||!Array.isArray(journal.publications)||!Array.isArray(journal.detections)) throw Error('Отсутствуют записи.');
@@ -157,7 +269,9 @@
     else if(!boundaries) decision_reason='Нет подтверждения начальной и конечной пустых фаз.';
     else if(reversed) decision_reason='Нарушен порядок меток сценария.';
     else if(uncertainLoss) decision_reason='Неизвестный участок может скрывать длинный провал.';
-    return {run_id:run.run_id,mode:run.mode,criterion_version:'motion-retention-v3',decision_reason,clock,timing_status:timingStatus,offset_lower_ms:finite(lo)?lo/1e6:null,offset_upper_ms:finite(hi)?hi/1e6:null,total_frames:allFrames.length,matched_frames:matchedFrames,missing_markers:missing,unmatched_markers:other,marker_order_invalid:reversed,alignment_invalid:alignmentInvalid,unknown_may_hide_long_failure:uncertainLoss,coverage,expected_ms:expected/1e6,evaluated_ms:evaluated/1e6,good_ms:good/1e6,bad_ms:bad/1e6,unknown_ms:unknown/1e6,good_fraction:ratio,good_fraction_lower:lower,good_fraction_upper:upper,longest_failure_ms:longest/1e6,longest_possible_failure_ms:longestPossible/1e6,blank_evaluated_ms:blank/1e6,false_box_blank_ms:falseBlank/1e6,false_box_blank_intervals:falseBlankIntervals,capture_latency_ms:capture?(capture.published_ns-first.capture_ns)/1e6:null,capture_frame_id:capture?(frameById.get(capture.frame_id)?.original_frame_id??capture.frame_id):null,recording_complete:journal.recording_complete??null,experiment_status:journal.experiment_status??null,sufficient,pass};
+    const center_error=centerError(ordered,spans,transform,journal,lo,hi,timingStatus,expected);
+    const provenance=reportMetadata(run,journal,points);
+    return {center_error,provenance,run_id:run.run_id,mode:run.mode,criterion_version:'motion-retention-v3',decision_reason,clock,timing_status:timingStatus,offset_lower_ms:finite(lo)?lo/1e6:null,offset_upper_ms:finite(hi)?hi/1e6:null,total_frames:allFrames.length,matched_frames:matchedFrames,missing_markers:missing,unmatched_markers:other,marker_order_invalid:reversed,alignment_invalid:alignmentInvalid,unknown_may_hide_long_failure:uncertainLoss,coverage,expected_ms:expected/1e6,evaluated_ms:evaluated/1e6,good_ms:good/1e6,bad_ms:bad/1e6,unknown_ms:unknown/1e6,good_fraction:ratio,good_fraction_lower:lower,good_fraction_upper:upper,longest_failure_ms:longest/1e6,longest_possible_failure_ms:longestPossible/1e6,blank_evaluated_ms:blank/1e6,false_box_blank_ms:falseBlank/1e6,false_box_blank_intervals:falseBlankIntervals,capture_latency_ms:capture?(capture.published_ns-first.capture_ns)/1e6:null,capture_frame_id:capture?(frameById.get(capture.frame_id)?.original_frame_id??capture.frame_id):null,recording_complete:journal.recording_complete??null,experiment_status:journal.experiment_status??null,sufficient,pass};
   }
 
   // Long timestamps are subtracted as BigInt before converting to Number. Frame
@@ -167,6 +281,7 @@
     let diagnosticRequired=false, diagnosticReports=0;
     const j={schema:'dronecv-motion-android-1',frames:[],detections:[],publications:[],complete:false,truncated:true};
     const ids=new Map(), states=[];
+    j.source_schema='dronecv-session-timeline-1';j.metadata_records=[];
     j.state_contract=true;
     const integer=(v,name)=>{if(typeof v!=='string'||!/^\d+$/.test(v)) throw Error(`Некорректное поле ${name}.`);return BigInt(v);};
     const relative=(v,name)=>{if(v==null)return null;const n=integer(v,name)-start;if(n < -BigInt(Number.MAX_SAFE_INTEGER)||n > BigInt(Number.MAX_SAFE_INTEGER)) throw Error('Длительность превышает точный диапазон JavaScript.');return Number(n);};
@@ -178,19 +293,32 @@
       if(session!==row.session_id||footer || (lastId===null && id!==1n)) broken=true;
       if(lastId!==null && id!==lastId+1n) {broken=true;if(id>lastId+1n){missing+=id-lastId-1n;firstMissing??=lastId+1n;lastMissing=id-1n;}}
       lastId=id; const d=row.data;
+      if(['header','metadata','diagnostic_report','frame_geometry'].includes(row.type)) {
+        const data=Object.fromEntries(Object.entries(d).filter(([key])=>!['frames','resources','tracking','calibration_image'].includes(key)));
+        if(d.calibration_image) data.calibration_image={width:d.calibration_image.width,height:d.calibration_image.height};
+        j.metadata_records.push({type:row.type,event_id:row.event_id,event_ns:row.event_ns,data});
+      }
+      if(row.type==='frame_geometry' && Array.isArray(d.crop) && d.crop.length===4) {
+        const signature=JSON.stringify([d.source_width,d.source_height,d.crop,d.rotation_degrees]);
+        if(j.frame_geometry_signature && j.frame_geometry_signature!==signature)j.geometry_conflict=true;
+        j.frame_geometry_signature=signature;
+      }
       if(start!==null) latest=Math.max(latest,relative(row.event_ns,'event_ns'));
       if(row.type==='state' && start!==null) latest=Math.max(latest,relative(d.publication_ns,'publication_ns'));
       if(row.type!=='session_end' && row.type!=='recording_failure') accepted++;
       if(row.type==='header') { if(start!==null) throw Error('Повторный заголовок.');start=integer(d.start_ns,'start_ns');j.mode=d.mode;diagnosticRequired=d.diagnostic_report_required===true; }
       else if(start===null) throw Error('Отсутствует заголовок.');
-      else if(row.type==='metadata') { if(d.geometry)j.geometry=d.geometry;if(d.calibration_image)j.calibration_image=d.calibration_image; }
+      else if(row.type==='metadata') {
+        if(d.geometry) {if(j.geometry && (j.geometry.width!==d.geometry.width || j.geometry.height!==d.geometry.height))j.geometry_conflict=true;j.geometry=d.geometry;}
+        if(d.calibration_image)j.calibration_image=d.calibration_image;
+      }
       else if(row.type==='frame') {
         integer(d.frame_id,'frame_id'); if(ids.has(d.frame_id)) throw Error('Повторный номер кадра.');
         const dense=j.frames.length+1;ids.set(d.frame_id,dense);
         const entry=relative(d.analyzer_entry_ns,'analyzer_entry_ns');
         const usable=d.timebase==='elapsed_realtime' && typeof d.capture_ns==='string' && /^\d+$/.test(d.capture_ns) && BigInt(d.capture_ns)>0n && BigInt(d.capture_ns)<=integer(d.analyzer_entry_ns,'analyzer_entry_ns');
         const capture=usable ? relative(d.capture_ns,'capture_ns') : null;
-        j.frames.push({frame_id:dense,original_frame_id:d.frame_id,analyzer_ns:entry,capture_ns:capture,raw_capture_ns:d.capture_ns??null,timebase:d.timebase,marker:d.marker});
+        j.frames.push({frame_id:dense,original_frame_id:d.frame_id,analyzer_ns:entry,capture_ns:capture,raw_capture_ns:d.capture_ns??null,timebase:d.timebase,marker:d.marker,width:d.width??null,height:d.height??null});
       } else if(row.type==='detection') {
         j.detections.push({original_frame_id:d.frame_id,published_ns:relative(d.published_ns,'published_ns'),bbox:d.bbox,confidence:d.confidence});
       } else if(row.type==='publication') {

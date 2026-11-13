@@ -45,10 +45,22 @@
       return {run,result,journal:j.name,calibration_points:j.points};
     });
     if(new Set(items.map(i=>i.run.run_id)).size!==items.length) throw Error('Для одного run_id загружено несколько журналов.');
-    output={schema:'dronecv-motion-report-3',runs:items.map(({run,result,journal,calibration_points})=>({journal,calibration_points,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result})),maxima:MotionReport.maxima(items)};
+    output={schema:'dronecv-motion-report-4',runs:items.map(({run,result,journal,calibration_points})=>({journal,calibration_points,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result})),maxima:MotionReport.maxima(items)};
     const percent=x=>x===null?'нет данных':(x*100).toFixed(1)+'%';
+    const px=x=>x===null?'нет данных':x.toFixed(2)+' px';
+    const centerReasons={offset_ambiguity:'результат зависит от допустимого смещения часов',
+      untrusted_interval:'неполный журнал, неизвестное состояние или разрыв наблюдений',
+      outside_capture_coverage:'нет наблюдений камеры для части временной области',
+      missing_frame_dimensions:'нет размеров кадра камеры',conflicting_frame_geometry:'противоречивая геометрия кадров',
+      invalid_reference_geometry:'непригодная рамка эталона',incompatible:'несовместимые метки времени',
+      insufficient_capture:'недостаточно меток экспозиции',no_unambiguous_coordinates:'нет однозначно сопоставленных координат'};
+    const centerText=c=>`Ошибка центра (px upright crop камеры), условно по оценённому времени: средняя ${px(c.mean_px)}, p50 ${px(c.p50_px)}, p95 ${px(c.p95_px)}, наблюдавшийся максимум ${px(c.max_observed_px)}\n`+
+      `Оценено ${c.evaluated_ms.toFixed(1)} из ${c.expected_ms.toFixed(1)} мс движения; покрытие ${percent(c.coverage)}; без координат ${c.absent_ms.toFixed(1)} мс; неизвестно ${c.unknown_ms.toFixed(1)} мс\n`+
+      `Ограничения ошибки центра: ${Object.keys(c.unknown_reasons_ms).map(reason=>centerReasons[reason]||reason).join('; ') || centerReasons[c.unavailable_reason] || 'нет неоднозначных участков'}; отсутствие координат не имеет численной ошибки.\n`;
     $('reportOutput').textContent='Результаты по прогонам\n'+output.runs.map(r=>
       `Прогон ${r.run_id} (${r.mode}); версия критерия: ${r.criterion_version}\n`+
+      centerText(r.center_error)+
+      (Object.keys(r.provenance.android.conflicts).length?`Противоречивые метаданные: ${Object.keys(r.provenance.android.conflicts).join(', ')}; исходные варианты сохранены в JSON.\n`:'')+
       `Совместимый интервал смещения часов: ${r.timing_status==='compatible'?r.offset_lower_ms.toFixed(1)+'–'+r.offset_upper_ms.toFixed(1)+' мс':'не определён'}; статус: ${r.timing_status}\n`+
       `Захват (диагностика): ${r.capture_latency_ms===null?'нет':r.capture_latency_ms.toFixed(1)+' мс'}; границы доли IoU ≥ 0,5: ${percent(r.good_fraction_lower)}–${percent(r.good_fraction_upper)}; неизвестно: ${r.unknown_ms.toFixed(1)} мс; доля среди оценённых (диагностика): ${percent(r.good_fraction)}\n`+
       `Самый длинный известный провал: ${r.longest_failure_ms.toFixed(1)} мс; возможный: ${r.longest_possible_failure_ms.toFixed(1)} мс\n`+
