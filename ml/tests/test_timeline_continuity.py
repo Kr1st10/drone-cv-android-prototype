@@ -167,6 +167,58 @@ class ContinuityTest(unittest.TestCase):
                 self.assertEqual(r['metrics']['duration_ns']['age_unknown'],1000*MS)
                 self.assertEqual(r['metrics']['fresh_coordinate_availability'],dict(exact=None,lower=0,upper=1))
 
+    def test_incompatible_clear_publication_clock_rejects_exact_half_availability(self):
+        self.write([(1000*MS, BOX, 1000*MS),
+                    (1500*MS, None, None, {'publication_clock': 'monotonic_nano_time'})])
+        for reader in (read_timeline, lambda path: analyze_timeline(path, max_coordinate_age_ns=1000*MS)):
+            with self.subTest(reader=reader.__name__):
+                with self.assertRaisesRegex(ValueError, 'incompatible state publication_clock.*line 3'):
+                    reader(self.path)
+
+    def test_incompatible_nonempty_publication_clock_is_not_an_interval_boundary(self):
+        for publication in (1500*MS, 9000*MS):
+            with self.subTest(publication=publication):
+                self.write([(1000*MS, BOX, 1000*MS),
+                            (publication, BOX, 1000*MS,
+                             {'publication_clock': 'monotonic_nano_time'})])
+                with self.assertRaisesRegex(ValueError, 'incompatible state publication_clock'):
+                    self.analyze()
+
+    def test_historical_missing_publication_clock_matches_explicit_elapsed_clock(self):
+        states = [(1000*MS, BOX, 1000*MS), (1500*MS, None, None)]
+        self.write(states)
+        historical = self.analyze(threshold=1000*MS)
+        self.write([(t, box, capture, {'publication_clock': 'elapsed_realtime_ns'})
+                    for t, box, capture in states])
+        explicit = self.analyze(threshold=1000*MS)
+        for key in ('recording_complete', 'integrity_errors', 'interval', 'metrics',
+                    'coordinate_gaps', 'fresh_coordinate_gaps'):
+            self.assertEqual(historical[key], explicit[key], key)
+        self.assertEqual(historical['metrics']['coordinate_availability']['exact'], 0.5)
+        self.assertEqual(historical['metrics']['fresh_coordinate_availability']['exact'], 0.5)
+
+    def test_unknown_exposure_with_valid_publication_clock_keeps_presence(self):
+        self.write([(1000*MS, BOX, None, {'publication_clock': 'elapsed_realtime_ns',
+                                        'timestamp_source': 'unknown'})])
+        result = self.analyze()
+        self.assertTrue(result['recording_complete'])
+        self.assertEqual(result['integrity_errors'], [])
+        self.assertEqual(result['metrics']['coordinate_availability']['exact'], 1)
+        self.assertEqual(result['metrics']['duration_ns']['age_unknown'], 1000*MS)
+
+    def test_cli_rejects_incompatible_publication_clock_before_writing_outputs(self):
+        self.write([(1000*MS, BOX, 1000*MS),
+                    (1500*MS, None, None, {'publication_clock': 'monotonic_nano_time'})])
+        output, episodes = self.path.with_suffix('.json'), self.path.with_suffix('.csv')
+        result = subprocess.run([sys.executable,
+            str(Path(__file__).resolve().parents[1]/'scripts/timeline_analysis.py'), str(self.path),
+            '--max-coordinate-age-ms', '1000', '--output', str(output),
+            '--episodes-csv', str(episodes)], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('incompatible state publication_clock', result.stderr)
+        self.assertFalse(output.exists())
+        self.assertFalse(episodes.exists())
+
     def test_initial_unknown_missing_and_invalid_box(self):
         for box_options in ({}, {'box':[1,0,0,1]}):
             self.write([(1200*MS,BOX,1200*MS,box_options)])

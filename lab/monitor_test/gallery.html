@@ -350,6 +350,7 @@ let EXPERIMENTS = load('experiments', []), DEVICE_PROFILE = load('device_profile
 let GALLERY_STATE = load('gallery_state', null);
 const ui = { section: 'gallery', hud: false, geometry: false, manual: 1, available: {}, chosen: null, toastT: 0, boundsImage: null, boundsDrag: null, android: null };
 let referenceTab = null;
+let androidImportRevision = 0;
 
 function load(k, d) { try { const v = localStorage.getItem(LS + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(LS + k, JSON.stringify(v)); return true; } catch (e) { toast('Не удалось сохранить в браузере: экспортируйте JSON, освободите место.'); return false; } }
@@ -421,6 +422,7 @@ function layout() { // Reuse controls/IDs and storage; only move the existing co
   $('screenCalibSection').prepend($('screenMeasure'));
 }
 function section(name) {
+  if (name !== ui.section) invalidateAndroidImport();
   if (name === 'gallery' && ui.galleryRestorePending && GALLERY_STATE) {
     const common = S || {};
     SAMPLE = GALLERY_STATE.sample; S = { ...common, ...GALLERY_STATE.settings, experiment_kind: 'gallery' };
@@ -607,10 +609,26 @@ function applyDeviceMetadata(meta) {
   if (meta.analysis_frame_h) $('frameH').value = meta.analysis_frame_h;
   readSettings();
 }
-async function importAndroidFile(file, observation) {
-  const text = await file.text(), parsed = window.LabExperiment.parseAndroid(JSON.parse(text));
+function invalidateAndroidImport() {
+  androidImportRevision++;
+  $('androidJson').value = ''; $('androidSetupJson').value = '';
+}
+function androidImportRequest(observation) {
+  return { revision: ++androidImportRevision, run: T?.run_id ?? null, step: T?.index ?? null, section: ui.section, observation };
+}
+function androidImportIsCurrent(request) {
+  return request.revision === androidImportRevision && request.run === (T?.run_id ?? null) &&
+    request.step === (T?.index ?? null) && request.section === ui.section &&
+    (!request.observation || !$('record').classList.contains('hidden'));
+}
+async function importAndroidFile(file, observation, request) {
+  const text = await file.text();
+  if (!androidImportIsCurrent(request)) return null;
+  const parsed = window.LabExperiment.parseAndroid(JSON.parse(text));
   if (observation && !parsed.frames.length) throw new Error('В файле нет выбранного кадра для проверки.');
-  const imported = { file_name: file.name, sha256: await sha256(new TextEncoder().encode(text)), metadata: parsed.metadata,
+  const hash = await sha256(new TextEncoder().encode(text));
+  if (!androidImportIsCurrent(request)) return null;
+  const imported = { file_name: file.name, sha256: hash, metadata: parsed.metadata,
     frame_count: parsed.frame_count, candidate_count: parsed.candidate_count, no_target_count: parsed.no_target_count, bbox_available: false,
     raw_confidence_median_pct: window.LabExperiment.median(parsed.frames.map(f => f.confidence_pct).filter(v => v != null)),
     raw_confidence_max_pct: parsed.frames.reduce((value, f) => f.confidence_pct == null ? value : value == null ? f.confidence_pct : Math.max(value, f.confidence_pct), null),
@@ -893,7 +911,8 @@ function hud() { // no image id / category / object size before recording
   h.textContent = `${T.index + 1}/${T.order.length} · ${T.settings.phone} ${T.settings.zoom} · ${T.settings.distance_cm} см · масштаб ${(ui.scale * (window.devicePixelRatio || 1)).toFixed(3)}` +
     (r ? ` · записано · объект ${r.object_monitor_px ?? '—'} px монитора` : ' · не записано');
 }
-function closeOverlays() { ['record', 'answer', 'calib', 'boundsEditor'].forEach(i => $(i).classList.add('hidden')); }
+function closeRecord() { invalidateAndroidImport(); $('record').classList.add('hidden'); document.activeElement?.blur(); }
+function closeOverlays() { closeRecord(); ['answer', 'calib', 'boundsEditor'].forEach(i => $(i).classList.add('hidden')); }
 function go(d) {
   if (!T) return; const n = T.index + d;
   if (n >= T.order.length) { const done = R.filter(r => r.run_id === T.run_id).length; toast(`Последнее изображение. Записано ${done} из ${T.order.length}. S — настройки (экспорт, повтор с другим зумом).`); return; }
@@ -903,6 +922,7 @@ function go(d) {
 
 // ---------- R: record (never reveals the answer) ----------
 function openRecord() {
+  invalidateAndroidImport();
   if (!T) return; $('answer').classList.add('hidden');
   $('recIdx').textContent = `${T.index + 1}/${T.order.length}`;
   const prev = recOf(T.index); ui.chosen = prev ? prev.detection : null;
@@ -996,7 +1016,7 @@ function saveRecord() {
     app_conf_threshold_pct: actual.confidence_pct, operator: s.operator || '', recorded_at: new Date().toISOString(), note: adv ? $('recNote').value : '' });
   R = R.filter(r => !(r.run_id === rec.run_id && r.step === rec.step)); R.push(rec); const stored = save('results', R);
   cacheExperiments();
-  $('record').classList.add('hidden'); document.activeElement?.blur(); hud();
+  closeRecord(); hud();
   const done = R.filter(r => r.run_id === T.run_id).length;
   toast(stored ? `Сохранено (${done}/${T.order.length}). A — правильный ответ, → — следующее.` : 'Запись пока только в памяти: не закрывайте страницу, экспортируйте JSON.');
 }
@@ -1134,7 +1154,7 @@ document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase(), inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT';
   if (!$('boundsEditor').classList.contains('hidden')) { if (k === 'escape') openSettings(); return; }
   if (!$('record').classList.contains('hidden')) {
-    if (k === 'escape') { $('record').classList.add('hidden'); document.activeElement?.blur(); }
+    if (k === 'escape') closeRecord();
     else if (k === 'enter') { e.preventDefault(); saveRecord(); }
     else if (!inInput && ['1', '2', '3'].includes(k)) { e.preventDefault(); choose(['box_on_object', 'box_elsewhere', 'no_box'][+k - 1]); }
     return;
@@ -1201,19 +1221,29 @@ $('exportExperiment').onclick = () => {
   const data = JSON.parse(sessionJson()); data.results = R.filter(r => r.run_id === d.id); data.runs = RUNS.filter(r => r.run_id === d.id); data.experiments = [d];
   data.trial = data.runs[0]?.trial || null; download(`dronecv_limit_${d.id}.json`, JSON.stringify(data, null, 1), 'application/json');
 };
-$('androidJson').onchange = async e => {
-  const file = e.target.files[0]; if (!file) return;
+async function handleAndroidImport(event, observation) {
+  const input = event.target, file = input.files[0]; if (!file) return;
+  const request = androidImportRequest(observation), status = $(observation ? 'androidPreview' : 'androidSetupStatus');
+  if (observation) ui.android = null;
+  status.textContent = 'Читаю Android JSON…';
   try {
-    $('androidPreview').textContent = await importAndroidFile(file, true);
-  } catch (x) { ui.android = null; $('androidPreview').textContent = 'Импорт не принят: ' + x.message; }
-  e.target.value = '';
-};
-$('androidSetupJson').onchange = async e => {
-  const file = e.target.files[0]; if (!file) return;
-  try { $('androidSetupStatus').textContent = await importAndroidFile(file, false); } catch (x) { $('androidSetupStatus').textContent = 'Импорт не принят: ' + x.message; }
-  e.target.value = '';
-};
-$('clearAndroidImport').onclick = () => { ui.android = null; $('androidPreview').textContent = 'Импорт снят; результат будет ручным подтверждением выбранного кадра.'; };
+    const message = await importAndroidFile(file, observation, request);
+    if (androidImportIsCurrent(request)) status.textContent = message;
+  } catch (error) {
+    if (androidImportIsCurrent(request)) {
+      if (observation) ui.android = null;
+      status.textContent = 'Импорт не принят: ' + error.message;
+    }
+  } finally { if (androidImportIsCurrent(request)) input.value = ''; }
+}
+$('androidJson').onchange = event => handleAndroidImport(event, true);
+$('androidSetupJson').onchange = event => handleAndroidImport(event, false);
+for (const id of ['androidJson', 'androidSetupJson']) {
+  $(id).closest('details').addEventListener('toggle', event => {
+    if (!event.target.open) invalidateAndroidImport();
+  });
+}
+$('clearAndroidImport').onclick = () => { invalidateAndroidImport(); ui.android = null; $('androidJson').value = ''; $('androidPreview').textContent = 'Импорт снят; результат будет ручным подтверждением выбранного кадра.'; };
 document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { document.body.classList.toggle('quick', isQuick()); readSettings(); });
 $('zoom').onchange = () => { readSettings(); summary(); };
 $('presetPilot').onclick = () => { if (setSample(makeSample(PILOT.counts, PILOT.seed, PILOT.name))) { readSettings(); summary(); } };
@@ -1221,7 +1251,7 @@ $('presetAll').onclick = () => { const c = {}; CATS.forEach(x => c[x] = M.filter
 $('makeSample').onclick = () => { if (setSample(makeSample(readCounts(), parseInt($('seed').value) || 0))) summary(); };
 document.querySelectorAll('.det').forEach(b => b.onclick = () => choose(b.dataset.det));
 $('recSave').onclick = saveRecord;
-$('recCancel').onclick = () => { $('record').classList.add('hidden'); document.activeElement?.blur(); };
+$('recCancel').onclick = closeRecord;
 $('start').onclick = startRun;
 $('resume').onclick = () => { if (T?.settings.experiment_kind === 'limit' && RUNS.some(r => r.trial?.settings && (r.trial.settings.experiment_kind || 'gallery') === 'gallery')) resumeKind('gallery'); else if (T) { ui.manual = 1; show(); } else alert('Нет сохранённого прогона'); };
 $('calibBtn').onclick = () => calib('camera');
@@ -1294,11 +1324,11 @@ $('importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; f
     save('object_bounds', BOUNDS);
   }
   if (d.sample && Array.isArray(d.sample.ids) && d.sample.ids.every(byId)) { SAMPLE = d.sample; save('sample', SAMPLE); writeCounts(SAMPLE.counts); $('seed').value = SAMPLE.seed; }
-  if (d.trial) { T = d.trial; save('trial', T); }
+  if (d.trial) { invalidateAndroidImport(); T = d.trial; save('trial', T); }
   if (Array.isArray(d.runs)) { const have = new Set(RUNS.map(r => r.run_id)); RUNS = RUNS.concat(d.runs.filter(r => !have.has(r.run_id))); save('runs', RUNS); }
   if (Array.isArray(d.results) && d.results.length && confirm('Добавить импортированные результаты к сохранённым?')) { const key = r => r.run_id + ':' + r.step; const have = new Set(R.map(key)); R = R.concat(d.results.filter(r => !have.has(key(r))).map(normalizeRecord)); save('results', R); }
   cacheExperiments(); sampleInfo(); summary(); screenStatus(); boundsStatus(); referencePhotoStatus(); renderExperiments(); e.target.value = ''; }).catch(() => alert('Не удалось импортировать сессию. Проверьте файл и свободное место.')); };
-$('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); cacheExperiments(); summary(); sampleInfo(); renderExperiments(); } };
+$('clear').onclick = () => { if (confirm('Удалить все результаты и прогоны? Выборка останется. Сначала экспортируйте CSV/JSON.')) { invalidateAndroidImport(); R = []; RUNS = []; T = null; save('results', R); save('runs', RUNS); localStorage.removeItem(LS + 'trial'); cacheExperiments(); summary(); sampleInfo(); renderExperiments(); } };
 const LEGACY = localStorage.getItem('dronecv66.results');
 if (LEGACY && LEGACY !== '[]') { $('legacy').classList.remove('hidden'); $('legacy').onclick = () => download(`dronecv66_v1_results_${Date.now()}.json`, LEGACY, 'application/json'); }
 

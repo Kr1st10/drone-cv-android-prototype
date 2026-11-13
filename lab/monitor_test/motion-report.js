@@ -164,6 +164,7 @@
   // IDs remain available as strings; the legacy evaluator uses dense indices.
   function timelineImporter() {
     let start=null, session=null, lastId=null, footer=null, broken=false, latest=0, accepted=0n, missing=0n, firstMissing=null, lastMissing=null;
+    let diagnosticRequired=false, diagnosticReports=0;
     const j={schema:'dronecv-motion-android-1',frames:[],detections:[],publications:[],complete:false,truncated:true};
     const ids=new Map(), states=[];
     j.state_contract=true;
@@ -180,7 +181,7 @@
       if(start!==null) latest=Math.max(latest,relative(row.event_ns,'event_ns'));
       if(row.type==='state' && start!==null) latest=Math.max(latest,relative(d.publication_ns,'publication_ns'));
       if(row.type!=='session_end' && row.type!=='recording_failure') accepted++;
-      if(row.type==='header') { if(start!==null) throw Error('Повторный заголовок.');start=integer(d.start_ns,'start_ns');j.mode=d.mode; }
+      if(row.type==='header') { if(start!==null) throw Error('Повторный заголовок.');start=integer(d.start_ns,'start_ns');j.mode=d.mode;diagnosticRequired=d.diagnostic_report_required===true; }
       else if(start===null) throw Error('Отсутствует заголовок.');
       else if(row.type==='metadata') { if(d.geometry)j.geometry=d.geometry;if(d.calibration_image)j.calibration_image=d.calibration_image; }
       else if(row.type==='frame') {
@@ -202,11 +203,12 @@
           state_known:Object.hasOwn(d,'box'),initial_snapshot:initial});
       } else if(row.type==='session_end') {footer=d;try {j.stop_ns=relative(d.stop_ns,'stop_ns');} catch (_) {broken=true;footer=null;}}
       else if(row.type==='recording_failure') broken=true;
+      else if(row.type==='diagnostic_report') diagnosticReports++;
       else if(!['state','resource','diagnostic_frame','tracking','frame_geometry','stale_discard','discard'].includes(row.type)) throw Error(`Неизвестная запись: ${row.type}`);
     }
     function finish(partial=false) {
       if(start===null) throw Error('Отсутствует заголовок.');
-      let incomplete=partial || broken || !footer;
+      let incomplete=partial || broken || !footer || (diagnosticRequired && diagnosticReports!==1);
       if(footer) try {
         const dropped=integer(footer.dropped_count,'dropped_count');
         const recorded=integer(footer.accepted_count,'accepted_count');

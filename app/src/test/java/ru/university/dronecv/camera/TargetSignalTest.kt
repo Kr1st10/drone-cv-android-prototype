@@ -38,7 +38,7 @@ class TargetSignalTest {
     }
 
     @Test fun uprightDimensionsBoundsAndUnknownClockPreserveCurrentCoordinates() {
-        val selected = selectTarget(listOf(Detection("drone", .9f, NormalizedBox(1f, 1f, 1f, 1f))), 480, 640)!!
+        val selected = selectTarget(listOf(Detection("drone", .9f, NormalizedBox(.99999994f, .99999994f, 1f, 1f))), 480, 640)!!
         assertEquals(PixelPoint(479.0, 639.0), selected.center)
         val signal = targetSignal(1, 2, stamp(1_000_000_000, source = CaptureTimebase.UNKNOWN),
             1_150_000_000, 480, 640, selected)

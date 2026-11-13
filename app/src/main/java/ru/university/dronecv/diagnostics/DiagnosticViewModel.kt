@@ -89,7 +89,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             return@synchronized
         }
         timeline = writer
-        writer.record("header", "{\"start_ns\":\"$timelineStartNs\",\"started_epoch_ms\":\"$startedEpochMs\",\"clock\":\"elapsed_realtime_ns\",\"measurement_clock\":\"monotonic_nano_time\",\"device\":${quote("${Build.MANUFACTURER} ${Build.MODEL}")},\"android_release\":${quote(Build.VERSION.RELEASE)},\"app_version\":${quote(BuildConfig.VERSION_NAME)},\"model_asset\":${quote(BuildConfig.DRONE_MODEL_ASSET)},\"model_sha256\":${quote(BuildConfig.DRONE_MODEL_SHA256)},\"confidence\":$confidence,\"intra_op_threads\":$threads}", timelineStartNs)
+        writer.record("header", "{\"start_ns\":\"$timelineStartNs\",\"started_epoch_ms\":\"$startedEpochMs\",\"clock\":\"elapsed_realtime_ns\",\"measurement_clock\":\"monotonic_nano_time\",\"device\":${quote("${Build.MANUFACTURER} ${Build.MODEL}")},\"android_release\":${quote(Build.VERSION.RELEASE)},\"app_version\":${quote(BuildConfig.VERSION_NAME)},\"model_asset\":${quote(BuildConfig.DRONE_MODEL_ASSET)},\"model_sha256\":${quote(BuildConfig.DRONE_MODEL_SHA256)},\"confidence\":$confidence,\"intra_op_threads\":$threads,\"diagnostic_report_required\":true,\"android_sdk\":${Build.VERSION.SDK_INT},\"build_type\":${quote(BuildConfig.BUILD_TYPE)},\"warmup\":{\"method\":\"manual\",\"completed_frames_before_session\":$warmupCompletedFrames}}", timelineStartNs)
         frames.timeline = { type, data, _ -> writer.record(type, data, SystemClock.elapsedRealtimeNanos()) }
         sampler = viewModelScope.launch(Dispatchers.Default) {
             while (true) {
@@ -113,11 +113,11 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
         val stopNs = System.nanoTime()
         val snapshot = frames.stop(id, stopNs, interrupted, reason) ?: return@synchronized
         frames.timeline = null
-        timeline?.finish(SystemClock.elapsedRealtimeNanos(), interrupted, reason)
         val result = DiagnosticReport(startedEpochMs, "${Build.MANUFACTURER} ${Build.MODEL}", Build.VERSION.RELEASE,
             Build.VERSION.SDK_INT, BuildConfig.VERSION_NAME, BuildConfig.DRONE_MODEL_ASSET, BuildConfig.DRONE_MODEL_SHA256, threshold,
             snapshot, resources.toList(), intraThreads, BuildConfig.BUILD_TYPE, warmupFrames)
         report = result
+        timeline?.finishDiagnostic(result, SystemClock.elapsedRealtimeNanos())
         mutableUi.update { it.copy(recording = false, report = result) }
         viewModelScope.launch(Dispatchers.Default) {
             val pipeline = durationSummary(snapshot.frames.map { it.pipelineMs })

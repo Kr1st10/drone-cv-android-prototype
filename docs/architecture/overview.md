@@ -58,7 +58,7 @@ flowchart LR
 | Общий исполнитель | [DetectorWorker](../../app/src/main/java/ru/university/dronecv/detection/DetectorWorker.kt) | Один executor/dispatcher на процесс; нативный инференс фото/камеры не выполняется параллельно |
 | Детектор | [OnnxDroneDetector](../../app/src/main/java/ru/university/dronecv/detection/onnx/OnnxDroneDetector.kt), [YoloOnnxEngine](../../app/src/main/java/ru/university/dronecv/detection/onnx/YoloOnnxEngine.kt) | Android-адаптер, общий JVM/Android ORT-движок, валидация тензоров, сессия |
 | Чистые алгоритмы | [detection/yolo](../../app/src/main/java/ru/university/dronecv/detection/yolo) | Поворот, letterbox, RGB-тензор, декодирование и NMS без Android SDK |
-| Диагностика | [diagnostics](../../app/src/main/java/ru/university/dronecv/diagnostics) | Измерения кадров/ресурсов, статистика, последний отчёт в Activity ViewModel, экспорт |
+| Диагностика | [diagnostics](../../app/src/main/java/ru/university/dronecv/diagnostics) | Измерения кадров/ресурсов, статистика, итоговый отчёт в архивном NDJSON, выбранный экспорт |
 | Архив журналов | [journals](../../app/src/main/java/ru/university/dronecv/journals) | Общие квоты диагностики/стенда, восстановление файлов и подтверждения экспорта, защита writer/экспорта; [контракт](../guides/journal-archive.md) |
 | Камеры и зум | [CameraInventory](../../app/src/main/java/ru/university/dronecv/camera/CameraInventory.kt), [CameraProbeState](../../app/src/main/java/ru/university/dronecv/camera/CameraProbeState.kt) | Метаданные Camera2/CameraX, запрос зума/физического ID и состояние rebind |
 

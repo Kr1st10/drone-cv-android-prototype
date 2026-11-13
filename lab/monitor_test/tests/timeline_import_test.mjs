@@ -98,3 +98,12 @@ const noExposure=stateFixture();noExposure.frames.forEach(f=>f.capture_ns=null);
 assert.equal(analyze(run,noExposure,points).timing_status,'insufficient_capture');
 assert.equal(analyze(run,noExposure,points).pass,null);
 assert.equal(analyze(run,noExposure,points).capture_latency_ms,null);
+
+for (const count of [0,1,2]) {
+  const reader=timelineImporter();let id=0;
+  const append=(type,data)=>reader.push({schema:'dronecv-session-timeline-1',session_id:'diagnostic',event_id:String(++id),event_ns:'100',type,data});
+  append('header',{start_ns:'100',diagnostic_report_required:true});
+  for(let i=0;i<count;i++)append('diagnostic_report',{schema_version:1,camera_input:{no_buffer_frames:30}});
+  append('session_end',{stop_ns:'200',recording_complete:true,dropped_count:'0',accepted_count:String(id),written_count:String(id),interrupted:false});
+  assert.equal(reader.finish().recording_complete,count===1);
+}

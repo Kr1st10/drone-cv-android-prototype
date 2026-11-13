@@ -17,6 +17,10 @@ class TimelineWriter(
     private val onClosed: (Boolean, String?) -> Unit = { _, _ -> },
 ) {
     private data class Entry(val id: Long, val time: Long, val type: String, val data: String)
+    private sealed interface Completion {
+        data class Report(val entry: Entry, val data: () -> String) : Completion
+        data class Footer(val entry: Entry) : Completion
+    }
     private val queue = ArrayBlockingQueue<Entry>(capacity)
     private val session = UUID.randomUUID().toString()
     private val finished = CountDownLatch(1)
@@ -30,8 +34,12 @@ class TimelineWriter(
     private var firstMissing: Entry? = null
     private var lastMissing: Entry? = null
     private var end: Entry? = null
+    private var finalEntry: Entry? = null
+    private var finalData: (() -> String)? = null
     @Volatile private var failure: String? = null
     @Volatile private var failureRecord: String? = null
+    /** Test barrier after a completion decision; never invoked while holding the writer monitor. */
+    @Volatile internal var afterCompletionSelection: (() -> Unit)? = null
     private val worker = Thread({ runWriter() }, "timeline-writer").apply { isDaemon = true; start() }
 
     init { require(capacity > 0) }
@@ -49,9 +57,16 @@ class TimelineWriter(
         return false
     }
 
-    @Synchronized fun finish(stopNs: Long, interrupted: Boolean, reason: String?) {
+    /** The optional mandatory final record bypasses the bounded event queue and is serialized on the writer. */
+    @Synchronized fun finish(stopNs: Long, interrupted: Boolean, reason: String?,
+                             finalRecord: Pair<String, () -> String>? = null) {
         if (end != null) return
         onFinishing()
+        finalRecord?.let { (type, data) ->
+            finalEntry = Entry(++nextId, stopNs, type, "")
+            finalData = data
+            accepted++
+        }
         end = Entry(++nextId, stopNs, "session_end", "{\"stop_ns\":\"$stopNs\",\"experiment_status\":\"${if (interrupted) "interrupted" else "not_observed"}\",\"interrupted\":$interrupted,\"reason\":${reason?.let(::quote) ?: "null"}")
     }
 
@@ -81,28 +96,47 @@ class TimelineWriter(
     }
 
     private fun line(entry: Entry): String = "{\"schema\":\"dronecv-session-timeline-1\",\"session_id\":${quote(session)},\"event_id\":\"${entry.id}\",\"event_ns\":\"${entry.time}\",\"type\":${quote(entry.type)},\"data\":${entry.data}}\n"
+
+    /** Select exactly one operation against finish(); the report remains pending until its write succeeds. */
+    @Synchronized private fun nextCompletion(): Completion? {
+        val e = end ?: return null
+        if (queue.isNotEmpty()) return null
+        finalEntry?.let { return Completion.Report(it, checkNotNull(finalData)) }
+        check(finalData == null && accepted == written) { "Incomplete timeline before footer" }
+        val first = firstMissing; val last = lastMissing
+        return Completion.Footer(e.copy(data = e.data + ",\"recording_complete\":${dropped == 0L},\"accepted_count\":\"$accepted\",\"written_count\":\"$written\",\"queue_high_water\":$highWater,\"missing_ranges\":\"$missingRanges\",\"missing_bounds_exact\":${missingRanges <= 1},\"dropped_count\":\"$dropped\",\"missing_first_event_id\":${first?.id?.let { "\"$it\"" } ?: "null"},\"missing_last_event_id\":${last?.id?.let { "\"$it\"" } ?: "null"},\"missing_first_ns\":${first?.time?.let { "\"$it\"" } ?: "null"},\"missing_last_ns\":${last?.time?.let { "\"$it\"" } ?: "null"}}"))
+    }
+
     private fun runWriter() {
+        var footerWritten = false
+        var closedSuccessfully = false
         try {
             open(file).bufferedWriter(Charsets.UTF_8).use { out ->
                 while (true) {
                     val item = queue.poll(50, TimeUnit.MILLISECONDS)
                     if (item != null) { out.write(line(item)); synchronized(this) { written++ }; continue }
-                    val footer = synchronized(this) {
-                        if (end == null || queue.isNotEmpty()) null else {
-                            val e = end!!
-                            val first = firstMissing; val last = lastMissing
-                            e.copy(data = e.data + ",\"recording_complete\":${dropped == 0L},\"accepted_count\":\"$accepted\",\"written_count\":\"$written\",\"queue_high_water\":$highWater,\"missing_ranges\":\"$missingRanges\",\"missing_bounds_exact\":${missingRanges <= 1},\"dropped_count\":\"$dropped\",\"missing_first_event_id\":${first?.id?.let { "\"$it\"" } ?: "null"},\"missing_last_event_id\":${last?.id?.let { "\"$it\"" } ?: "null"},\"missing_first_ns\":${first?.time?.let { "\"$it\"" } ?: "null"},\"missing_last_ns\":${last?.time?.let { "\"$it\"" } ?: "null"}}")
+                    val completion = nextCompletion()
+                    afterCompletionSelection?.invoke()
+                    when (completion) {
+                        is Completion.Report -> {
+                            out.write(line(completion.entry.copy(data = completion.data())))
+                            synchronized(this) { finalEntry = null; finalData = null; written++ }
                         }
+                        is Completion.Footer -> { out.write(line(completion.entry)); footerWritten = true; break }
+                        null -> Unit
                     }
-                    if (footer != null) { out.write(line(footer)); break }
                 }
             }
+            closedSuccessfully = true
         } catch (e: Exception) { failure = e.message ?: e.javaClass.simpleName; onIssue("Ошибка записи: $failure") }
+        catch (_: OutOfMemoryError) { failure = "Недостаточно памяти при записи журнала"; onIssue("Ошибка записи: $failure") }
         finally {
+            finalData = null
             try {
                 val complete = synchronized(this) {
                     failure?.let { failureRecord = line(Entry(++nextId, clock(), "recording_failure", "{\"reason\":${quote(it)}}")) }
-                    end != null && failure == null && dropped == 0L
+                    closedSuccessfully && footerWritten && end != null && finalEntry == null &&
+                        failure == null && dropped == 0L && accepted == written
                 }
                 onClosed(complete, failureRecord)
             } finally { finished.countDown() }

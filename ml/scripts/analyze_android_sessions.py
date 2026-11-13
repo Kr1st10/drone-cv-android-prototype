@@ -339,6 +339,43 @@ def thread_comparison_key(run):
     return (run['device'], run['android_release'], run['android_sdk'], run['app_version'], run['build_type'], model)
 
 
+def archived_diagnostic(path, timeline):
+    """Return only a persisted, session-bound full report; historical omissions stay unknown."""
+    reports = []
+    with path.open('rb') as stream:
+        for raw in stream:
+            try:
+                row = json.loads(raw, parse_constant=lambda x: (_ for _ in ()).throw(ValueError('non-finite JSON')))
+            except (ValueError, UnicodeDecodeError):
+                continue  # read_timeline already marks damaged files incomplete
+            if isinstance(row, dict) and row.get('type') == 'diagnostic_report':
+                reports.append(row.get('data'))
+    required = timeline['header'].get('diagnostic_report_required') is True
+    if not reports and not required:
+        return None
+    if not timeline['recording_complete']:
+        raise ValueError('Incomplete diagnostic timeline; full performance data cannot be certified: ' + str(path))
+    if len(reports) != 1 or not isinstance(reports[0], dict):
+        raise ValueError('Missing or duplicate mandatory diagnostic_report: ' + str(path))
+    report = reports[0]
+    header, end = timeline['header'], timeline['end']
+    expected = {key: report.get(key) for key in
+                ('device', 'android_release', 'android_sdk', 'app_version', 'build_type', 'warmup')}
+    model = report.get('model', {})
+    if 'model_asset' in header and header['model_asset'] != model.get('asset'):
+        raise ValueError('diagnostic_report/header mismatch: model_asset')
+    expected.update(model_sha256=model.get('sha256'), confidence=model.get('confidence'),
+                    intra_op_threads=model.get('intra_op_threads'))
+    for key, value in expected.items():
+        if key not in header or header[key] != value:
+            raise ValueError('diagnostic_report/header mismatch: ' + key)
+    if str(report.get('started_epoch_ms')) != header.get('started_epoch_ms'):
+        raise ValueError('diagnostic_report/header mismatch: started_epoch_ms')
+    if any(report.get(key) != end.get(key) for key in ('interrupted', 'reason')):
+        raise ValueError('diagnostic_report/session_end mismatch')
+    return report
+
+
 def main():
     from timeline_analysis import read_timeline
     p = argparse.ArgumentParser(description=__doc__)
@@ -356,20 +393,25 @@ def main():
         except (ValueError, UnicodeDecodeError):
             probe = None
         timeline_flags.append(isinstance(probe, dict) and isinstance(probe.get('schema'), str) and probe['schema'].startswith('dronecv-session-timeline-'))
-    if any(timeline_flags):
-        if not all(timeline_flags) or args.compare_threads:
-            raise ValueError('timeline cannot be mixed with legacy reports or compared by threads')
-        timelines = [read_timeline(path) for path in args.inputs]
+    timelines = [read_timeline(path) if flag else None for path, flag in zip(args.inputs, timeline_flags)]
+    archived = [archived_diagnostic(path, timeline) if timeline is not None else None
+                for path, timeline in zip(args.inputs, timelines)]
+    if any(timeline_flags) and any(flag and report is None for flag, report in zip(timeline_flags, archived)):
+        if not all(timeline_flags) or any(report is not None for report in archived) or args.compare_threads:
+            raise ValueError('Historical or motion timeline has no full diagnostic_report; performance and thread comparison unavailable')
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps({'schema': 'dronecv-timeline-analysis-1', 'sessions': timelines}, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
         if any(not r['recording_complete'] for r in timelines):
             raise SystemExit('Incomplete timeline; see output')
         return
     runs = []
-    for path in args.inputs:
-        raw = path.read_bytes()
-        d = json.loads(raw, parse_constant=lambda x: (_ for _ in ()).throw(ValueError('non-finite JSON')))
-        runs.append(analyze(d, path.as_posix(), hashlib.sha256(raw).hexdigest()))
+    for path, timeline, report in zip(args.inputs, timelines, archived):
+        if timeline is not None:
+            runs.append(analyze(report, path.as_posix(), timeline['sha256']))
+        else:
+            raw = path.read_bytes()
+            d = json.loads(raw, parse_constant=lambda x: (_ for _ in ()).throw(ValueError('non-finite JSON')))
+            runs.append(analyze(d, path.as_posix(), hashlib.sha256(raw).hexdigest()))
     runs.sort(key=lambda x: (x['started_epoch_ms'], x['file']))
     config_fields = ('device','android_release','android_sdk','app_version','model')
     if args.compare_threads:

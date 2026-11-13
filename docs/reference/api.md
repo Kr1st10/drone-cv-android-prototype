@@ -10,11 +10,11 @@
 
 | Операция | Вход | Результат, ошибки и побочные эффекты |
 |---|---|---|
-| `ObjectDetector.detect` | `frame: Bitmap`, `rotationDegrees: Int` по часовой стрелке | `List<Detection>` относительно upright кадра; пустой список допустим. Android-реализация блокирующая, запрещает Main и вызов после close (`IllegalStateException`); неверный поворот/bitmap → `IllegalArgumentException`/`IllegalStateException`, ошибки модели → `DetectorException` |
+| `ObjectDetector.detect` | `frame: Bitmap`, `rotationDegrees: Int` по часовой стрелке | `List<Detection>` видимых непустых рамок относительно upright кадра; пустой список допустим. [Критерий отбора](../architecture/data-flow.md#пространства-координат). Android-реализация блокирующая, запрещает Main и вызов после close (`IllegalStateException`); неверный поворот/bitmap → `IllegalArgumentException`/`IllegalStateException`, ошибки модели → `DetectorException` |
 | `ObjectDetector.close()` | Нет | `Unit`; освобождает сессию. Для ORT может ждать текущий infer; вызывайте через worker |
 | `OnnxDroneDetector.create` | `context: Context`; `options=YoloEngineOptions()`; `assetPath`/`expectedSha256` из BuildConfig | Детектор. Копирует/проверяет ONNX в no-backup storage, создаёт ORT. Main запрещён; возможны ошибки файла/хеша/формата/ORT и I/O |
 | `createAsync(context, options=...)` | Те же Context/options | Suspend-обёртка `create` на `Dispatchers.IO`; блокирующие исключения сохраняются |
-| `detectDetailed(frame, rotationDegrees)` | Bitmap и поворот | `YoloResult`: пиксельные рамки и времена. Требует фонового потока, не закрытого движка |
+| `detectDetailed(frame, rotationDegrees)` | Bitmap и поворот | `YoloResult`: сырой численный выход с пиксельными рамками и временами, включая пустые рамки после clipping; прикладной отбор выполняет потребитель. Требует фонового потока, не закрытого движка |
 | `detectArgbDetailed(image, rotationDegrees, postprocess)` | `ArgbImage`, Int, `PostprocessConfig` | `YoloResult`; не создаёт Bitmap, читает заимствованные пиксели синхронно; Main запрещён |
 | `ObjectDetector.detectAsync(frame, rotationDegrees)` | Bitmap и Int | Suspend `List<Detection>` на `Dispatchers.Default`; это обёртка, не общий worker контроллеров |
 | `labels` | Нет | `List<String>` меток из спецификации модели |
