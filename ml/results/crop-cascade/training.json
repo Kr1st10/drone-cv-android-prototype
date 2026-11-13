@@ -1,0 +1,266 @@
+{
+  "architecture": "RGB48, Conv3s2 12/20/24, ReLU, AvgPool3, Linear, Sigmoid",
+  "seed": 65,
+  "epochs": 20,
+  "seconds": 13.766059916000813,
+  "torch": "2.15.0",
+  "parameters": 6957,
+  "train_frames": 1662,
+  "crops_by_label": {
+    "0": 1502,
+    "1": 873
+  },
+  "ambiguous_skipped": 42,
+  "train_losses": [
+    0.688832989366431,
+    0.6662094958706906,
+    0.6253857716259204,
+    0.5607790193557739,
+    0.5337837187992899,
+    0.5164083830431888,
+    0.5061241551449425,
+    0.5396285022936369,
+    0.5371160744491377,
+    0.48976916680837934,
+    0.5061858907749779,
+    0.47962857709432904,
+    0.4748577850994311,
+    0.4639018515787627,
+    0.49478820773174886,
+    0.4614544417105223,
+    0.4608070851125215,
+    0.4896155292925082,
+    0.44891228572945846,
+    0.462760389403293
+  ],
+  "max_onnx_export_abs_error": 2.384185791015625e-07,
+  "onnx_bytes": 29319,
+  "onnx_sha256": "64ad35ab0e7bc49653e9a0c6bd2516ffe5a5fcf91547b68e0754ce42faf43bc9",
+  "manifest_sha256": "69e57a9213deff3b25aa2bc215edd336fc0b1d33c497bd2cc11fbd8a5a6a0119",
+  "training_groups": [
+    "halmstad:V_AIRPLANE_001",
+    "halmstad:V_AIRPLANE_002",
+    "halmstad:V_AIRPLANE_004",
+    "halmstad:V_AIRPLANE_005",
+    "halmstad:V_AIRPLANE_006",
+    "halmstad:V_AIRPLANE_008",
+    "halmstad:V_AIRPLANE_009",
+    "halmstad:V_AIRPLANE_013",
+    "halmstad:V_AIRPLANE_015",
+    "halmstad:V_AIRPLANE_018",
+    "halmstad:V_AIRPLANE_021",
+    "halmstad:V_AIRPLANE_023",
+    "halmstad:V_AIRPLANE_049",
+    "halmstad:V_AIRPLANE_050",
+    "halmstad:V_AIRPLANE_058",
+    "halmstad:V_BIRD_001",
+    "halmstad:V_BIRD_007",
+    "halmstad:V_BIRD_008",
+    "halmstad:V_BIRD_010",
+    "halmstad:V_BIRD_011",
+    "halmstad:V_BIRD_013",
+    "halmstad:V_BIRD_014",
+    "halmstad:V_BIRD_025",
+    "halmstad:V_BIRD_027",
+    "halmstad:V_BIRD_028",
+    "halmstad:V_BIRD_031",
+    "halmstad:V_BIRD_038",
+    "halmstad:V_BIRD_042",
+    "halmstad:V_BIRD_044",
+    "halmstad:V_BIRD_047",
+    "halmstad:V_BIRD_049",
+    "halmstad:V_HELICOPTER_009",
+    "halmstad:V_HELICOPTER_011",
+    "halmstad:V_HELICOPTER_057",
+    "halmstad:V_HELICOPTER_059",
+    "halmstad:V_HELICOPTER_060",
+    "halmstad:V_HELICOPTER_061"
+  ],
+  "crop_counts_by_group_and_label": [
+    {
+      "group": "halmstad:V_AIRPLANE_001",
+      "label": 0,
+      "crops": 16
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_002",
+      "label": 0,
+      "crops": 15
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_004",
+      "label": 0,
+      "crops": 17
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_005",
+      "label": 0,
+      "crops": 239
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_006",
+      "label": 0,
+      "crops": 14
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_008",
+      "label": 0,
+      "crops": 16
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_009",
+      "label": 0,
+      "crops": 76
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_013",
+      "label": 0,
+      "crops": 21
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_015",
+      "label": 0,
+      "crops": 523
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_018",
+      "label": 0,
+      "crops": 11
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_021",
+      "label": 0,
+      "crops": 12
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_049",
+      "label": 0,
+      "crops": 11
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_050",
+      "label": 0,
+      "crops": 12
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_058",
+      "label": 0,
+      "crops": 25
+    },
+    {
+      "group": "halmstad:V_BIRD_001",
+      "label": 0,
+      "crops": 18
+    },
+    {
+      "group": "halmstad:V_BIRD_007",
+      "label": 0,
+      "crops": 14
+    },
+    {
+      "group": "halmstad:V_BIRD_008",
+      "label": 0,
+      "crops": 4
+    },
+    {
+      "group": "halmstad:V_BIRD_010",
+      "label": 0,
+      "crops": 17
+    },
+    {
+      "group": "halmstad:V_BIRD_011",
+      "label": 0,
+      "crops": 6
+    },
+    {
+      "group": "halmstad:V_BIRD_013",
+      "label": 0,
+      "crops": 68
+    },
+    {
+      "group": "halmstad:V_BIRD_014",
+      "label": 0,
+      "crops": 8
+    },
+    {
+      "group": "halmstad:V_BIRD_025",
+      "label": 0,
+      "crops": 31
+    },
+    {
+      "group": "halmstad:V_BIRD_027",
+      "label": 0,
+      "crops": 16
+    },
+    {
+      "group": "halmstad:V_BIRD_028",
+      "label": 0,
+      "crops": 17
+    },
+    {
+      "group": "halmstad:V_BIRD_031",
+      "label": 0,
+      "crops": 17
+    },
+    {
+      "group": "halmstad:V_BIRD_038",
+      "label": 0,
+      "crops": 17
+    },
+    {
+      "group": "halmstad:V_BIRD_042",
+      "label": 0,
+      "crops": 12
+    },
+    {
+      "group": "halmstad:V_BIRD_044",
+      "label": 0,
+      "crops": 17
+    },
+    {
+      "group": "halmstad:V_BIRD_047",
+      "label": 0,
+      "crops": 9
+    },
+    {
+      "group": "halmstad:V_BIRD_049",
+      "label": 0,
+      "crops": 19
+    },
+    {
+      "group": "halmstad:V_HELICOPTER_009",
+      "label": 0,
+      "crops": 86
+    },
+    {
+      "group": "halmstad:V_HELICOPTER_011",
+      "label": 0,
+      "crops": 53
+    },
+    {
+      "group": "halmstad:V_HELICOPTER_057",
+      "label": 0,
+      "crops": 16
+    },
+    {
+      "group": "halmstad:V_HELICOPTER_059",
+      "label": 0,
+      "crops": 19
+    },
+    {
+      "group": "halmstad:V_HELICOPTER_060",
+      "label": 0,
+      "crops": 19
+    },
+    {
+      "group": "halmstad:V_HELICOPTER_061",
+      "label": 0,
+      "crops": 11
+    },
+    {
+      "group": "halmstad:V_AIRPLANE_015",
+      "label": 1,
+      "crops": 873
+    }
+  ]
+}

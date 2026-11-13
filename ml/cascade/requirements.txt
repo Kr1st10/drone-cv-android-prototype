@@ -1,0 +1,12 @@
+# Offline inference
+numpy==2.5.4
+onnxruntime==1.31.1
+opencv-python-headless==5.0.0.93
+Pillow==13.0.0
+
+# Dataset preparation, training and export
+pyarrow==26.0.0
+openpyxl==3.1.5
+mcos-decoder==0.1.0
+torch==2.15.0
+onnx==1.23.2

@@ -1,0 +1,55 @@
+{
+  "platform": "macOS-15.8-arm64-arm-64bit-Mach-O",
+  "rss_unit": "KiB",
+  "runs": {
+    "baseline": {
+      "frames": 68,
+      "runtime_rss_kib": 106080,
+      "detector_rss_kib": 178096,
+      "sessions_ready_rss_kib": 178128,
+      "warmed_rss_kib": 455200,
+      "peak_rss_kib": 472320.0,
+      "classifier_load_ms": null,
+      "pipeline_ms": {
+        "p50": 78.69425,
+        "p95": 87.74207885,
+        "max": 171.503041
+      },
+      "crop_batch_ms": {},
+      "incremental_classifier_rss": {
+        "before_kib": 472304,
+        "after_load_kib": 472336,
+        "after_warming_batch8_kib": 472480
+      }
+    },
+    "cascade": {
+      "frames": 68,
+      "runtime_rss_kib": 105200,
+      "detector_rss_kib": 183184,
+      "sessions_ready_rss_kib": 183360,
+      "warmed_rss_kib": 445760,
+      "peak_rss_kib": 473040.0,
+      "classifier_load_ms": 1.599709,
+      "pipeline_ms": {
+        "p50": 80.3020625,
+        "p95": 84.42661885,
+        "max": 86.56975
+      },
+      "crop_batch_ms": {
+        "1": {
+          "p50": 0.092208,
+          "p95": 0.09790000000000001,
+          "max": 0.16775
+        },
+        "8": {
+          "p50": 0.6582915,
+          "p95": 0.77693925,
+          "max": 1.13875
+        }
+      },
+      "incremental_classifier_rss": null
+    }
+  },
+  "model_bytes": 29319,
+  "input_batch_bytes": 221184
+}
