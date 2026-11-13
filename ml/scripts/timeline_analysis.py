@@ -12,6 +12,11 @@ def integer(value, name):
 
 
 def read_timeline(path):
+    """Read intervals, rejecting incompatible publication clocks before using time.
+
+    Historical schema-1 files without an explicit clock use elapsed realtime.
+    Exposure clock validity affects image age separately from interval bounds.
+    """
     digest = hashlib.sha256()
     header = end = None
     counts = {}
@@ -75,6 +80,11 @@ def read_timeline(path):
             elif header is None:
                 raise ValueError('missing timeline header')
             elif kind == 'state':
+                publication_clock = data.get('publication_clock', 'elapsed_realtime_ns')
+                recording_clock = header.get('clock', 'elapsed_realtime_ns')
+                if publication_clock != 'elapsed_realtime_ns' or recording_clock != 'elapsed_realtime_ns':
+                    raise ValueError(f'incompatible state publication_clock on line {line_no}: '
+                                     f'{publication_clock!r}; recording clock {recording_clock!r}')
                 published = integer(data.get('publication_ns'), 'publication_ns')
                 last_time = max(last_time, published)
                 if published < current['start_ns']:
@@ -88,7 +98,7 @@ def read_timeline(path):
             elif kind == 'recording_failure':
                 failure = True
                 errors.append('recording failure: ' + str(data.get('reason')))
-            elif kind not in ('frame', 'detection', 'metadata', 'publication', 'resource', 'diagnostic_frame', 'tracking', 'frame_geometry', 'stale_discard', 'discard'):
+            elif kind not in ('frame', 'detection', 'metadata', 'publication', 'resource', 'diagnostic_frame', 'diagnostic_report', 'tracking', 'frame_geometry', 'stale_discard', 'discard'):
                 raise ValueError(f'unsupported timeline record type: {kind}')
     if header is None: raise ValueError('missing timeline header')
     try:
@@ -116,6 +126,8 @@ def read_timeline(path):
         except ValueError:
             errors.append('invalid session_end counters or missing bounds')
     else: errors.append('missing session_end')
+    if header.get('diagnostic_report_required') is True and counts.get('diagnostic_report', 0) != 1:
+        errors.append('missing or duplicate mandatory diagnostic_report')
     complete = bool(end and end.get('recording_complete') is True and not errors)
     # Lost records can contain state changes, and their event clocks need not be
     # ordered. Without trustworthy transition bounds, none of the carried boxes
