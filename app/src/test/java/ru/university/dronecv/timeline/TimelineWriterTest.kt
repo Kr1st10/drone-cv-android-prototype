@@ -17,8 +17,126 @@ import ru.university.dronecv.tracking.ClassConfirmation
 import ru.university.dronecv.tracking.FrameKey
 import ru.university.dronecv.tracking.TrackingObservation
 import ru.university.dronecv.tracking.VisualPhase
+import ru.university.dronecv.journals.JournalArchive
+import ru.university.dronecv.journals.JournalKind
+import ru.university.dronecv.journals.JournalState
+import java.nio.file.Files
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class TimelineWriterTest {
+    private fun awaitWriter(writer: TimelineWriter) {
+        CompletableFuture.runAsync { writer.awaitFinished() }.get(5, TimeUnit.SECONDS)
+    }
+
+    @Test fun finishBetweenCompletionSelectionAndExecutionCannotSkipMandatoryReport() {
+        val root = Files.createTempDirectory("timeline-finish-race").toFile()
+        val selected = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        try {
+            val archive = JournalArchive(root)
+            val reservation = archive.reserve(JournalKind.DIAGNOSTIC)
+            val writer = reservation.openWriter({ 1L }, {})
+            writer.record("header", "{\"start_ns\":\"1\",\"diagnostic_report_required\":true}", 1)
+            val first = AtomicBoolean(true)
+            writer.afterCompletionSelection = {
+                if (first.compareAndSet(true, false)) {
+                    check(!Thread.holdsLock(writer))
+                    selected.countDown()
+                    check(resume.await(5, TimeUnit.SECONDS))
+                }
+            }
+            assertTrue("Writer never reached empty completion selection", selected.await(5, TimeUnit.SECONDS))
+            writer.finish(2, false, null, "diagnostic_report" to { "{\"schema_version\":1}" })
+            writer.finish(99, true, "duplicate", "diagnostic_report" to { error("Duplicate finish serialized") })
+            resume.countDown()
+            awaitWriter(writer)
+            val rows = reservation.file.readLines()
+            val types = rows.map { Regex("\"type\":\"([^\"]+)\"").find(it)!!.groupValues[1] }
+            val entry = archive.inventory().entries.single()
+            assertEquals("Rows=$rows; writer.error=${writer.error()}; archive=${entry.state}",
+                listOf("header", "diagnostic_report", "session_end"), types)
+            assertEquals(listOf("1", "2", "3"), rows.map { Regex("\"event_id\":\"(\\d+)\"").find(it)!!.groupValues[1] })
+            assertTrue(rows.last().contains("\"accepted_count\":\"2\""))
+            assertTrue(rows.last().contains("\"written_count\":\"2\""))
+            assertTrue(rows.last().contains("\"dropped_count\":\"0\""))
+            assertTrue(rows.last().contains("\"recording_complete\":true"))
+            assertFalse(rows.last().contains("duplicate"))
+            assertNull(writer.error())
+            assertEquals(JournalState.COMPLETE, entry.state)
+            val next = archive.reserve(JournalKind.MOTION)
+            val nextWriter = next.openWriter({ 3L }, {})
+            nextWriter.record("header", "{\"start_ns\":\"3\"}", 3)
+            nextWriter.finish(4, false, null)
+            awaitWriter(nextWriter)
+            val restored = JournalArchive(root)
+            val exported = java.io.ByteArrayOutputStream()
+            restored.selectExport(entry.id).copy({ exported })
+            assertArrayEquals(reservation.file.readBytes(), exported.toByteArray())
+            assertEquals(JournalState.COMPLETE, restored.inventory().entries.first { it.id == entry.id }.state)
+        } finally { resume.countDown(); root.deleteRecursively() }
+    }
+
+    @Test fun repeatedFinishWithoutReportPreservesOriginalFooterAndCounters() {
+        val file = File.createTempFile("timeline-finish", ".ndjson")
+        val opened = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        var complete: Boolean? = null
+        try {
+            val writer = TimelineWriter(file, { 1L }, open = {
+                opened.countDown(); check(resume.await(5, TimeUnit.SECONDS)); it.outputStream()
+            }, onClosed = { value, _ -> complete = value })
+            assertTrue(opened.await(5, TimeUnit.SECONDS))
+            writer.record("header", "{\"start_ns\":\"1\"}", 1)
+            writer.record("state", "{\"box\":null}", 1)
+            writer.finish(2, false, null)
+            writer.finish(99, true, "duplicate", "diagnostic_report" to { error("Unexpected report") })
+            assertFalse(writer.record("state", "{}", 3))
+            resume.countDown(); awaitWriter(writer)
+            val rows = file.readLines()
+            assertEquals(3, rows.size)
+            assertTrue(rows.last().contains("\"event_id\":\"3\""))
+            assertTrue(rows.last().contains("\"stop_ns\":\"2\""))
+            assertTrue(rows.last().contains("\"accepted_count\":\"2\""))
+            assertTrue(rows.last().contains("\"written_count\":\"2\""))
+            assertEquals(1, rows.count { it.contains("\"type\":\"session_end\"") })
+            assertFalse(file.readText().contains("diagnostic_report"))
+            assertEquals(true, complete)
+            assertNull(writer.error())
+        } finally { resume.countDown(); file.delete() }
+    }
+
+    @Test fun blockedSerializationDoesNotHoldMonitorOrAllowFooterBeforeReport() {
+        val file = File.createTempFile("timeline-serialization", ".ndjson")
+        val serializing = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        val calls = AtomicInteger()
+        try {
+            val writer = TimelineWriter(file, { 1L })
+            writer.record("header", "{\"start_ns\":\"1\"}", 1)
+            writer.finish(2, false, null, "diagnostic_report" to {
+                check(!Thread.holdsLock(writer))
+                calls.incrementAndGet(); serializing.countDown()
+                check(resume.await(5, TimeUnit.SECONDS))
+                "{\"schema_version\":1}"
+            })
+            assertTrue(serializing.await(5, TimeUnit.SECONDS))
+            CompletableFuture.runAsync {
+                writer.finish(99, true, "duplicate")
+                assertFalse(writer.record("state", "{}", 3))
+            }.get(2, TimeUnit.SECONDS)
+            assertFalse(writer.isFinished())
+            assertFalse(file.readText().contains("session_end"))
+            resume.countDown(); awaitWriter(writer)
+            val rows = file.readLines()
+            assertEquals(1, calls.get())
+            assertEquals(3, rows.size)
+            assertTrue(rows[1].contains("\"type\":\"diagnostic_report\""))
+            assertTrue(rows[2].contains("\"type\":\"session_end\""))
+            assertNull(writer.error())
+        } finally { resume.countDown(); file.delete() }
+    }
     @Test fun finalRecordOutOfMemoryCannotMarkRecordingComplete() {
         val file = File.createTempFile("timeline-memory", ".ndjson")
         try {
@@ -127,20 +245,25 @@ class TimelineWriterTest {
         val file = File.createTempFile("timeline", ".ndjson")
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
+        var complete: Boolean? = null
         try {
             val writer = TimelineWriter(file, { 10L }, capacity = 1, open = {
                 entered.countDown(); release.await(); it.outputStream()
-            })
+            }, onClosed = { value, _ -> complete = value })
             assertTrue(entered.await(2, TimeUnit.SECONDS))
             assertTrue(writer.record("header", "{}", 1))
             assertFalse(writer.record("state", "{}", 2))
-            writer.finish(3, false, null)
+            writer.finish(3, false, null, "diagnostic_report" to { "{}" })
             release.countDown(); writer.awaitFinished()
             val footer = file.readLines().last()
             assertTrue(footer.contains("\"recording_complete\":false"))
             assertTrue(footer.contains("\"dropped_count\":\"1\""))
             assertTrue(footer.contains("\"missing_first_event_id\":\"2\""))
             assertTrue(footer.contains("\"missing_first_ns\":\"2\""))
+            assertTrue(footer.contains("\"accepted_count\":\"2\""))
+            assertTrue(footer.contains("\"written_count\":\"2\""))
+            assertEquals(1, file.readLines().count { it.contains("\"type\":\"diagnostic_report\"") })
+            assertEquals(false, complete)
         } finally { release.countDown(); file.delete() }
     }
 

@@ -8,6 +8,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CompletableFuture
+import java.io.FilterOutputStream
+import java.io.IOException
 
 class DiagnosticArchiveTest {
     private val origin = 1_000_000_000L
@@ -79,6 +82,12 @@ class DiagnosticArchiveTest {
                 r=json.loads(output.read_text()); assert set(r['thread_groups'])=={'1','2','4'} and not r['config_mismatches'],r
                 interrupted=Path(sys.argv[5]); d=archived_diagnostic(interrupted,read_timeline(interrupted))
                 assert d['interrupted'] and d['reason']=='tab switch' and d['camera_input']['no_buffer_frames']==30
+                damaged=paths[0].parent/'without-report.ndjson'
+                damaged.write_text(''.join(line+'\n' for line in paths[0].read_text().splitlines() if json.loads(line)['type']!='diagnostic_report'))
+                timeline=read_timeline(damaged); assert not timeline['recording_complete'],timeline
+                try: archived_diagnostic(damaged,timeline)
+                except ValueError: pass
+                else: raise AssertionError('Missing mandatory report was accepted')
             """.trimIndent()
             val process = ProcessBuilder(listOf("python3", "-c", python, repository.path)+selected.map(File::getPath)+interruptedExport.path)
                 .redirectErrorStream(true).start()
@@ -89,6 +98,10 @@ class DiagnosticArchiveTest {
                 for(const file of process.argv.slice(2)) {
                   const reader=timelineImporter();for(const line of fs.readFileSync(file,'utf8').trim().split('\n'))reader.push(JSON.parse(line));
                   if(!reader.finish().recording_complete)throw Error('incomplete Kotlin archive');
+                  const missing=timelineImporter();for(const line of fs.readFileSync(file,'utf8').trim().split('\n')) {
+                    const row=JSON.parse(line);if(row.type!=='diagnostic_report')missing.push(row);
+                  }
+                  if(missing.finish().recording_complete)throw Error('missing Kotlin report accepted');
                 }
             """.trimIndent()
             val node = ProcessBuilder(listOf("node", "-e", javascript, repository.path)+selected.map(File::getPath))
@@ -98,6 +111,7 @@ class DiagnosticArchiveTest {
             System.getenv("DRONECV_DIAGNOSTIC_FIXTURE_DIR")?.let { path ->
                 File(path).mkdirs()
                 selected.forEachIndexed { i, f -> f.copyTo(File(path, "threads-${listOf(1,2,4)[i]}.ndjson"), true) }
+                File(root, "without-report.ndjson").copyTo(File(path, "without-report.ndjson"), true)
             }
             assertTrue(restored.inventory().entries.filter { it.id in files.map(File::getName) }.all { it.exported })
         } finally { root.deleteRecursively() }
@@ -140,5 +154,46 @@ class DiagnosticArchiveTest {
             assertTrue(bytes.toString("UTF-8").contains("recording_failure"))
             assertFalse(bytes.toString("UTF-8").contains("session_end"))
         } finally { root.deleteRecursively() }
+    }
+
+    @Test fun failedMandatoryReportCannotBecomeEligibleForAutomaticDeletion() {
+        for (mode in listOf("serialization", "write", "close", "memory")) {
+            val root = Files.createTempDirectory("diagnostic-$mode").toFile()
+            try {
+                val issues = java.util.concurrent.CopyOnWriteArrayList<String>()
+                val store = JournalArchive(root, JournalPolicy(maxRecords = 1))
+                val lease = store.reserve(JournalKind.DIAGNOSTIC)
+                val writer = lease.openWriter({ origin }, { issues.add(it) }, open = { file ->
+                    object : FilterOutputStream(file.outputStream()) {
+                        override fun write(bytes: ByteArray, offset: Int, length: Int) {
+                            if (mode == "write") throw IOException("report write failed")
+                            out.write(bytes, offset, length)
+                        }
+                        override fun close() {
+                            super.close()
+                            if (mode == "close") throw IOException("report close failed")
+                        }
+                    }
+                })
+                writer.record("header", """{"start_ns":"$origin","diagnostic_report_required":true}""", origin)
+                writer.finish(origin+1, false, null, "diagnostic_report" to {
+                    when (mode) {
+                        "serialization" -> throw IllegalStateException("report serialization failed")
+                        "memory" -> throw OutOfMemoryError("synthetic report failure")
+                        else -> "{\"padding\":\"${"x".repeat(32768)}\"}"
+                    }
+                })
+                CompletableFuture.runAsync { writer.awaitFinished() }.get(5, TimeUnit.SECONDS)
+                assertNotNull("No error for $mode", writer.error())
+                assertTrue("No warning for $mode", issues.isNotEmpty())
+                val restored = JournalArchive(root, JournalPolicy(maxRecords = 1))
+                assertEquals(JournalState.INCOMPLETE_OR_UNKNOWN, restored.inventory().entries.single().state)
+                val bytes = ByteArrayOutputStream(); restored.selectExport(lease.file.name).copy({ bytes })
+                assertTrue(bytes.toString("UTF-8").contains("recording_failure"))
+                try { restored.reserve(JournalKind.DIAGNOSTIC); fail("Evicted failed $mode journal") }
+                catch (_: JournalQuotaException) { }
+                assertTrue(lease.file.isFile)
+            } finally { root.deleteRecursively() }
+        }
     }
 }
