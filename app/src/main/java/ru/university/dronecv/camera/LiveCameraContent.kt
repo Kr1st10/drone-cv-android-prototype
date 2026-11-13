@@ -1,5 +1,7 @@
 package ru.university.dronecv.camera
 
+import ru.university.dronecv.detection.highestConfidenceVisibleDetection
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -242,7 +244,7 @@ private fun LiveOverlay(state: LiveState, yoloOnly: Boolean, modifier: Modifier)
         val signal = state.tracking
         if (signal == null) {
             if (!yoloOnly) return@Canvas
-            val box = state.result?.detections?.maxByOrNull { it.confidence }?.box ?: return@Canvas
+            val box = state.result?.detections?.highestConfidenceVisibleDetection()?.box ?: return@Canvas
             val topLeft = Offset(box.left * size.width, box.top * size.height)
             drawRect(Color.Green, topLeft, Size((box.right - box.left) * size.width, (box.bottom - box.top) * size.height), style = Stroke(2.dp.toPx()))
             return@Canvas

@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import ru.university.dronecv.BuildConfig
 import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.detection.ObjectDetector
+import ru.university.dronecv.detection.visibleDetections
 import ru.university.dronecv.detection.yolo.ArgbImage
 import ru.university.dronecv.detection.yolo.ModelNotFoundException
 import ru.university.dronecv.detection.yolo.PostprocessConfig
@@ -33,10 +34,10 @@ class OnnxDroneDetector private constructor(private val engine: YoloOnnxEngine) 
 
     override fun detect(frame: Bitmap, rotationDegrees: Int): List<Detection> {
         val result = detectDetailed(frame, rotationDegrees)
-        return result.detections.map { it.toDetection(result.imageWidth, result.imageHeight) }
+        return result.detections.map { it.toDetection(result.imageWidth, result.imageHeight) }.visibleDetections()
     }
 
-    /** То же, что [detect], но с рамками в пикселях повёрнутого кадра и замерами времени. */
+    /** Raw decoder output for numerical parity; application consumers must discard empty clipped boxes. */
     fun detectDetailed(frame: Bitmap, rotationDegrees: Int): YoloResult {
         checkNotMainThread("detect")
         check(!engine.isClosed) { "OnnxDroneDetector is closed" }

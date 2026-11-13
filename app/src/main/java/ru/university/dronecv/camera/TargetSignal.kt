@@ -1,6 +1,7 @@
 package ru.university.dronecv.camera
 
 import ru.university.dronecv.detection.Detection
+import ru.university.dronecv.detection.highestConfidenceVisibleDetection
 
 /** Camera timestamp source, not the clock used for backend stage durations. */
 enum class CaptureTimebase { ELAPSED_REALTIME, UNKNOWN }
@@ -61,7 +62,7 @@ internal data class DetectedTarget(val center: PixelPoint, val confidence: Float
 /** Independent selection from the current YOLO frame; equal confidence keeps the first detection. */
 internal fun selectTarget(detections: List<Detection>, width: Int, height: Int): DetectedTarget? {
     require(width > 0 && height > 0)
-    val chosen = detections.maxByOrNull { it.confidence } ?: return null
+    val chosen = detections.highestConfidenceVisibleDetection() ?: return null
     return DetectedTarget(PixelPoint(
         ((chosen.box.left.toDouble() + chosen.box.right) * .5 * width).coerceIn(0.0, (width - 1).toDouble()),
         ((chosen.box.top.toDouble() + chosen.box.bottom) * .5 * height).coerceIn(0.0, (height - 1).toDouble())), chosen.confidence)

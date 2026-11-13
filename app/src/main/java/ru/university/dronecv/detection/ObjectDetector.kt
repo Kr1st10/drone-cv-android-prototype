@@ -19,7 +19,7 @@ interface ObjectDetector : AutoCloseable {
      * @param frame кадр/фото в исходной ориентации (ARGB_8888; другие конфигурации конвертируются).
      * @param rotationDegrees поворот по часовой стрелке (0/90/180/270), который нужно применить к кадру,
      *        чтобы он совпал с ориентацией экрана (ImageInfo.rotationDegrees в CameraX).
-     * @return список обнаружений в координатах повёрнутого кадра; пустой список, если объектов нет.
+     * @return видимые непустые обнаружения в координатах повёрнутого кадра; пустой список, если объектов нет.
      * @throws ru.university.dronecv.detection.yolo.DetectorException при ошибке инференса.
      */
     fun detect(frame: Bitmap, rotationDegrees: Int): List<Detection>
@@ -62,3 +62,12 @@ data class NormalizedBox(
     fun toPixels(width: Int, height: Int): FloatArray =
         floatArrayOf(left * width, top * height, right * width, bottom * height)
 }
+
+/** Clipping can collapse a raw YOLO box into padding; no minimum pixel size is imposed. */
+fun List<Detection>.visibleDetections(): List<Detection> = filter {
+    it.box.right > it.box.left && it.box.bottom > it.box.top
+}
+
+/** Shared by target publication and the YOLO overlay; ties preserve decoder order. */
+fun List<Detection>.highestConfidenceVisibleDetection(): Detection? =
+    visibleDetections().maxByOrNull { it.confidence }

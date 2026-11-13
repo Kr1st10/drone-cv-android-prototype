@@ -9,6 +9,8 @@ import ru.university.dronecv.tracking.YoloRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import ru.university.dronecv.detection.Detection
+import ru.university.dronecv.detection.visibleDetections
+import ru.university.dronecv.detection.highestConfidenceVisibleDetection
 import ru.university.dronecv.diagnostics.DiagnosticFrames
 import ru.university.dronecv.motion.MotionJournal
 import ru.university.dronecv.detection.NormalizedBox
@@ -559,13 +561,14 @@ class LiveController<Frame : AutoCloseable>(
                     return null
                 }
                 if (token != null) diagnostics?.received(token)
-                val result = backend.infer(frame, request.second)
+                val rawResult = backend.infer(frame, request.second)
+                val result = rawResult.copy(detections = rawResult.detections.visibleDetections())
                 val end = nanoTime()
                 val processingMs = preparationMs + (end - start) / 1_000_000.0
                 return synchronized(lock) {
                     if (!closed && active && generation == request.first) {
                         val selected = selectTarget(result.detections, result.width, result.height)
-                        val selectedDetection = result.detections.maxByOrNull { it.confidence }
+                        val selectedDetection = result.detections.highestConfidenceVisibleDetection()
                         completions.addLast(end)
                         while (completions.size > 30 ||
                             (completions.size > 2 && end - completions.first() > 3_000_000_000L)) {
@@ -586,7 +589,7 @@ class LiveController<Frame : AutoCloseable>(
                         if (token != null && result.conversionMs != null && result.preprocessMs != null && result.postprocessMs != null) {
                             diagnostics?.completed(token, end, result.conversionMs, result.preprocessMs,
                                 result.inferenceMs, result.postprocessMs, processingMs, signal,
-                                detectionCount = result.detections.size.takeIf { forTracking })
+                                detectionCount = result.detections.size)
                         }
                         // An unconfined signal subscriber may synchronously stop/reconfigure this controller.
                         if (!closed && active && generation == request.first) {

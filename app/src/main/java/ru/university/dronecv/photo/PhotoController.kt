@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import ru.university.dronecv.detection.Detection
+import ru.university.dronecv.detection.visibleDetections
 import ru.university.dronecv.detection.yolo.ModelIntegrityException
 import ru.university.dronecv.detection.yolo.ModelNotFoundException
 
@@ -67,7 +68,8 @@ class PhotoController<Image : Any>(
                             if (!published) backend.discard(image)
                         }
                         is Command.Infer -> {
-                            val result = backend.infer(command.image)
+                            val rawResult = backend.infer(command.image)
+                            val result = rawResult.copy(detections = rawResult.detections.visibleDetections())
                             publish(command.id, PhotoState(
                                 if (result.detections.isEmpty()) PhotoPhase.EMPTY else PhotoPhase.DETECTIONS,
                                 command.image, result,
