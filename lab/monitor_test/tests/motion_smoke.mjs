@@ -116,7 +116,12 @@ assert.match(outputText,/критерий: не определён/); assert.mat
 assert.match(outputText,/ограничение скорости 100 px\/с: 200 px\/с²/);
 assert.match(outputText,/ограничение скорости 300 px\/с: 600 px\/с²/);
 const multiReport=await exportJson('#reportExport');
-assert.equal(multiReport.schema,'dronecv-motion-report-3');
+assert.equal(multiReport.schema,'dronecv-motion-report-4');
+assert.equal(multiReport.runs[0].center_error.version,'motion-center-error-v1');
+assert.equal(multiReport.runs[0].center_error.units,'camera_px');
+assert.equal(multiReport.runs[0].provenance.android.fields.git_sha,null);
+assert.match(await page.textContent('#reportOutput'), /Ошибка центра.*условно/);
+assert.match(await page.textContent('#reportOutput'), /p50.*p95/);
 assert.equal(multiReport.runs.find(r=>r.run_id==='u1').pass,null);
 assert.equal(multiReport.runs[0].criterion_version,'motion-retention-v3');
 assert.equal(multiReport.runs[0].timing_status,'compatible');

@@ -1,5 +1,13 @@
 # PROJECT_STATE.md
 
+## Ошибка центра в отчёте движения — 2026-11-13
+
+- От актуальной `origin/main` @ `5037a9c` создана ветка `codex/motion-center-error` в отдельной рабочей копии `/private/tmp/dronecv-motion-center`. Проверен открытый PR №41: другая ML-задача. Посторонние изменения исходной папки сохранены.
+- Добавлена `motion-center-error-v1`: расстояние между центром действующей рамки и центром прямоугольника, охватывающего четыре проецированных угла эталона, в пикселях upright crop камеры. Среднее и квантили взвешены длительностью; учитываются только фазы движения. Условная статистика, покрытие, отсутствие координат и неизвестность разделены. При неопределённом общем смещении используются только значения, одинаковые для всех допустимых смещений; оптимизация по ошибке и границы статистик не реализованы.
+- UI и экспорт `dronecv-motion-report-4` сохраняют метаданные и их источники, конфликтующие варианты, условия/идентификаторы A/B и калибровку. Снимок camera_context не приписывается каждому кадру. Критерий `motion-retention-v3`, IoU, PASS/FAIL, Android, модель, YOLO/LK и TTL не менялись. Определения и отдельная аппаратная приёмка: [протокол](lab/monitor_test/PROTOCOL.md#ошибка-центра-во-времени), схема: [модель данных](docs/reference/data-model.md#ошибка-центра-в-отчёте-движения-v4).
+- Проверено: Node `center_error_test.mjs`, `motion_report_test.mjs`, `timeline_import_test.mjs`, `motion_test.mjs` прошли. Импорт дополнительно проверен на существующей Kotlin-фикстуре `/private/tmp/dronecv-timeline-fixture.ndjson` и её diagnostic-файле; заново не генерировались. `pytest lab/monitor_test/tests/test_motion.py` с Chrome/Playwright: 4 passed, 0 skipped, включая NDJSON, калибровку, интерфейс и экспорт. Первый запуск Chrome внутри sandbox был заблокирован; прогон с разрешённым доступом прошёл.
+- Python-набор `test_timeline_analysis`, `test_timeline_continuity`, `test_target_signals`, `test_tracking_reports`, `test_analyze_android_sessions`: 66 passed и 15 subtests passed, 0 skipped. Независимое review математики/документации, санитарная/текстовая проверка, локальные ссылки и `git diff --check` выполнены. Markdown проверен как исходная разметка, отдельный визуальный preview не запускался. Android-сборки и device-тесты не запускались: исходники Android не менялись. Синтетические тесты подтверждают вычисления; физическая точность на Xiaomi пока не подтверждена.
+
 ## Гонка финализации диагностического журнала PR №40 — 2026-11-13
 
 - После `git fetch origin` и сверки PR через GitHub API head остаётся `f99bdec8e3a37f8b05a36fb0cc245d06d5d8de3b`, ветка `codex/fix-diagnostic-integrity`. Ошибка не была исправлена. Использована та же отдельная рабочая копия `/private/tmp/dronecv-review-fixes`; посторонние изменения основной папки сохранены.

@@ -135,7 +135,33 @@
 
 ## Лабораторная галерея
 
-Полноэкранный режим движения выгружает отдельные JSON эталона. Схемы `dronecv-motion-run-1`, `dronecv-motion-series-1`, журнал Android `dronecv-motion-android-1`, отчёт `dronecv-motion-report-3`, экранная метка и методика IoU описаны в [протоколе движения](../../lab/monitor_test/PROTOCOL.md#7-движущаяся-цель).
+Полноэкранный режим движения выгружает отдельные JSON эталона. Схемы `dronecv-motion-run-1`, `dronecv-motion-series-1`, журнал Android `dronecv-motion-android-1`, отчёт `dronecv-motion-report-4`, экранная метка и методика IoU описаны в [протоколе движения](../../lab/monitor_test/PROTOCOL.md#7-движущаяся-цель).
+
+### Ошибка центра в отчёте движения v4
+
+Расширение `dronecv-motion-report-4` сохраняет `runs[]` и `maxima[]`, все прежние поля удержания и `criterion_version=motion-retention-v3`. Каждый элемент `runs[]` дополнен следующими объектами. Входы не меняются. Алгоритм и аппаратная приёмка описаны в [протоколе](../../lab/monitor_test/PROTOCOL.md#ошибка-центра-во-времени).
+
+| Поле `center_error` | Смысл |
+|---|---|
+| `version` | `motion-center-error-v1`, независимо от версии критерия удержания. |
+| `coordinate_space`, `units` | `upright_crop`, `camera_px`; оси вправо и вниз, W и H применяются отдельно. |
+| `reference_center` | `center_of_aabb_of_four_projected_corners`: середина прямоугольника, охватывающего четыре проецированных угла экранной рамки. |
+| `domain` | `visible_accelerate_cruise_brake`; длительности записанных шагов, без остановок и пустых фаз. |
+| `weighting`, `quantile` | `duration_ns`, `inverse_weighted_cdf`: минимальная ошибка с накопленным весом не меньше q от оценённой длительности. |
+| `uncertainty_method` | `invariant_over_all_common_offsets`: учитываются только значения, одинаковые при всех допустимых общих смещениях. |
+| `statistics_scope` | `conditional_on_evaluated_time`; сводка относится только к оценённой части. |
+| `mean_px`, `p50_px`, `p95_px`, `max_observed_px` | Среднее, взвешенные квантили, наблюдавшийся максимум в пикселях камеры; `null` при отсутствии оценённых интервалов. |
+| `expected_ms`, `evaluated_ms`, `absent_ms`, `unknown_ms` | Область T, однозначно оценённое E, однозначное отсутствие координат A и неизвестность U; T=E+A+U, с погрешностью чисел JavaScript. A не выводится из порога IoU. |
+| `coverage` | E/T, 0 при T=0; отображается рядом со статистикой. |
+| `whole_run_statistics` | Те же четыре статистики только при A=U=0; иначе `null`. Численная ошибка отсутствующей рамки не определена. |
+| `unavailable_reason` | Причина отсутствия численной сводки, иначе `null`. |
+| `unknown_reasons_ms` | Непересекающиеся длительности по кодам причин: `offset_ambiguity`, `untrusted_interval`, `outside_capture_coverage`, `missing_frame_dimensions`, `conflicting_frame_geometry`, `invalid_reference_geometry`, `incompatible`, `insufficient_capture`. При нескольких возможных исходах используется `offset_ambiguity`. |
+
+`provenance.source` хранит исходную схему журнала, `session_id`, `run_id`, `series_id`, `pair_index`, `slot`, `order`; недоступные идентификаторы равны `null`. Имя загруженного файла остаётся в `runs[].journal`. `geometry` сохраняет размеры upright crop. `calibration` содержит `screen_points` в пикселях canvas и `camera_normalized_points`; `scenario`, `conditions`, `photo` сохраняют условия эталона без вывода настроек камеры из текста оператора.
+
+`provenance.android.records[]` сохраняет исходные `header`, `metadata`, `diagnostic_report`, `frame_geometry` с `event_id` и абсолютным строковым `event_ns`. Служебные массивы `frames`, `resources`, `tracking` исключены из диагностического отчёта; из калибровочного изображения сохраняются только размеры. Это происхождение настроек, не копия всей записи. Для старого JSON сохраняются корневые метаданные без массивов наблюдений и изображения. Временные строки не преобразуются в неточные числа; для расчёта по-прежнему вычитается начало через `BigInt`.
+
+`android.fields` содержит доступные Git SHA/dirty, версию приложения, модель/asset/SHA, режим, confidence/NMS, backend/потоки, LK/периоды/TTL, устройство/Android и `camera_context`. Незаписанное поле равно `null`. Единственное непротиворечивое значение переносится из исходных структур, включая `diagnostic_report.model`; при разных ненулевых значениях поле равно `null`, а `android.conflicts` сохраняет варианты с типом источника и ID события. Все исходные варианты остаются в `records`, конфликт не разрешается выбором последнего. `camera_context_scope=latest_context_not_frame_bound`: requested/confirmed/latest параметры, идентификаторы камер, zoom, AF/AE и стабилизация сохраняют исходные имена и смысл; этот снимок не приписывается каждому кадру. `frame_geometry` остаётся отдельным источником crop/rotation/source dimensions; изменение сигнатуры геометрии или несовпадение размеров кадра делает ошибку центра неизвестной. Отсутствие этих дополнительных полей у старых файлов не создаёт выдуманных значений.
 
 Галерея хранит выборку, settings, runs, trial и results в браузерном `localStorage` с префиксом `dronecv66v2.`. Это отдельное хранилище, не связанное с Android ViewModel. Экспорт JSON имеет `format="dronecv66-session-2"`; [results_template.csv](../../lab/monitor_test/results_template.csv) задаёт 36 столбцов CSV. Назначение полей, единицы, null и правила TP/FN/FP/TN канонически описаны в [протоколе](../../lab/monitor_test/PROTOCOL.md#5-размеры-и-экспорт).
 

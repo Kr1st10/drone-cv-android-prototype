@@ -13,8 +13,9 @@ def test_motion_browser(tmp_path):
     run_gallery_smoke('motion_smoke.mjs', tmp_path)
 
 
-def test_motion_report():
+@pytest.mark.parametrize('script', ['motion_report_test.mjs', 'center_error_test.mjs', 'timeline_import_test.mjs'])
+def test_motion_report(script):
     node = shutil.which('node')
     if not node:
         pytest.skip('node is not available')
-    subprocess.run([node, str(ROOT / 'tests' / 'motion_report_test.mjs')], check=True)
+    subprocess.run([node, str(ROOT / 'tests' / script)], check=True)
