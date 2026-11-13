@@ -77,9 +77,13 @@ python3 lab/monitor_test/build_manifest.py
 python3 ml/scripts/analyze_android_sessions.py /absolute/path/to/report.ndjson --output /tmp/drone-session-analysis.json
 ```
 
-Анализатор проверяет целостность и восстанавливает интервалы NDJSON либо пересчитывает агрегаты прежнего JSON, не выполняя infer. Пропуски и отсутствующий конец не позволяют считать запись полной; [контракт формата](../reference/data-model.md#поток-диагностической-сессии-dronecv-session-timeline-1). Ненулевой exit требует разбора errors/config_mismatches. Сопоставление потоков требует новых явных metadata, его условия — [ORT_THREAD_BENCHMARK](../ORT_THREAD_BENCHMARK.md).
+Анализатор проверяет целостность и пересчитывает производительность из `diagnostic_report` новых NDJSON либо прежнего корневого JSON, не выполняя infer. Для исторических и motion-NDJSON без полного отчёта сохраняется анализ интервалов. Пропуски и отсутствующий конец не позволяют считать запись полной; [контракт формата](../reference/data-model.md#поток-диагностической-сессии-dronecv-session-timeline-1). Ненулевой exit требует разбора errors/config_mismatches. Сопоставление потоков требует новых явных metadata, его условия — [ORT_THREAD_BENCHMARK](../ORT_THREAD_BENCHMARK.md).
 
 ## Архив журналов
+
+`DiagnosticArchiveTest` создаёт записи настоящими `DiagnosticFrames`/writer, запускает следующие сессии, пересоздаёт владельца архива, экспортирует прежние записи и вызывает Python-анализ с `--compare-threads` и JavaScript-импортёр. Проверяются ненулевые входные счётчики, копирование, прогрев/сборка, confidence, прерывание, квота и ошибка итогового отчёта. `TimelineWriterTest` проверяет обязательный итоговый отчёт при полной очереди. Оба теста требуют `python3` и `node` в PATH. Новые Kotlin-файлы для повторного чтения можно сохранить через `DRONECV_DIAGNOSTIC_FIXTURE_DIR=/tmp/dronecv-diagnostic-fixtures ./gradlew testDebugUnitTest --tests '*DiagnosticArchiveTest'`.
+
+`gallery_import_race_test.mjs` проверяет порядок завершения чтения/SHA через управляемые Promise в настоящей странице, включая сохранение и экспорт выбранного наблюдения. Обёртка `test_gallery_import_races.py` требует Node/Chrome/Playwright, но использует собственный manifest и не требует скачанных фотографий.
 
 `JournalArchiveTest` запускается общим `testDebugUnitTest`: оба типа, старые файлы, общий допуск, квоты числа/байтов, защита записи и финализации, выбор/копирование/закрытие экспорта, отмены, восстановление метаданных и аварийного `recording_failure`. Управляемые latch проверяют гонки без sleep. `managedMotionRefusesUnreservedOrCancelledStartsAndReleasesUnusedFiles` проверяет отказ старта без резервации и инвалидированную подготовку. [Ручные сценарии и ограничения архива](../guides/journal-archive.md#проверки); компиляция AndroidTest не заменяет проверку системного диалога на телефоне.
 

@@ -30,6 +30,8 @@ class TimelineWriter(
     private var firstMissing: Entry? = null
     private var lastMissing: Entry? = null
     private var end: Entry? = null
+    private var finalEntry: Entry? = null
+    private var finalData: (() -> String)? = null
     @Volatile private var failure: String? = null
     @Volatile private var failureRecord: String? = null
     private val worker = Thread({ runWriter() }, "timeline-writer").apply { isDaemon = true; start() }
@@ -49,9 +51,16 @@ class TimelineWriter(
         return false
     }
 
-    @Synchronized fun finish(stopNs: Long, interrupted: Boolean, reason: String?) {
+    /** The optional mandatory final record bypasses the bounded event queue and is serialized on the writer. */
+    @Synchronized fun finish(stopNs: Long, interrupted: Boolean, reason: String?,
+                             finalRecord: Pair<String, () -> String>? = null) {
         if (end != null) return
         onFinishing()
+        finalRecord?.let { (type, data) ->
+            finalEntry = Entry(++nextId, stopNs, type, "")
+            finalData = data
+            accepted++
+        }
         end = Entry(++nextId, stopNs, "session_end", "{\"stop_ns\":\"$stopNs\",\"experiment_status\":\"${if (interrupted) "interrupted" else "not_observed"}\",\"interrupted\":$interrupted,\"reason\":${reason?.let(::quote) ?: "null"}")
     }
 
@@ -87,6 +96,14 @@ class TimelineWriter(
                 while (true) {
                     val item = queue.poll(50, TimeUnit.MILLISECONDS)
                     if (item != null) { out.write(line(item)); synchronized(this) { written++ }; continue }
+                    val last = synchronized(this) {
+                        if (end == null || queue.isNotEmpty()) null else finalEntry.also { finalEntry = null }
+                    }
+                    if (last != null) {
+                        out.write(line(last.copy(data = finalData!!())))
+                        finalData = null
+                        synchronized(this) { written++ }
+                    }
                     val footer = synchronized(this) {
                         if (end == null || queue.isNotEmpty()) null else {
                             val e = end!!
@@ -98,7 +115,9 @@ class TimelineWriter(
                 }
             }
         } catch (e: Exception) { failure = e.message ?: e.javaClass.simpleName; onIssue("Ошибка записи: $failure") }
+        catch (_: OutOfMemoryError) { failure = "Недостаточно памяти при записи журнала"; onIssue("Ошибка записи: $failure") }
         finally {
+            finalData = null
             try {
                 val complete = synchronized(this) {
                     failure?.let { failureRecord = line(Entry(++nextId, clock(), "recording_failure", "{\"reason\":${quote(it)}}")) }

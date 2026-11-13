@@ -139,3 +139,130 @@ def test_input_zero_duration_requires_null_fps():
     d['camera_input'] = dict(received_frames=0, copied_frames=0, superseded_frames=0, no_buffer_frames=0,
         stale_frames=0, invalidated_frames=0, copy_errors=0, copy_mean_ms=None, copy_max_ms=None, fps_session=None)
     assert not a.analyze(d)['errors']
+
+
+def timeline_report(path, report, *, report_present=True, complete=True):
+    import json
+    rows = [('header', dict(start_ns='1000000000', clock='elapsed_realtime_ns',
+                           diagnostic_report_required=True, started_epoch_ms=str(report['started_epoch_ms']),
+                           device=report['device'], android_release=report['android_release'],
+                           android_sdk=report['android_sdk'], app_version=report['app_version'],
+                           build_type=report['build_type'], warmup=report['warmup'],
+                           model_sha256=report['model']['sha256'], confidence=report['model'].get('confidence'),
+                           intra_op_threads=report['model']['intra_op_threads']))]
+    if report_present:
+        rows.append(('diagnostic_report', report))
+    accepted = len(rows)
+    rows.append(('session_end', dict(stop_ns='2000000000', recording_complete=complete,
+                                    interrupted=report['interrupted'], reason=report['reason'],
+                                    accepted_count=str(accepted), written_count=str(accepted), dropped_count='0')))
+    path.write_text(''.join(json.dumps(dict(schema='dronecv-session-timeline-1', session_id='s',
+        event_id=str(i+1), event_ns=str(1000000000 if i == 0 else 2000000000), type=kind, data=data))+'\n'
+        for i, (kind, data) in enumerate(rows)))
+
+
+def performance_sample(threads=2):
+    d = input_sample()
+    d['model'] = dict(intra_op_threads=threads, inter_op_threads=1, execution_mode='SEQUENTIAL',
+        execution_provider='CPU', backend=f'ONNX Runtime CPU, intra-op {threads}, inter-op 1', sha256='abc', confidence=.5)
+    d['build_type'] = 'debug'
+    d['warmup'] = dict(method='manual', completed_frames_before_session=37)
+    return d
+
+
+def run_performance_cli(paths, output, compare=False):
+    import subprocess, sys
+    command = [sys.executable, str(Path(__file__).parents[1]/'scripts/analyze_android_sessions.py'),
+               *map(str, paths), '--output', str(output)]
+    if compare: command.append('--compare-threads')
+    return subprocess.run(command, capture_output=True, text=True)
+
+
+def test_archived_ndjson_supports_full_performance_and_thread_comparison(tmp_path):
+    import json
+    paths = []
+    for threads in (1, 2, 4):
+        path = tmp_path/f't{threads}.ndjson'
+        timeline_report(path, performance_sample(threads))
+        paths.append(path)
+    output = tmp_path/'comparison.json'
+    result = run_performance_cli(paths, output, compare=True)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(output.read_text())
+    assert set(report['thread_groups']) == {'1', '2', '4'}
+    assert report['config_mismatches'] == []
+    for run in report['sessions']:
+        assert run['camera_input']['no_buffer_frames'] == 1
+        assert run['camera_input']['copy_mean_ms'] == .7
+        assert run['warmup']['completed_frames_before_session'] == 37
+        assert run['build_type'] == 'debug' and run['android_sdk'] == 29
+        assert run['stages_ms']['analyzer_pipeline']['count'] == 20
+        assert run['resources']['pss_kb']['count'] == 2
+
+
+def test_archived_ndjson_does_not_invent_missing_or_failed_report(tmp_path):
+    for present, complete in ((False, True), (False, False), (True, False)):
+        path = tmp_path/'missing.ndjson'
+        timeline_report(path, performance_sample(), report_present=present, complete=complete)
+        result = run_performance_cli([path], tmp_path/'out.json', compare=True)
+        assert result.returncode != 0
+
+
+def test_archived_ndjson_comparison_checks_configuration_and_interruption(tmp_path):
+    import json
+    one, two = performance_sample(1), performance_sample(4)
+    two['device'] = 'other'
+    paths = [tmp_path/'one.ndjson', tmp_path/'two.ndjson']
+    for path, report in zip(paths, (one, two)): timeline_report(path, report)
+    output = tmp_path/'out.json'
+    result = run_performance_cli(paths, output, compare=True)
+    assert result.returncode != 0
+    assert json.loads(output.read_text())['config_mismatches'] == [str(paths[1])]
+    two['device'] = one['device']; two['interrupted'] = True; two['reason'] = 'pause'
+    timeline_report(paths[1], two)
+    result = run_performance_cli(paths, output, compare=True)
+    assert result.returncode != 0
+    assert json.loads(output.read_text())['excluded_sessions'] == [str(paths[1])]
+
+
+def test_archived_ndjson_normal_analysis_and_session_binding(tmp_path):
+    import hashlib, json
+    path, output = tmp_path/'run.ndjson', tmp_path/'out.json'
+    timeline_report(path, performance_sample())
+    result = run_performance_cli([path], output)
+    assert result.returncode == 0, result.stderr
+    run = json.loads(output.read_text())['sessions'][0]
+    assert run['sha256'] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert run['fps'] == 20 and run['camera_input']['fps_session'] == 60
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[1]['data']['warmup']['completed_frames_before_session'] = 99
+    path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    result = run_performance_cli([path], output)
+    assert result.returncode != 0 and 'mismatch: warmup' in result.stderr
+
+
+def test_historical_timeline_unknown_performance_is_not_replaced_by_zero(tmp_path):
+    import json
+    path, output = tmp_path/'old.ndjson', tmp_path/'out.json'
+    timeline_report(path, performance_sample(), report_present=False)
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    del rows[0]['data']['diagnostic_report_required']
+    path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    result = run_performance_cli([path], output)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(output.read_text())
+    assert report['schema'] == 'dronecv-timeline-analysis-1'
+    assert 'camera_input' not in report['sessions'][0]
+    result = run_performance_cli([path], output, compare=True)
+    assert result.returncode != 0 and 'performance and thread comparison unavailable' in result.stderr
+
+
+def test_archived_ndjson_model_asset_binding(tmp_path):
+    import json
+    path = tmp_path/'run.ndjson'
+    timeline_report(path, performance_sample())
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[0]['data']['model_asset'] = 'other-model.onnx'
+    path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    result = run_performance_cli([path], tmp_path/'out.json')
+    assert result.returncode != 0 and 'mismatch: model_asset' in result.stderr

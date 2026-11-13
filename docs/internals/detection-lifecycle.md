@@ -152,9 +152,14 @@ sequenceDiagram
     participant VM as DiagnosticViewModel
     participant F as DiagnosticFrames
     participant C as LiveController
+    participant W as TimelineWriter
+    participant A as JournalArchive
+    participant J as JournalArchiveViewModel
     participant OS as Ресурсы / ContentResolver
     U->>VM: start(confidence, threads, warmupFrames)
+    VM->>A: reserve() на IO-worker
     VM->>F: start(nanoTime), новый token
+    VM->>W: openWriter(), header
     VM->>OS: Опрос PSS / thermal / battery, примерно каждые 5 с
     C->>F: currentToken(), received(token)
     C->>F: completed(token запроса, времена YOLO)
@@ -162,16 +167,18 @@ sequenceDiagram
     U->>VM: stop() / событие прерывания
     VM->>F: stop(token), снимок
     VM->>VM: Сохранить последний report, посчитать сводки в фоне
-    U->>VM: export(uri) после CreateDocument
-    VM->>VM: Захватить отчёт и операцию под lock
-    VM->>OS: Записать report.toJson() на Dispatchers.IO
-    OS-->>VM: Результат записи
-    VM->>VM: Статус только для текущего отчёта и последнего запроса
+    VM->>W: finishDiagnostic(report, stopNs)
+    W->>W: Сохранить diagnostic_report и session_end в фоне
+    W->>A: Финализация после закрытия потока
+    U->>J: Выбрать прежнюю запись, экспорт
+    J->>A: selectExport(id), защита файла
+    J->>OS: CreateDocument, копирование выбранного NDJSON
+    J->>A: Освободить защиту после close
 ```
 
 Рисунок 7. Запись и экспорт диагностики. Сессионный token исключает завершение старого кадра в новом отчёте. Опрос ресурсов выполняется независимой coroutine и не подразумевает пробу на каждый кадр.
 
-Фон, выключение экрана, смена вкладки/порога/камеры, rebind, Stop или ошибка прерывают сессию с причиной. После возврата запись автоматически не продолжается. Последний отчёт остаётся в Activity ViewModel до новой сессии/уничтожения процесса; экспорт нужен до этого. После выбора файла операция записывает захваченный отчёт даже при начале следующей записи. Статус успеха или ошибки публикуется только для текущего отчёта и последней операции экспорта. Отмена выбора файла не запускает запись. Сериализация и I/O не держат lock. Экспорт с полученным URI живёт в Activity ViewModel при recreation; после уничтожения ViewModel или процесса продолжение не гарантируется. Уже записанный файл хранит выбранный провайдер. [Маршрут и карточка прогона](../guides/android-session-acceptance.md), [данные](../reference/data-model.md).
+Фон, выключение экрана, смена вкладки/порога/камеры, rebind, Stop или ошибка прерывают сессию с причиной. После возврата запись автоматически не продолжается. Итоговый снимок передаётся writer для сохранения внутри NDJSON перед завершающей строкой. Сериализация выполняется вне UI/lock владельца. Прежний файл доступен после новой сессии и перезапуска приложения; владение, ошибки и защита выбранного экспорта описаны в [архиве](../guides/journal-archive.md). [Маршрут и карточка прогона](../guides/android-session-acceptance.md), [данные](../reference/data-model.md).
 
 ## Ошибки и инварианты
 

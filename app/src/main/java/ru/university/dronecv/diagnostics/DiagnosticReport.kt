@@ -4,6 +4,7 @@ import ru.university.dronecv.camera.FrameStamp
 import ru.university.dronecv.camera.TrackingSampleKind
 import ru.university.dronecv.camera.TrackingSignal
 import ru.university.dronecv.camera.toJson
+import ru.university.dronecv.timeline.TimelineWriter
 
 /** Resource samples use the same monotonic origin as frame offsets. Battery temperature is not CPU temperature. */
 data class ResourceSample(val offsetNanos: Long, val pssKb: Long?, val thermalStatus: Int?,
@@ -16,6 +17,10 @@ data class DiagnosticReport(val startEpochMs: Long, val device: String, val andr
                             val warmupCompletedFrames: Long = 0) {
     init { require(intraOpThreads in setOf(1, 2, 4) && warmupCompletedFrames >= 0) }
 }
+
+/** Persist this session's immutable snapshot before the footer; serialization never runs on the UI. */
+fun TimelineWriter.finishDiagnostic(report: DiagnosticReport, stopNs: Long) =
+    finish(stopNs, report.frames.interrupted, report.frames.reason, "diagnostic_report" to report::toJson)
 
 private fun q(s: String): String = buildString {
     append('"')

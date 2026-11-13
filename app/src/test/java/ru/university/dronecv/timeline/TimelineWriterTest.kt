@@ -19,6 +19,49 @@ import ru.university.dronecv.tracking.TrackingObservation
 import ru.university.dronecv.tracking.VisualPhase
 
 class TimelineWriterTest {
+    @Test fun finalRecordOutOfMemoryCannotMarkRecordingComplete() {
+        val file = File.createTempFile("timeline-memory", ".ndjson")
+        try {
+            val issues = java.util.concurrent.CopyOnWriteArrayList<String>()
+            var complete: Boolean? = null
+            val writer = TimelineWriter(file, { 1L }, onIssue = { issues.add(it) },
+                onClosed = { value, _ -> complete = value })
+            writer.record("header", "{\"start_ns\":\"1\"}", 1)
+            writer.finish(2, false, null, "diagnostic_report" to { throw OutOfMemoryError("synthetic") })
+            writer.awaitFinished()
+            assertEquals(false, complete)
+            assertNotNull(writer.error())
+            assertTrue(issues.isNotEmpty())
+            val output = java.io.ByteArrayOutputStream(); writer.copyTo(output)
+            assertTrue(output.toString("UTF-8").contains("recording_failure"))
+            assertFalse(output.toString("UTF-8").contains("session_end"))
+        } finally { file.delete() }
+    }
+    @Test fun mandatoryFinalRecordBypassesFullQueueAndSerializesOffCaller() {
+        val file = File.createTempFile("timeline-final", ".ndjson")
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        try {
+            val caller = Thread.currentThread()
+            val writer = TimelineWriter(file, { 1L }, capacity = 1, open = {
+                entered.countDown(); check(release.await(5, TimeUnit.SECONDS)); it.outputStream()
+            })
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            assertTrue(writer.record("header", "{\"start_ns\":\"1\"}", 1))
+            writer.finish(2, false, null, "diagnostic_report" to {
+                assertNotSame(caller, Thread.currentThread())
+                "{\"camera_input\":{\"no_buffer_frames\":30}}"
+            })
+            release.countDown(); writer.awaitFinished()
+            assertNull(writer.error())
+            val lines = file.readLines()
+            assertEquals(3, lines.size)
+            assertTrue(lines[1].contains("\"type\":\"diagnostic_report\""))
+            assertTrue(lines[2].contains("\"accepted_count\":\"2\""))
+            assertTrue(lines[2].contains("\"written_count\":\"2\""))
+            assertTrue(lines[2].contains("\"recording_complete\":true"))
+        } finally { release.countDown(); file.delete() }
+    }
     @Test fun longSessionIsStreamedAndRetainsBothEnds() {
         val file = File.createTempFile("timeline", ".ndjson")
         try {
