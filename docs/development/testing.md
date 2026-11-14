@@ -63,7 +63,31 @@ python -m pytest lab/monitor_test/tests -q
 
 В этом же наборе `reference_test.mjs` проверяет расчёт эталонной оси (15 м, удвоение при уменьшении изображения), отказ при неизвестной геометрии и три профиля. `reference_smoke.mjs` проверяет вкладку, локальные фото, масштаб/расстояние, сохранение настроек, риски в окне 460 × 600 и сохранность прежних результатов/экспорта; синтетическая подтверждённая ось существует только внутри теста. Хеши шести исходных фото проверяются отдельно. Переключение девяти записей ракурсов, отсутствие устаревших метров после смены фотографии/калибровки и собственные размеры моделей проверяются браузером; прямоугольники с тестовыми осями не выдаются за реальные эталоны. Независимый Python-тест сравнивает JavaScript с фиксированными ответами и выводом через atan2/tan (равенство угловых размеров); промежуточные результаты не округляются. Эти проверки не подтверждают соответствие реального силуэта паспортному габариту или дальность детекции Xiaomi.
 
-Движение по заданным временам и кодирование метки проверяет `node lab/monitor_test/tests/motion_test.mjs`. Браузерный сценарий проверяет полноэкранный запуск, повтор пары, JSON эталона и отчёт на синтетическом Android-журнале. Синтетические расчёты IoU отдельно проверяет `node lab/monitor_test/tests/motion_report_test.mjs`, ошибки центра и метаданных: `node lab/monitor_test/tests/center_error_test.mjs`. `pytest lab/monitor_test/tests/test_motion.py` включает эти два набора, импорт timeline и браузерный сценарий. Браузерная проверка также загружает синтетический NDJSON, отмечает калибровочные точки и экспортирует отчёт v4 с условной статистикой ошибки и покрытием. Повторное чтение фактических Kotlin-файлов выполняется после их создания JVM-тестами; при отсутствии файлов соответствующие проверки пропускаются. Считывание метки камерой и точность отчёта на реальной съёмке проверяют отдельно по [протоколу движения](../../lab/monitor_test/PROTOCOL.md#7-движущаяся-цель).
+Ядро движения и неизменный sync-код проверяет `node lab/monitor_test/tests/motion_test.mjs`. Новые автономные проверки запускаются из корня репозитория:
+
+```bash
+node lab/monitor_test/tests/motion_scenario_test.mjs
+node lab/monitor_test/tests/motion_calibration_test.mjs
+node lab/monitor_test/tests/motion_report_v4_test.mjs
+node lab/monitor_test/tests/motion_report_test.mjs
+node lab/monitor_test/tests/center_error_test.mjs
+node lab/monitor_test/tests/timeline_import_test.mjs
+```
+
+Первый набор проверяет фазы, единое время, геометрию области и скрытое продолжение маршрута. Второй использует синтетические изображения с перспективой, разными размерами, пропуском и повтором ID. Третий проверяет новый `motion-scenario-v4`, включая временные доли, очистку, сохранённую рамку, повторный захват, цензурирование и неопределённость часов. Старые IoU, ошибка центра и импорт timeline проверяются отдельно, без изменения критерия `motion-retention-v3`.
+
+Для браузерных сценариев нужны локальные изображения, Chrome/Chromium и Playwright. Укажите каталог с `node_modules/playwright` в `PLAYWRIGHT_NODE_DIR`; запускайте Node из этого каталога, поскольку сценарии используют его для поиска пакета. Пример с абсолютными путями:
+
+```bash
+cd /absolute/path/to/playwright-workdir
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_auto_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_controls_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_calibration_jpeg_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+```
+
+`motion_auto_smoke.mjs` проверяет простой сценарий, постоянное хранение, повтор и автоматический импорт/анализ; `motion_calibration_jpeg_smoke.mjs` выполняет синтетический canvas→JPEG→decode без камеры. Совместимость настоящего рендера проверяется неизменённым Android-декодером: `python3 lab/monitor_test/tests/motion_decoder_compat.py /absolute/path/to/frame.png 12345678 42`. Здесь `12345678` и `42` должны совпадать с кодом сохранённого PNG; `none` вместо ID ожидает отсутствие единственного валидного кода. Нужны JDK и кеш компилятора Kotlin 2.0.21 из обычной подготовки проекта; runner не редактирует Android и не заменяет device-тесты.
+
+Полный `pytest lab/monitor_test/tests` включает прежние режимы галереи; отсутствие Node, браузера, Playwright или изображений приводит к пропуску браузерных проверок. Проверки импорта фактических Kotlin-файлов требуют заранее созданных JVM-фикстур, иначе соответствующие проверки пропускаются. Синтетические журналы и изображения проверяют вычисления и программную совместимость. Читаемость меток на 5×, JPEG телефона, реальные размеры в кадре и точность сопровождения принимают отдельно по [протоколу движения](../../lab/monitor_test/PROTOCOL.md#аппаратная-проверка-на-xiaomi).
 
 Без ML-зависимостей можно проверить manifest стенда стандартной библиотекой Python:
 
