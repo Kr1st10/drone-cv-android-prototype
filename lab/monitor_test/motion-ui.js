@@ -97,6 +97,7 @@
   async function start(repeat = false) {
     if (attempt || active || finishing || runs.length >= maxRuns || sampleCount() >= maxSeriesSamples) return;
     const pending = { cancelled: false }; attempt = pending; update();
+    let operation='fullscreen';
     try {
       persist();
       const v = repeat ? structuredClone(lastScenario.values) : values();
@@ -108,6 +109,7 @@
       catch (_) { throw Error('Выбранная фотография недоступна. Восстановите файл или выберите другое фото.'); }
       if (pending.cancelled) { await returnToSettings(); return; }
       if (image.naturalWidth !== v.m.width || image.naturalHeight !== v.m.height) throw Error('Размеры файла не совпадают с сохранённым снимком.');
+      operation='photo';
       if(!v.m.file.startsWith('data:')){const retained=document.createElement('canvas');retained.width=v.m.width;retained.height=v.m.height;retained.getContext('2d').drawImage(image,0,0);v.m.file=retained.toDataURL('image/png');}
       if (document.hidden || document.fullscreenElement !== stage) throw Error('Страница скрыта или полный экран закрыт.');
       const vp = viewport(); canvas.width = vp.width; canvas.height = vp.height;
@@ -119,6 +121,7 @@
       const runId = freshRunId();
       const run = { schema: 'dronecv-motion-run-2', run_id: runId, mode: null, series_id: seriesId, photo: { id: v.m.id, sha256: v.m.sha256 || null, width: v.m.width, height: v.m.height, bbox: v.bbox }, conditions: { ...v.conditions, viewport: vp }, scenario: plan.config, calibration_points: plan.calibration_points, calibration_markers:plan.calibration_markers,sync_backing:plan.sync_backing, marker: plan.marker, duration_ms: plan.duration_ms, complete: false, abort_reason: 'не завершён', samples: [] };
       saveFailure=null;
+      operation='storage';
       const key=await MotionStore.begin(run);
       if(pending.cancelled){run.abort_reason='старт отменён';await MotionStore.end(key,run);await returnToSettings();return;}
       lastScenario = { values: structuredClone(v), viewport: vp };
@@ -141,7 +144,11 @@
         finishing = true;
         await returnToSettings();
         finishing = false;
-        status(`Не удалось начать: ${e.message}`);
+        const reason=e.name==='SecurityError' ? operation==='photo'
+          ? 'Браузер запретил чтение пикселей фотографии из локального файла. Откройте стенд через http://localhost или выберите фото кнопкой «Заменить фотографию».'
+          : operation==='fullscreen' ? 'Браузер запретил полный экран. Откройте стенд в отдельной вкладке и разрешите полноэкранный режим.'
+          : 'Браузер запретил доступ к хранилищу эталонов. Откройте стенд через http://localhost и проверьте настройки хранения данных.' : e.message;
+        status(`Не удалось начать: ${reason}`);
       }
     } finally { if (attempt === pending) attempt = null; update(); }
   }
