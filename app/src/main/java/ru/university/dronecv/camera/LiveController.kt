@@ -558,11 +558,13 @@ class LiveController<Frame : AutoCloseable>(
 
     fun configure(enabled: Boolean, threshold: Float, stopReason: String = "detection_stop"): Unit = publicationTransaction {
         require(threshold in 0.01f..1f)
-        if (publicationDepth > 1) {
-            deferredControls.addLast { configure(enabled, threshold, stopReason) }
-            return@publicationTransaction
-        }
-        if (closed || (enabled && mutableThreads.value.switching) || (active == enabled && confidence == threshold)) return@publicationTransaction
+        if (publicationDepth > 1) deferredControls.addLast { publicationTransaction { applyConfiguration(enabled, threshold, stopReason) } }
+        else applyConfiguration(enabled, threshold, stopReason)
+    }
+
+    /** Apply at the command's FIFO position; callers hold the publication lock. */
+    private fun applyConfiguration(enabled: Boolean, threshold: Float, stopReason: String = "detection_stop") {
+        if (closed || (enabled && mutableThreads.value.switching) || (active == enabled && confidence == threshold)) return
         val clearReason = if (active && (enabled != active || threshold != confidence))
             if (!enabled) stopReason else "configuration_changed" else null
         val wasActive = active
@@ -618,7 +620,11 @@ class LiveController<Frame : AutoCloseable>(
         true
     }
 
-    fun updateThreshold(threshold: Float) = publicationTransaction { configure(active, threshold) }
+    fun updateThreshold(threshold: Float): Unit = publicationTransaction {
+        require(threshold in 0.01f..1f)
+        if (publicationDepth > 1) deferredControls.addLast { publicationTransaction { applyConfiguration(active, threshold) } }
+        else applyConfiguration(active, threshold)
+    }
 
     /** A new binding cannot accept callbacks left queued by an older use case. */
     fun newSource(): Long = publicationTransaction {
@@ -733,7 +739,6 @@ class LiveController<Frame : AutoCloseable>(
 
     private fun fail(id: Long, message: String, release: Boolean = true) = publicationTransaction {
         if (closed || !active || generation != id) return@publicationTransaction
-        onFailure?.invoke(message)
         val failureGeneration = ++generation
         invalidatePending()
         resetTracking(failureGeneration, source)
@@ -746,6 +751,7 @@ class LiveController<Frame : AutoCloseable>(
             if (generation != failureGeneration) return@publicationTransaction
             publicationNs?.let { clearTimeline(it, "detector_error") }
             motion?.stop("Detector error: $message")
+            onFailure?.invoke(message)
         }
     }
 

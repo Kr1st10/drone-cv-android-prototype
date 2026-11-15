@@ -1,5 +1,13 @@
 # PROJECT_STATE.md
 
+## Исправления ревью PR №47 — 2026-11-16
+
+- Удалённая ветка `codex/publication-timing` сверена перед работой: HEAD `7ab4b01`, замечания не были исправлены. Использована прежняя отдельная копия `/tmp/dron-publication-timing`; посторонние изменения основной папки сохранены.
+- Для принятой актуальной ошибки ERROR публикуется и `detector_error` принимается диагностическим writer до вызова `onFailure`, который завершает диагностику. Метка остаётся непосредственно перед присваиванием StateFlow; сериализация и диск остаются на writer. Освобождение backend, motion stop, generation/source и FIFO управляющих команд сохранены.
+- `updateThreshold` откладывается целиком: порог фиксируется при запросе, `active` читается при применении. Общий метод применения конфигурации выполняет команду на её месте без повторной постановки в очередь. Это исправление публичного API при reentrant подписчике; перезапуск от обычного слайдера UI не воспроизводился. [Контракт](docs/reference/data-model.md#границы-публикации-stateflow).
+- До исправления новые тесты A/B: **2 failed** (нет очистки, получен STARTING вместо STOPPED); тест C FIFO уже passed. После: все четыре новые регрессии passed, включая реальный TimelineWriter с очисткой перед diagnostic_report/session_end и защиту новой сессии от устаревшей ошибки.
+- Локально JBR 21 / SDK 35: `assembleDebug testDebugUnitTest assembleDebugAndroidTest lintDebug` успешно, **246 JVM passed, 2 parity skipped** (нет Python parity fixtures), 0 failures/errors. Python-анализаторы: 69 passed и 18 subtests passed; Node timeline import и pilot (9 tests) passed. `git diff --check` выполнен. CI итогового SHA проверяется отдельно после push в существующий PR. AndroidTest локально только скомпилированы; телефон, отображение, FPS и качество CV не измерялись. Модель, параметры CV и форматы экспорта не менялись.
+
 ## Готовность и публикация результатов — 2026-11-15
 
 - После слияния PR №46 (`main @ 9a1e350`) создана отдельная копия `/tmp/dron-publication-timing`, ветка `codex/publication-timing`; посторонние изменения основной копии сохранены. Writer по-прежнему сериализует immutable payload вне обработки кадров и блокировки контроллера.

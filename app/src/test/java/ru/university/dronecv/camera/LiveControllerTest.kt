@@ -1,5 +1,6 @@
 package ru.university.dronecv.camera
 
+import ru.university.dronecv.diagnostics.toJson
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import java.util.concurrent.CountDownLatch
@@ -186,6 +187,116 @@ class LiveControllerTest {
         subscriber.cancel()
         controller.close(); worker.drain()
     }
+
+    @Test fun detectorErrorIsQueuedBeforeFailureHandlerFinalizesDiagnosticWriter() {
+        var now = 1_000_000_000L
+        val worker = Worker()
+        val backend = Backend()
+        val frames = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        val file = kotlin.io.path.createTempFile("failure-order", ".ndjson").toFile()
+        val writer = ru.university.dronecv.timeline.TimelineWriter(file, { now })
+        writer.record("header", "{\"start_ns\":\"$now\",\"diagnostic_report_required\":true}", now)
+        var token = 0L
+        var failures = 0
+        lateinit var controller: LiveController<Frame>
+        controller = LiveController(backend, worker, frames, eventTime = { now }, nanoTime = { now }, onFailure = {
+            failures++
+            assertEquals(LivePhase.ERROR, controller.state.value.phase)
+            assertNull(controller.state.value.target)
+            val snapshot = frames.stop(token, now, true, "Detector error: $it")!!
+            frames.timeline = null
+            val report = ru.university.dronecv.diagnostics.DiagnosticReport(123, "test", "16", 36,
+                "test", "model", "hash", .5f, snapshot, emptyList())
+            writer.finish(now, true, "Detector error: $it", "diagnostic_report" to { report.toJson() })
+        })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        controller.startDiagnostics {
+            token = frames.start(now)
+            frames.timeline = { type, data, _ -> writer.record(type, data, now) }
+        }
+        fun offer() {
+            val stamp = FrameStamp(now, CaptureTimebase.ELAPSED_REALTIME, now)
+            controller.offerFrame(Frame(), controller.beginFrame(source, stamp)!!, stamp, 0.0)
+            worker.drain()
+        }
+        offer()
+        assertNotNull(controller.state.value.target?.center)
+        backend.onInfer = { now += 9_000_000L; error("failure-test") }
+        offer()
+        writer.awaitFinished()
+        assertNull(writer.error())
+        assertEquals(1, failures)
+        assertEquals(LivePhase.ERROR, controller.state.value.phase)
+        assertNull(controller.state.value.target)
+        assertNull(controller.signals.value)
+        val rows = file.readLines()
+        val clears = rows.filter { it.contains("\"reason\":\"detector_error\"") }
+        assertEquals(1, clears.size)
+        assertTrue(clears.single().contains("\"box\":null"))
+        assertTrue(clears.single().contains("\"state_publication_ns\":\"1009000000\""))
+        val clearIndex = rows.indexOf(clears.single())
+        assertTrue(clearIndex < rows.indexOfFirst { it.contains("\"type\":\"diagnostic_report\"") })
+        assertTrue(clearIndex < rows.indexOfFirst { it.contains("\"type\":\"session_end\"") })
+        assertTrue(rows.last().contains("Detector error: failure-test"))
+        controller.close(); worker.drain(); file.delete()
+    }
+
+    @Test fun obsoleteDetectorErrorCannotStopNewDiagnosticSession() {
+        val worker = Worker()
+        val backend = Backend()
+        val frames = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        var failures = 0
+        val controller = LiveController(backend, worker, frames, onFailure = { failures++ })
+        val old = frames.start(1_000_000_000L)
+        controller.configure(true, .5f)
+        var replacement = 0L
+        backend.onInfer = {
+            controller.newSource()
+            controller.configure(true, .5f)
+            frames.stop(old, 1_000_000_001L, true, "source changed")
+            replacement = frames.start(1_000_000_002L)
+            error("obsolete failure")
+        }
+        controller.analyze(Frame())
+        worker.drain()
+        assertEquals(0, failures)
+        assertEquals(replacement, frames.currentToken())
+        assertEquals(LivePhase.STARTING, controller.state.value.phase)
+        frames.stop(replacement, 1_000_000_003L, false, null)
+        controller.close(); worker.drain()
+    }
+
+    private fun deferredThresholdSequence(restart: Boolean) = kotlinx.coroutines.runBlocking {
+        val worker = Worker()
+        val backend = Backend()
+        val controller = LiveController(backend, worker, eventTime = { 1_000_000_000L })
+        controller.configure(true, .5f)
+        var invoked = false
+        val subscriber = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            controller.signals.collect {
+                if (it != null && !invoked) {
+                    invoked = true
+                    controller.configure(false, .5f)
+                    controller.updateThreshold(.7f)
+                    if (restart) controller.configure(true, .8f)
+                }
+            }
+        }
+        val stamp = FrameStamp(null, CaptureTimebase.UNKNOWN, 1_000_000_000L)
+        controller.analyze(Frame(), stamp = stamp)
+        worker.drain()
+        assertEquals(if (restart) LivePhase.STARTING else LivePhase.STOPPED, controller.state.value.phase)
+        if (restart) {
+            controller.analyze(Frame(), stamp = stamp)
+            assertEquals(.8f, backend.thresholds.last())
+        }
+        subscriber.cancel()
+        controller.close(); worker.drain()
+    }
+
+    @Test fun stopThenThresholdFromSignalSubscriberStaysStopped() = deferredThresholdSequence(false)
+    @Test fun deferredThresholdDoesNotOvertakeLaterExplicitConfiguration() = deferredThresholdSequence(true)
 
     @Test fun geometrySerializationRequiresOwningDiagnosticTokenAndNeverRetainsPixels() {
         val worker = Worker()
