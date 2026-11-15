@@ -1,3 +1,4 @@
+// Preserve the pre-enlargement movement fixture at an explicit 6 px cell.
 // Actual Chrome IndexedDB/reloads, with synthetic transaction failures.
 import {createRequire} from 'node:module';
 import path from 'node:path';
@@ -55,7 +56,7 @@ try {
     await p.goto('file://'+path.join(root,'gallery.html'));await p.waitForFunction(()=>!!window.MotionStore);
     const old=await p.evaluate(async()=>{const run={schema:'dronecv-motion-run-2',run_id:'ffffffff',mode:null,complete:true,abort_reason:null,photo:{id:'A'},scenario:{version:'simple-motion-v1'},samples:[]};const key=await MotionStore.begin(run);await MotionStore.end(key,run);return run;});
     if(ending.startsWith('pending')){await p.reload();await p.waitForFunction(()=>!!window.MotionStore);}
-    await p.click('[data-section=motion]');await p.selectOption('#motionPhoto','civ01');const bounds=await p.evaluate(()=>MANIFEST.images.find(m=>m.id==='civ01').object_bbox);
+    await p.click('[data-section=motion]');await p.evaluate(()=>{const e=document.getElementById('motionSyncSize');e.value='6';e.dispatchEvent(new Event('input'));});await p.selectOption('#motionPhoto','civ01');const bounds=await p.evaluate(()=>MANIFEST.images.find(m=>m.id==='civ01').object_bbox);
     await p.click('#motionBounds');for(const [i,id] of ['boundX1','boundY1','boundX2','boundY2'].entries())await p.fill('#'+id,String(bounds[i]));await p.click('#saveBounds');
     await p.evaluate(()=>{crypto.getRandomValues=array=>{array[0]=1;return array;};});
     if(ending.startsWith('pending'))await p.evaluate(failEnd=>{const begin=MotionStore.begin;MotionStore.begin=async run=>{const key=await begin(run);window.reviewBeginStored=true;await new Promise(resolve=>{window.releaseReviewBegin=resolve;});return key;};if(failEnd)MotionStore.end=()=>Promise.reject(new DOMException('injected finalization failure','QuotaExceededError'));},ending==='pending_end_failure');

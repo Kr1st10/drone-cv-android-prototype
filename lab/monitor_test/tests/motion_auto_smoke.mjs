@@ -1,3 +1,4 @@
+// Preserve the pre-enlargement movement fixture at an explicit 6 px cell.
 // Synthetic journals/camera JPEGs validate the offline workflow, not Xiaomi CV.
 import {createRequire} from 'node:module';
 import path from 'node:path';
@@ -17,7 +18,7 @@ async function exportRun(){const [d]=await Promise.all([page.waitForEvent('downl
 async function uploadJournal(data,name='journal.json'){await page.setInputFiles('#reportJournals',{name,mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});}
 try{
   await page.goto('file://'+path.join(root,'gallery.html'));await page.waitForFunction(()=>/Изображений: 90/.test(document.getElementById('status').textContent),null,{polling:100});
-  await page.click('[data-section=gallery]');await page.click('#presetPilot');await page.click('#start');await page.keyboard.press('s');await page.click('[data-section=motion]');
+  await page.click('[data-section=gallery]');await page.click('#presetPilot');await page.click('#start');await page.keyboard.press('s');await page.click('[data-section=motion]');await page.evaluate(()=>{const e=document.getElementById('motionSyncSize');e.value='6';e.dispatchEvent(new Event('input'));});
   const original=await page.evaluate(()=>MANIFEST.images.find(m=>m.id==='civ01'));
   await page.setInputFiles('#motionUpload',path.join(root,original.file));await page.waitForFunction(()=>document.getElementById('motionPhoto').value.startsWith('ref-'),null,{polling:50});
   const photo=await page.inputValue('#motionPhoto'),local=await page.evaluate(id=>M.find(m=>m.id===id),photo);

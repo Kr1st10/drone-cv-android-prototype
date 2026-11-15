@@ -51,6 +51,7 @@
   body.motion-mode #stage, body.motion-mode #hud, body.motion-mode #geometry, body.motion-mode #stageControls, body.motion-mode #answer, body.motion-mode #record { display: none !important; }
   #motionPhoto { display: block; max-width: 100%; }
   #motionSection input[type=file] { max-width: 100%; }
+  #syncCheckStatus { white-space: pre-line; }
   #motionStage { position: fixed; inset: 0; z-index: 100; background: #fff; }
   #motionPhotoPreview { display:block; width:240px; height:140px; max-width:100%; object-fit:contain; background:white; }
   #motionPhotoPreview[hidden] { visibility:hidden; }
@@ -152,7 +153,7 @@
       <label>Ширина области, % <input id="motionAreaWidth" type="number" min="1" max="100" value="90"></label>
       <label>Высота области, % <input id="motionAreaHeight" type="number" min="1" max="100" value="90"></label>
       <label>Сторона угловой метки, px <input id="motionTagSize" type="number" min="24" value="48"></label>
-      <label>Ячейка sync-кода, px <input id="motionSyncSize" type="number" min="2" value="6"></label>
+      <label>Ячейка sync-кода, px <input id="motionSyncSize" type="number" min="2" step="1" value="18"></label>
       <canvas id="motionAreaPreview" width="640" height="360" aria-label="Расположение рабочей области"></canvas>
       <p>Четыре метки и маршрут перемещаются вместе с областью. Положение кода фиксируется между верхними метками. Читаемость проверяется только по данным телефона.</p>
     </details>
@@ -165,6 +166,12 @@
       <p class="muted">Эти сведения вводит оператор; они не измеряются автоматически.</p>
     </details>
     <p id="motionStatus" class="warn"></p>
+    <p>Ячейка sync: <button type="button" data-sync-size="12">12</button> <button type="button" data-sync-size="18">18</button> <button type="button" data-sync-size="24">24</button> <button type="button" data-sync-size="32">32</button> px canvas; ручной ввод выше.</p>
+    <p id="syncSizeStatus" class="muted"></p>
+    <button id="syncCheckStart">Проверить чтение кода</button>
+    <p class="muted">Без фотографии: 10 секунд неизменного кода, затем пять шагов по секунде. Сначала включите запись стенда на телефоне.</p>
+    <label>Проверка чтения <select id="syncCheckSelect"></select></label><button id="syncCheckExport" disabled>Экспорт проверки</button>
+    <p id="syncCheckStatus" role="status">Камерой не проверено. Импортируйте журнал телефона ниже.</p>
     <button id="motionStart" class="primary">Старт</button><button id="motionRepeat">Повторить</button><button id="motionNewSeries">Новая серия</button>
     <button id="motionExportLast">Экспорт последнего запуска JSON</button><button id="motionExport">Экспорт серии JSON</button>
     <p id="motionHistoryStatus" class="muted"></p>
@@ -364,6 +371,8 @@
 <script src="motion-scenario.js"></script>
 <script src="motion-store.js"></script>
 <script src="motion-calibration.js"></script>
+<script src="sync-check.js"></script>
+<script src="sync-check-ui.js" defer></script>
 <script src="motion-ui.js" defer></script>
 <script src="motion-report.js"></script>
 <script src="motion-report-v4.js"></script>

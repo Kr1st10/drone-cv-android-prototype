@@ -67,6 +67,7 @@ python -m pytest lab/monitor_test/tests -q
 
 ```bash
 node lab/monitor_test/tests/motion_scenario_test.mjs
+node lab/monitor_test/tests/sync_check_test.mjs
 node lab/monitor_test/tests/motion_calibration_test.mjs
 node lab/monitor_test/tests/motion_report_v4_test.mjs
 node lab/monitor_test/tests/motion_journal_status_test.mjs
@@ -88,7 +89,7 @@ CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monito
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_report_review_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 ```
 
-`motion_auto_smoke.mjs` проверяет простой сценарий, постоянное хранение, повтор и автоматический импорт/анализ; `motion_calibration_jpeg_smoke.mjs` выполняет синтетический canvas→JPEG→decode без камеры. `motion_store_review_smoke.mjs` использует настоящий Chrome IndexedDB с искусственными отказами транзакций: импорт после записи метаданных/шагов, откат, повторная попытка, дедупликация, конфликт, reload и устойчивый выбор последнего локального запуска при обратном порядке ID. `motion_report_review_smoke.mjs` проверяет раздельные sync/временные/пространственные статусы, автоматическую обработку нескольких JPEG, имена проблемных журналов, ручной режим, быстрые переключения и импорт во время декодирования. Искусственные отказы и синтетические журналы не являются испытанием камеры.
+`motion_auto_smoke.mjs` проверяет простой сценарий, постоянное хранение, повтор и автоматический импорт/анализ; `motion_calibration_jpeg_smoke.mjs` выполняет синтетический canvas→JPEG→decode без камеры. `motion_store_review_smoke.mjs` использует настоящий Chrome IndexedDB с искусственными отказами транзакций: импорт после записи метаданных/шагов, откат, повторная попытка, дедупликация, конфликт, reload и устойчивый выбор последнего локального запуска при обратном порядке ID. `motion_report_review_smoke.mjs` проверяет раздельные sync/временные/пространственные статусы, автоматическую обработку нескольких JPEG, имена проблемных журналов, ручной режим, быстрые переключения и импорт во время декодирования. Искусственные отказы и синтетические журналы не являются испытанием камеры. `sync_check_test.mjs` проверяет фазовое сопоставление, все размеры и отсутствие пересечений; `sync_check_smoke.mjs` — запуск без фото, 10 секунд + пять шагов, отдельное сохранение, отмену/очистку, JSON/NDJSON с пропусками, JPEG/угловые метки и движение с ячейкой 18. Старые браузерные фикстуры движения явно используют прежние 6 px; это проверка сохранности прежней геометрии. Физическая процедура — [проверка чтения](../../lab/monitor_test/README.md#проверка-чтения-sync-кода).
 
 Совместимость настоящего рендера проверяется неизменённым Android-декодером: `python3 lab/monitor_test/tests/motion_decoder_compat.py /absolute/path/to/frame.png 12345678 42`. Здесь `12345678` и `42` должны совпадать с кодом сохранённого PNG; `none` вместо ID ожидает отсутствие единственного валидного кода. Нужны JDK и кеш компилятора Kotlin 2.0.21 из обычной подготовки проекта; runner не редактирует Android и не заменяет device-тесты.
 

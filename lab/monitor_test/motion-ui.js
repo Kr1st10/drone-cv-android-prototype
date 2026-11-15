@@ -10,17 +10,20 @@
   let runs = [], lastLocalRun = null, lastScenario = null, active = null, attempt = null, finishing = false, refreshVersion = 0;
   let seriesId = id(), ready=false, saveFailure=null;
   function id() { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0].toString(16).padStart(8, '0'); }
-  function freshRunId() { let x; do { x = id(); } while (runs.some(r => r.run_id === x)); return x; }
+  function freshRunId() { let x; do { x = id(); } while (runs.some(r => r.run_id === x) || SyncCheckUI.hasId(x)); return x; }
   function sampleCount() { return runs.reduce((n, r) => n + r.samples.length, 0); }
   function status(message) { $('motionStatus').textContent = message; }
   function rememberLocalRun(run){runs.push(run);lastLocalRun=run;$('motionHistoryStatus').textContent='Последний локальный запуск: '+run.run_id;}
   function persist() {
     if(!MotionGallery.save('motion_settings', { photo_id: selectedId, ...Object.fromEntries(parameters.map(key => [key, $(key).value])) })) status('Не удалось сохранить настройки. Освободите место и повторите.');
+    const m=Number($('motionSyncSize').value);$('syncSizeStatus').textContent=Number.isInteger(m)&&m>=2?`Код с белым полем: ${12*m} × ${10*m} px canvas; чёрная подложка: ${14*m} × ${12*m} px canvas. Читаемость камерой ещё не подтверждена. Размер в кадре камеры отличается.`:'Введите целую сторону ячейки не меньше 2 px canvas.';
     const p=$('motionAreaPreview'),c=p.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,p.width,p.height);c.strokeStyle='#111';c.lineWidth=2;
     const [x,y,w,h]=['motionAreaX','motionAreaY','motionAreaWidth','motionAreaHeight'].map(k=>Number($(k).value));c.strokeRect(x*p.width/100,y*p.height/100,w*p.width/100,h*p.height/100);c.fillStyle='#111';c.font='16px sans-serif';c.fillText('Рабочая область (без sync-кода)',12,22);
   }
   function update() {
     const busy = !!attempt || !!active || finishing, limit = runs.length >= maxRuns || sampleCount() >= maxSeriesSamples;
+    $('syncCheckStart').disabled=busy;
+    document.querySelectorAll('[data-sync-size]').forEach(b=>b.disabled=busy);
     $('motionStart').disabled = busy || limit || !ready;
     $('motionRepeat').disabled = busy || limit || !lastScenario || !ready;
     $('motionNewSeries').disabled = busy;
@@ -81,6 +84,14 @@
     if (active) {
       const current = active; active = null; cancelAnimationFrame(current.raf);
       current.run.complete = !reason; current.run.abort_reason = reason || null;
+      if(current.check){
+        current.run.end_ms=current.start===null?null:Math.max(0,performance.now()-current.start);
+        // RAF timestamps and performance.now share the browser monotonic clock.
+        current.run.end_ms=Math.max(current.run.end_ms||0,current.lastElapsed||0);
+        attempt=null;await returnToSettings();
+        const ok=SyncCheckUI.save(current.run);if(!ok)saveFailure=Error('Не удалось сохранить проверку чтения');finishing=false;update();
+        status((reason?'Проверка прервана: '+reason:'Проверка завершена')+'. '+(ok?'Запись проверки сохранена отдельно от движения.':'Не удалось сохранить в браузере. Экспортируйте проверку до закрытия страницы.'));return;
+      }
       rememberLocalRun(current.run);
       flush(current);
       current.writes=current.writes.then(()=>MotionStore.end(current.key,current.run));
@@ -96,6 +107,39 @@
     status(saveFailure?`Ошибка сохранения: ${saveFailure.message}. Экспортируйте эталон до закрытия страницы.`:reason ? `Запуск прерван: ${reason}. Эталон сохранён как неполный.` : 'Запуск завершён. Эталон сохранён в браузере.');
   }
   function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
+  async function startCheck(){
+    if(attempt||active||finishing)return;
+    const pending={cancelled:false};attempt=pending;update();
+    try{
+      persist();stage.classList.remove('hidden');await stage.requestFullscreen();
+      if(pending.cancelled){await returnToSettings();return;}
+      if(document.hidden||document.fullscreenElement!==stage)throw Error('Страница скрыта или полный экран закрыт.');
+      const vp=viewport();canvas.width=vp.width;canvas.height=vp.height;
+      const [x,y,w,h]=['motionAreaX','motionAreaY','motionAreaWidth','motionAreaHeight'].map(k=>Number($(k).value));
+      const button=$('motionStop').getBoundingClientRect();
+      const plan=MotionScenario.layout({width:vp.width,height:vp.height,workspace:{x:x*vp.width/100,y:y*vp.height/100,width:w*vp.width/100,height:h*vp.height/100},calibration_size_px:Number($('motionTagSize').value),sync_module_px:Number($('motionSyncSize').value),control_width_px:button.width*vp.dpr,control_height_px:button.height*vp.dpr});
+      $('motionStop').style.left=plan.control_rect[0]/vp.dpr+'px';$('motionStop').style.top=plan.control_rect[1]/vp.dpr+'px';$('motionStop').style.right='auto';
+      const run={schema:'dronecv-sync-check-1',run_id:freshRunId(),viewport:vp,...plan,complete:false,steps:[],end_ms:null};
+      $('settings').classList.add('hidden');
+      const current={check:true,run,plan,viewport:vp,start:null,raf:0,lastElapsed:0};active=current;
+      const frame=now=>{
+        if(active!==current)return;
+        if(document.hidden||document.fullscreenElement!==stage||!same(viewport(),vp)){finish('экран, видимость или размер окна изменились');return;}
+        if(current.start===null)current.start=now;
+        const elapsed=now-current.start;current.lastElapsed=elapsed;
+        const last=run.steps.at(-1);
+        if(last&&elapsed-last.elapsed_ms>=(last.step_id===0?10000:1000)){
+          if(last.step_id===5){finish(null);return;}
+        }else if(last){current.raf=requestAnimationFrame(frame);return;}
+        const step_id=last?last.step_id+1:0;
+        try{draw({run_id:run.run_id,step_id,visible:false},plan,null);}catch(e){finish('ошибка отрисовки: '+e.message);return;}
+        run.steps.push({step_id,elapsed_ms:elapsed,browser_time_ms:now});
+        current.raf=requestAnimationFrame(frame);
+      };
+      current.raf=requestAnimationFrame(frame);
+    }catch(e){if(!pending.cancelled){finishing=true;await returnToSettings();finishing=false;status('Не удалось начать проверку: '+e.message);}}
+    finally{if(attempt===pending)attempt=null;update();}
+  }
   async function start(repeat = false) {
     if (attempt || active || finishing || runs.length >= maxRuns || sampleCount() >= maxSeriesSamples) return;
     const pending = { cancelled: false }; attempt = pending; update();
@@ -164,6 +208,8 @@
   parameters.forEach(key => $(key).addEventListener('input', persist));
   $('motionUpload').onchange = async e => { try { const m = await MotionGallery.upload(e.target.files[0]); refresh(m.id); } catch (err) { status(err.message); } e.target.value = ''; };
   $('motionBounds').onclick = () => MotionGallery.edit(selectedId);
+  $('syncCheckStart').onclick=startCheck;
+  document.querySelectorAll('[data-sync-size]').forEach(b=>b.onclick=()=>{$('motionSyncSize').value=b.dataset.syncSize;persist();});
   $('motionStart').onclick = () => start();
   $('motionRepeat').onclick = () => start(true);
   $('motionStop').onclick = () => finish('остановлено оператором');

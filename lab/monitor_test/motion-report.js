@@ -359,6 +359,7 @@
       }
       if(incomplete) j.detections=j.detections.filter(d=>d.frame_id!==null);
       if(!footer) j.stop_ns=latest;
+      j.event_integrity={missing_events:String(missing),dropped_count:footer?.dropped_count??null,footer_present:!!footer,sequence_broken:broken};
       j.complete=!incomplete && footer.interrupted===false;j.truncated=incomplete;
       j.recording_complete=!incomplete;j.experiment_status=footer?.experiment_status??'unknown';j.session_id=session;
       return j;

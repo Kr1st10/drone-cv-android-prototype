@@ -25,7 +25,7 @@
     if(!ids.size)throw Error('Sync-код не считан ни разу. Повторите запись, изменив размер или положение кода.');
     if(ids.size!==1)throw Error('В журнале несколько разных запусков. Загрузите запись одного запуска.');
     const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
-    const id=[...ids][0],unique=new Map(runs.filter(r=>r.run_id===id).map(r=>[JSON.stringify(canonical(r)),r]));
+    const id=[...ids][0];if(SyncCheckUI.hasId(id))throw Error('Это проверка чтения кода. Результат показан отдельно над запуском движения; эталон траектории не требуется.');const unique=new Map(runs.filter(r=>r.run_id===id).map(r=>[JSON.stringify(canonical(r)),r]));
     if(!unique.size)throw Error(`Эталон ${id} отсутствует. Загрузите файл эталона отдельно.`);
     if(unique.size>1)throw Error(`Конфликтующие эталоны с ID ${id}. Нужна однозначная запись.`);
     return [...unique.values()][0];
@@ -47,8 +47,9 @@
   }
   function renderSelected(){
     const j=journals[selected];
+    SyncCheckUI.renderJournal(j||null);
     if(!j){$('reportSyncStatus').textContent='Читаемость sync-кода: журнал не загружен.';$('reportTimingStatus').textContent='Временное сопоставление: журнал не загружен.';$('reportCalibrationStatus').textContent=$('motionCameraStatus').textContent='Камерой не проверено.';return;}
-    try{const r=MotionJournalStatus.codeReadability(j.data);$('reportSyncStatus').textContent=`${j.name}: sync-код считан в ${r.read_frames} из ${r.total_frames} кадров; без кода ${r.missing_markers}; run_id: ${r.run_ids.join(', ')||'не обнаружены'}. ${r.recording_complete&&r.experiment_complete&&!r.truncated?'Запись и опыт завершены.':'Журнал или опыт неполный. '+(r.completeness_reason||'')}`;}catch(e){$('reportSyncStatus').textContent=`${j.name}: читаемость недоступна: ${e.message}`;}
+    try{const r=MotionJournalStatus.codeReadability(j.data);$('reportSyncStatus').textContent=`${j.name}: sync-код считан в ${r.read_frames} из ${r.total_frames} кадров; доля прочитанных кодов по всему файлу ${r.total_frames?(100*r.read_frames/r.total_frames).toFixed(1)+'%':'недостаточно данных'}; без кода ${r.missing_markers}; run_id: ${r.run_ids.join(', ')||'не обнаружены'}. ${r.recording_complete&&r.experiment_complete&&!r.truncated?'Запись и опыт завершены.':'Журнал или опыт неполный. '+(r.completeness_reason||'')}`;}catch(e){$('reportSyncStatus').textContent=`${j.name}: читаемость недоступна: ${e.message}`;}
     let run;
     try{run=match(j);const t=MotionJournalStatus.timing(run,j.data);$('reportTimingStatus').textContent=`${j.name}: сопоставлено ${t.matched_frames}, неизвестные шаги ${t.unknown_step_frames}, чужие ID ${t.foreign_run_frames}; порядок ${t.marker_order_invalid?'нарушен':'сохранён'}; без времени экспозиции ${t.untimed_frames}; зависших шагов ${t.stalled_step_ids.length}. Синхронизация: ${t.timing_status}; смещение ${ms(t.offset_lower_ms)}…${ms(t.offset_upper_ms)} мс, неопределённость ${ms(t.offset_uncertainty_ms)} мс. ${t.reason} ${t.completeness_reason?'Журнал или эталон неполный. '+t.completeness_reason:''}`;}catch(e){$('reportTimingStatus').textContent=`${j.name}: временное сопоставление недоступно: ${e.message}`;}
     const label=markerLabel(j);let spatial='Калибровка не выполнена.',estimate='';

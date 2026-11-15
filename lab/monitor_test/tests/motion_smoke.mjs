@@ -1,3 +1,4 @@
+// Preserve the pre-enlargement movement fixture at an explicit 6 px cell.
 // Offline browser integration; simulated timing and operator inputs are not device measurements.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -22,7 +23,7 @@ await page.goto('file://' + path.join(dir, 'gallery.html'));
 await page.waitForFunction(() => /Изображений: 90/.test(document.getElementById('status').textContent), null, { polling: 100 });
 await page.click('[data-section=gallery]'); await page.click('#presetPilot'); await page.click('#start');
 const previous = await page.evaluate(() => JSON.parse(sessionJson()));
-await page.keyboard.press('s'); await page.click('[data-section=motion]');
+await page.keyboard.press('s'); await page.click('[data-section=motion]');await page.evaluate(()=>{const e=document.getElementById('motionSyncSize');e.value='6';e.dispatchEvent(new Event('input'));});
 for (const [key,value] of Object.entries({motionWidth:'40',motionSpeed:'300',motionAcceleration:'500',motionLaps:'1'})) assert.equal(await page.inputValue('#'+key),value);
 await page.click('#motionStart'); assert.match(await page.textContent('#motionStatus'), /Не удалось начать/);
 const original = await page.evaluate(() => MANIFEST.images.find(m => m.id === 'civ01'));
