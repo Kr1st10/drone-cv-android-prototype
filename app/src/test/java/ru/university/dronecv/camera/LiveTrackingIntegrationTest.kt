@@ -111,6 +111,81 @@ class LiveTrackingIntegrationTest {
         }
     }
 
+    @Test fun `independent timeline channels serialize only for receivers and preserve late snapshots`() {
+        for (diagnosticOn in listOf(false, true)) for (motionOn in listOf(false, true)) {
+            val file = kotlin.io.path.createTempFile("diagnostic-channels", ".ndjson").toFile()
+            val journal = MotionJournal(clock = { 1_100_000_000L }, fileFactory = { file })
+            val f = Fixture(trackingCapacity = 1, journal = journal)
+            val serialized = java.util.concurrent.ConcurrentLinkedQueue<String>()
+            f.controller.beforeDiagnosticSerialization = { serialized.add(it) }
+            var trackingSerializations = 0
+            f.diagnostic.beforeTrackingSerialization = { trackingSerializations++ }
+            val pending = mutableListOf<Pair<String, () -> String>>()
+            f.start()
+            f.acquire() // Latest observation exists before either recording starts.
+            val original = f.controller.state.value.tracking!!
+            assertTrue(serialized.isEmpty())
+            if (diagnosticOn) f.controller.startDiagnostics {
+                f.diagnostic.start(f.now)
+                f.diagnostic.timeline = { type, data, _ -> pending += type to data }
+            }
+            if (motionOn) f.controller.startRecording()
+            f.frame(100)
+            val stamp = FrameStamp(f.now - 500_000_000L, CaptureTimebase.ELAPSED_REALTIME, f.now)
+            assertNull(f.controller.beginFrame(f.sources, stamp))
+            f.frame(130)
+            val snapshot = f.diagnostic.currentToken()?.let { f.diagnostic.stop(it, f.now, false, null) }
+            f.diagnostic.timeline = null
+            journal.stop()
+            if (motionOn) journal.awaitFinished(file)
+            val diagnosticEvents = pending.map { it.first to it.second() }
+            assertEquals(if (diagnosticOn) 2 else 0, trackingSerializations)
+            if (!diagnosticOn && !motionOn) assertTrue(serialized.isEmpty())
+            val motionStates = if (motionOn) file.readLines().filter { it.contains("\"type\":\"state\"") } else emptyList()
+            val diagnosticStates = diagnosticEvents.filter { it.first == "state" }.map { it.second }
+            for (states in listOf(diagnosticStates, motionStates).filter { it.isNotEmpty() }) {
+                assertEquals(3, states.size)
+                assertTrue(states.first().contains("\"reason\":\"initial_snapshot\""))
+                assertTrue(states.first().contains("\"capture_ns\":\"${original.observation.stamp.captureNs}\""))
+                assertTrue(states.first().contains("\"analyzer_entry_ns\":\"${original.observation.stamp.analyzerEntryNs}\""))
+                assertTrue(states.first().contains("\"last_yolo_capture_ns\":\"995000000\""))
+                assertTrue(states.first().contains("\"last_yolo_accepted_ns\":\"1066000000\""))
+                assertTrue(states.first().contains("\"frame_id\":\"3\""))
+                assertTrue(states.first().contains("\"generation\":\"1\""))
+                assertTrue(states.first().contains("\"source_id\":\"${f.sources}\""))
+                assertTrue(states.first().contains("\"box\":[0.22,"))
+                assertTrue(states.last().contains("\"frame_id\":\"5\""))
+            }
+            if (diagnosticOn) {
+                assertEquals(listOf("metadata", "state", "state", "tracking", "discard", "state", "tracking"), diagnosticEvents.map { it.first })
+                assertEquals(2L, snapshot!!.tracking!!.observedFrames)
+                assertEquals(2L, snapshot.tracking!!.trackUpdates)
+                assertEquals(1, snapshot.tracking!!.samples.size)
+                assertEquals(1L, snapshot.tracking!!.unstoredSamples)
+                assertEquals(1L, snapshot.staleFramesDiscarded)
+            } else assertTrue(diagnosticEvents.isEmpty())
+            if (motionOn) assertEquals(1, file.readLines().count { it.contains("\"type\":\"discard\"") })
+            f.controller.close(); f.ml.drain(); f.vision.drain()
+            assertTrue(f.snapshots.all { it.closes == 1 })
+            file.delete()
+        }
+    }
+
+    @Test fun `tracking statistics without timeline do not serialize and retain bounded samples`() {
+        val f = Fixture(trackingCapacity = 1)
+        var calls = 0
+        f.diagnostic.beforeTrackingSerialization = { calls++ }
+        val id = f.diagnostic.start(f.now)
+        f.start(); f.acquire(); f.frame(100)
+        val snapshot = f.diagnostic.stop(id, f.now, false, null)!!.tracking!!
+        assertEquals(0, calls)
+        assertEquals(4L, snapshot.observedFrames)
+        assertEquals(1L, snapshot.corrections)
+        assertEquals(1, snapshot.samples.size)
+        assertEquals(4L, snapshot.unstoredSamples)
+        f.controller.close(); f.ml.drain(); f.vision.drain()
+    }
+
     @Test fun `exported delayed correction keeps detector and coordinate frame times separate`() {
         val file = kotlin.io.path.createTempFile("timeline-correction", ".ndjson").toFile()
         var clock = 1_000_000_000L

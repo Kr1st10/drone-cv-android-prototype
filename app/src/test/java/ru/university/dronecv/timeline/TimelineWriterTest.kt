@@ -30,6 +30,54 @@ class TimelineWriterTest {
         CompletableFuture.runAsync { writer.awaitFinished() }.get(5, TimeUnit.SECONDS)
     }
 
+    @Test fun deferredEventFailureIsReportedWithoutACompleteFooter() {
+        val file = File.createTempFile("deferred-failure", ".ndjson")
+        val writer = TimelineWriter(file, { 10L })
+        try {
+            writer.record("state", { throw IllegalStateException("deferred event failed") })
+            writer.finish(20, false, null)
+            writer.awaitFinished()
+            assertEquals("deferred event failed", writer.error())
+            assertEquals(0, writer.queuedCount())
+            val output = java.io.ByteArrayOutputStream()
+            writer.copyTo(output)
+            assertTrue(output.toString("UTF-8").contains("recording_failure"))
+            assertFalse(output.toString("UTF-8").contains("session_end"))
+        } finally { writer.awaitFinished(); file.delete() }
+    }
+
+    @Test fun deferredPayloadsStayBoundedOrderedAndUnencodedWhenRejected() {
+        val file = File.createTempFile("deferred-bounded", ".ndjson")
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val calls = java.util.concurrent.CopyOnWriteArrayList<Int>()
+        val threads = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val writer = TimelineWriter(file, { 10L }, capacity = 2, open = {
+            entered.countDown(); check(release.await(5, TimeUnit.SECONDS)); it.outputStream()
+        })
+        fun payload(id: Int): () -> String = {
+            calls.add(id); threads.add(Thread.currentThread().name); "{\"id\":$id}"
+        }
+        try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            assertTrue(writer.record("state", payload(1)))
+            assertTrue(writer.record("state", payload(2)))
+            repeat(100) { assertFalse(writer.record("state", payload(3))) }
+            assertEquals(2, writer.queuedCount())
+            writer.finish(20, false, null)
+            assertFalse(writer.record("state", payload(4)))
+            assertTrue(calls.isEmpty())
+            release.countDown(); writer.awaitFinished()
+            assertEquals(listOf(1, 2), calls.toList())
+            assertTrue(threads.all { it == "timeline-writer" })
+            val lines = file.readLines()
+            assertTrue(lines[0].contains("\"id\":1"))
+            assertTrue(lines[1].contains("\"id\":2"))
+            assertTrue(lines.last().contains("\"dropped_count\":\"100\""))
+            assertTrue(lines.last().contains("\"queue_high_water\":2"))
+        } finally { release.countDown(); writer.awaitFinished(); file.delete() }
+    }
+
     @Test fun finishBetweenCompletionSelectionAndExecutionCannotSkipMandatoryReport() {
         val root = Files.createTempDirectory("timeline-finish-race").toFile()
         val selected = CountDownLatch(1)

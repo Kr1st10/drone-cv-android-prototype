@@ -81,8 +81,11 @@ fun DiagnosticReport.toJson(): String = buildString {
 }
 
 
-private fun FrameStamp.stampJson(): String =
-    "{\"capture_ns\":$captureNs,\"timestamp_source\":\"${timebase.name.lowercase()}\",\"analyzer_entry_ns\":$analyzerEntryNs}"
+private fun longJson(value: Long?, quoteLongs: Boolean): String =
+    if (value == null) "null" else if (quoteLongs) "\"$value\"" else value.toString()
+
+private fun FrameStamp.stampJson(quoteLongs: Boolean): String =
+    "{\"capture_ns\":${longJson(captureNs, quoteLongs)},\"timestamp_source\":\"${timebase.name.lowercase()}\",\"analyzer_entry_ns\":${longJson(analyzerEntryNs, quoteLongs)}}"
 
 private fun StringBuilder.appendTracking(snapshot: TrackingSnapshot, durationNs: Long) {
     val updates = snapshot.samples.map { it.signal }.filter {
@@ -107,14 +110,14 @@ private fun StringBuilder.appendTracking(snapshot: TrackingSnapshot, durationNs:
     append("]}")
 }
 
-internal fun StringBuilder.appendTrackingSample(offsetMs: Double, signal: TrackingSignal) {
+internal fun StringBuilder.appendTrackingSample(offsetMs: Double, signal: TrackingSignal, quoteLongs: Boolean = false) {
     val o = signal.observation
     val box = signal.box
     val quality = o.estimate?.quality
     val center = signal.center
-    append("{\"offset_ms\":$offsetMs,\"kind\":\"${signal.kind.name.lowercase()}\",\"sequence\":${o.key.sequence},")
-    append("\"generation\":${o.key.generation},\"source_id\":${o.key.source},\"status\":\"${o.phase.name.lowercase()}\",")
-    append("\"track_id\":${o.trackId},\"reason\":${o.reason?.let(::q) ?: "null"},")
+    append("{\"offset_ms\":$offsetMs,\"kind\":\"${signal.kind.name.lowercase()}\",\"sequence\":${longJson(o.key.sequence, quoteLongs)},")
+    append("\"generation\":${longJson(o.key.generation, quoteLongs)},\"source_id\":${longJson(o.key.source, quoteLongs)},\"status\":\"${o.phase.name.lowercase()}\",")
+    append("\"track_id\":${longJson(o.trackId, quoteLongs)},\"reason\":${o.reason?.let(::q) ?: "null"},")
     append("\"coordinate_space\":\"upright_crop_pixels\",\"width\":${signal.width},\"height\":${signal.height},")
     append("\"tracking_width\":${signal.trackingWidth},\"tracking_height\":${signal.trackingHeight},")
     append("\"center\":${center?.let { "{\"x\":${it.x},\"y\":${it.y}}" }},")
@@ -122,8 +125,8 @@ internal fun StringBuilder.appendTrackingSample(offsetMs: Double, signal: Tracki
     append("\"box\":${box?.let { "{\"left\":${it.left},\"top\":${it.top},\"right\":${it.right},\"bottom\":${it.bottom}}" }},")
     append("\"quality\":${quality?.let { "{\"points\":${it.points},\"initial_points\":${it.initialPoints},\"retained_fraction\":${it.retainedFraction},\"median_fb_error_px\":${it.medianFbErrorPx},\"correlation\":${it.correlation}}" }},")
     append("\"classification\":\"${o.classification.name.lowercase()}\",\"last_yolo_confidence\":${o.lastYoloConfidence},")
-    append("\"last_yolo_frame\":${o.lastYoloStamp?.stampJson()},\"confirmation_age_ms\":${signal.confirmationAgeMs},")
-    append("\"frame\":${o.stamp.stampJson()},\"signal_dispatch_ns\":${signal.dispatchNs},\"work_ms\":${signal.workMs},")
+    append("\"last_yolo_frame\":${o.lastYoloStamp?.stampJson(quoteLongs)},\"confirmation_age_ms\":${signal.confirmationAgeMs},")
+    append("\"frame\":${o.stamp.stampJson(quoteLongs)},\"signal_dispatch_ns\":${longJson(signal.dispatchNs, quoteLongs)},\"work_ms\":${signal.workMs},")
     append("\"timing_issue\":${signal.timingIssue?.let(::q) ?: "null"},\"capture_to_signal_ms\":${signal.captureToSignalMs},")
     append("\"capture_to_analyzer_ms\":${signal.captureToAnalyzerMs},\"analyzer_to_signal_ms\":${signal.analyzerToSignalMs}}")
 }
