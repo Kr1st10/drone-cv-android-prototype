@@ -19,6 +19,7 @@ data class TrackingSignal(
     val trackingHeight: Int = height,
     /** Monotonic UI deadline; this is not a duration or a measurement in the report. */
     val displayUntilNs: Long = dispatchNs + MAX_TRACKING_SILENCE_NS,
+    val resultReadyNs: Long? = null,
 ) {
     init {
         require(trackingWidth in 1..width && trackingHeight in 1..height && workMs.isFinite() && workMs >= 0)

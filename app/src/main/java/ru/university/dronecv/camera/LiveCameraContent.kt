@@ -157,7 +157,7 @@ private fun LiveControls(
                 else -> "неизвестно: часы камеры не сопоставлены"
             }
             val signalLabel = if (signal.kind == TrackingSampleKind.CORRECTION) "коррекция LK" else "наблюдение LK"
-            Text("Экспозиция → $signalLabel: $latency", style = MaterialTheme.typography.bodySmall,
+            Text("Экспозиция → публикация state ($signalLabel): $latency", style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.testTag("capture-to-signal"))
             signal.center?.let { point ->
                 val observation = signal.observation

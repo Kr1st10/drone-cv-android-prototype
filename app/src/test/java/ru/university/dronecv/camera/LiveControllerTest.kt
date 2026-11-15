@@ -1,5 +1,7 @@
 package ru.university.dronecv.camera
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -39,6 +41,150 @@ class LiveControllerTest {
             return result
         }
         override fun close() { events += "close" }
+    }
+
+    @Test fun publicationIncludesPreparationButExcludesDeferredSerializationAndKeepsSnapshotTime() {
+        var now = 1_000_000_000L
+        val worker = Worker()
+        val diagnostics = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        val controller = LiveController(Backend(), worker, diagnostics, eventTime = { now }, nanoTime = { now })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        val events = mutableListOf<() -> String>()
+        val session = diagnostics.start(now)
+        diagnostics.timeline = { type, payload, _ -> if (type == "state") events += payload }
+        controller.beforePublication = { now += 17_000_000L }
+        controller.beforeDiagnosticSerialization = { now += 900_000_000L }
+        val stamp = FrameStamp(now - 3_000_000L, CaptureTimebase.ELAPSED_REALTIME, now)
+        val ticket = controller.beginFrame(source, stamp)!!
+        controller.offerFrame(Frame(), ticket, stamp, 0.0)
+        worker.drain()
+        val signal = controller.signals.value!!
+        assertEquals(20.0, signal.captureToSignalMs!!, 0.0)
+        assertEquals(17.0, signal.analyzerToSignalMs!!, 0.0)
+        assertEquals(1_000_000_000L, signal.resultReadyNs)
+        val original = events.single()()
+        assertTrue(original.contains("\"state_publication_ns\":\"1017000000\""))
+        assertEquals(20.0, signal.captureToSignalMs!!, 0.0)
+        controller.startDiagnostics { }
+        val snapshot = events.last()()
+        assertTrue(snapshot.contains("initial_snapshot"))
+        assertTrue(snapshot.contains("\"observation_publication_ns\":\"1017000000\""))
+        assertTrue(snapshot.contains("\"capture_ns\":\"997000000\""))
+        diagnostics.stop(session, now, false, null)
+        controller.close(); worker.drain()
+    }
+
+    @Test fun signalSubscriberWorkBelongsOnlyToLaterStatePublication() = kotlinx.coroutines.runBlocking {
+        var now = 1_000_000_000L
+        val worker = Worker()
+        val diagnostics = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        val controller = LiveController(Backend(), worker, diagnostics, eventTime = { now }, nanoTime = { now })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        val payloads = mutableListOf<() -> String>()
+        val session = diagnostics.start(now)
+        diagnostics.timeline = { type, payload, _ -> if (type == "state") payloads += payload }
+        val subscriber = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            controller.signals.collect { if (it != null) now += 13_000_000L }
+        }
+        val stamp = FrameStamp(now, CaptureTimebase.ELAPSED_REALTIME, now)
+        controller.offerFrame(Frame(), controller.beginFrame(source, stamp)!!, stamp, 0.0)
+        worker.drain()
+        assertEquals(0.0, controller.signals.value!!.analyzerToSignalMs!!, 0.0)
+        val payload = payloads.single()()
+        assertTrue(payload.contains("\"signal_publication_ns\":\"1000000000\""))
+        assertTrue(payload.contains("\"state_publication_ns\":\"1013000000\""))
+        subscriber.cancel()
+        diagnostics.stop(session, now, false, null)
+        controller.close(); worker.drain()
+    }
+
+    @Test fun stateSubscriberStartsRecordingAfterPublicationTransaction() = kotlinx.coroutines.runBlocking {
+        var now = 1_000_000_000L
+        val worker = Worker()
+        val diagnostics = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        val controller = LiveController(Backend(), worker, diagnostics, eventTime = { now }, nanoTime = { now })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        val payloads = mutableListOf<() -> String>()
+        var session: Long? = null
+        val subscriber = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            controller.state.collect { state ->
+                if (state.result != null && session == null) {
+                    now += 11_000_000L
+                    controller.startDiagnostics {
+                        session = diagnostics.start(now)
+                        diagnostics.timeline = { type, data, _ -> if (type == "state") payloads += data }
+                    }
+                }
+            }
+        }
+        val stamp = FrameStamp(now, CaptureTimebase.ELAPSED_REALTIME, now)
+        controller.offerFrame(Frame(), controller.beginFrame(source, stamp)!!, stamp, 0.0)
+        worker.drain()
+        val snapshot = payloads.single()()
+        assertTrue(snapshot.contains("initial_snapshot"))
+        assertTrue(snapshot.contains("\"publication_ns\":\"1011000000\""))
+        assertTrue(snapshot.contains("\"state_publication_ns\":\"1000000000\""))
+        assertTrue(snapshot.contains("\"frame_id\":\"1\""))
+        subscriber.cancel()
+        diagnostics.stop(session!!, now, false, null)
+        controller.close(); worker.drain()
+    }
+
+    @Test fun stateSubscriberStopKeepsPublishedUpdateBeforeClear() = kotlinx.coroutines.runBlocking {
+        var now = 1_000_000_000L
+        val worker = Worker()
+        val diagnostics = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        val controller = LiveController(Backend(), worker, diagnostics, eventTime = { now }, nanoTime = { now })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        val payloads = mutableListOf<() -> String>()
+        val session = diagnostics.start(now)
+        diagnostics.timeline = { type, data, _ -> if (type == "state") payloads += data }
+        val subscriber = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            controller.state.collect { state ->
+                if (state.result != null) {
+                    now += 11_000_000L
+                    controller.configure(false, .5f)
+                }
+            }
+        }
+        val stamp = FrameStamp(now, CaptureTimebase.ELAPSED_REALTIME, now)
+        controller.offerFrame(Frame(), controller.beginFrame(source, stamp)!!, stamp, 0.0)
+        worker.drain()
+        assertEquals(LivePhase.STOPPED, controller.state.value.phase)
+        val rows = payloads.map { it() }
+        assertEquals(2, rows.size)
+        assertTrue(rows[0].contains("\"reason\":\"update\""))
+        assertTrue(rows[0].contains("\"publication_ns\":\"1000000000\""))
+        assertTrue(rows[1].contains("\"reason\":\"detection_stop\""))
+        assertTrue(rows[1].contains("\"publication_ns\":\"1011000000\""))
+        subscriber.cancel()
+        diagnostics.stop(session, now, false, null)
+        controller.close(); worker.drain()
+    }
+
+    @Test fun nestedSourceSwitchCannotRollBackNewestReservedSource() = kotlinx.coroutines.runBlocking {
+        val worker = Worker()
+        val controller = LiveController(Backend(), worker, eventTime = { 1_000_000_000L })
+        controller.newSource()
+        controller.configure(true, .5f)
+        var newest: Long? = null
+        val subscriber = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            controller.state.collect {
+                if (it.phase == LivePhase.STOPPED && newest == null) newest = controller.newSource()
+            }
+        }
+        val first = controller.newSource()
+        assertTrue(newest!! > first)
+        controller.configure(true, .5f)
+        val stamp = FrameStamp(null, CaptureTimebase.UNKNOWN, 1_000_000_000L)
+        assertNotNull(controller.beginFrame(newest!!, stamp))
+        assertNull(controller.beginFrame(first, stamp))
+        subscriber.cancel()
+        controller.close(); worker.drain()
     }
 
     @Test fun geometrySerializationRequiresOwningDiagnosticTokenAndNeverRetainsPixels() {

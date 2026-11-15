@@ -41,6 +41,7 @@ data class TargetSignal(
     val status: TargetStatus,
     val center: PixelPoint?,
     val confidence: Float?,
+    val resultReadyNs: Long? = null,
 ) {
     init {
         require(width > 0 && height > 0 && frameId > 0)
@@ -80,6 +81,7 @@ fun TargetSignal.toJson(): String {
     return "{\"schema_version\":2,\"frame_id\":$frameId,\"source_id\":$sourceId,\"status\":\"${status.name.lowercase()}\"," +
         "\"capture_ns\":${stamp.captureNs},\"timestamp_source\":\"${stamp.timebase.name.lowercase()}\",\"analyzer_entry_ns\":${stamp.analyzerEntryNs},\"signal_dispatch_ns\":$dispatchNs," +
         "\"capture_to_signal_ms\":$captureToSignalMs,\"capture_to_analyzer_ms\":$captureToAnalyzerMs,\"analyzer_to_signal_ms\":$analyzerToSignalMs,\"timing_issue\":$issue," +
+        (resultReadyNs?.let { "\"timing_semantics\":\"stateflow_assignment_v1\",\"result_ready_ns\":\"$it\",\"signal_publication_ns\":\"$dispatchNs\"," } ?: "") +
         "\"width\":$width,\"height\":$height,\"coordinate_space\":\"upright_crop_pixels\",\"center\":${point(center)}," +
         "\"pixel\":${center?.let { "{\"x\":${it.x.toInt()},\"y\":${it.y.toInt()}}" } ?: "null"},\"confidence\":$confidence}"
 }

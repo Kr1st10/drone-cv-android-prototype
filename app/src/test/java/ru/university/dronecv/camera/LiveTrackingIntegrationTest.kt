@@ -111,6 +111,26 @@ class LiveTrackingIntegrationTest {
         }
     }
 
+    @Test fun `LK and correction include preparation in state publication timing`() {
+        val f = Fixture()
+        f.start()
+        f.controller.beforePublication = { f.now += 7_000_000L }
+        f.frame(0)
+        val first = f.controller.state.value.tracking!!
+        assertEquals(7.0, first.analyzerToSignalMs!!, 0.0)
+        assertEquals(1_000_000_000L, first.resultReadyNs)
+        f.ml.step()
+        f.vision.step()
+        f.ml.step()
+        f.vision.step()
+        val correction = f.controller.state.value.tracking!!
+        assertEquals(TrackingSampleKind.CORRECTION, correction.kind)
+        assertTrue(correction.dispatchNs > first.dispatchNs)
+        assertEquals(7_000_000L, correction.dispatchNs - correction.resultReadyNs!!)
+        assertEquals(first.observation.stamp, correction.observation.stamp)
+        f.controller.close(); f.vision.drain(); f.ml.drain()
+    }
+
     @Test fun `independent timeline channels serialize only for receivers and preserve late snapshots`() {
         for (diagnosticOn in listOf(false, true)) for (motionOn in listOf(false, true)) {
             val file = kotlin.io.path.createTempFile("diagnostic-channels", ".ndjson").toFile()

@@ -81,6 +81,23 @@ class LiveController<Frame : AutoCloseable>(
         require(tracking == null || eventTime != null)
     }
     private val lock = Any()
+    private var publicationDepth = 0
+    private var drainingControls = false
+    private val deferredControls = ArrayDeque<() -> Unit>()
+
+    // Reentrant StateFlow controls run after state and timeline commit, under the same lock.
+    private inline fun <T> publicationTransaction(block: () -> T): T = synchronized(lock) {
+        publicationDepth++
+        try { block() } finally {
+            publicationDepth--
+            if (publicationDepth == 0 && !drainingControls) {
+                drainingControls = true
+                try {
+                    while (deferredControls.isNotEmpty()) deferredControls.removeFirst().invoke()
+                } finally { drainingControls = false }
+            }
+        }
+    }
     private val mutableState = MutableStateFlow(LiveState())
     val state = mutableState.asStateFlow()
     private val mutableSignals = MutableStateFlow<TargetSignal?>(null)
@@ -95,12 +112,13 @@ class LiveController<Frame : AutoCloseable>(
     private var confidence = 0.5f
     private var trackingEnabled = motion?.ui?.value?.mode != "yolo"
 
-    fun setTrackingEnabled(enabled: Boolean): Boolean = synchronized(lock) {
+    fun setTrackingEnabled(enabled: Boolean): Boolean = publicationTransaction {
         if (active || motion?.token() != null) false else { trackingEnabled = enabled; true }
     }
     private var generation = 0L
     private var revision = 0L
     private var source = 0L
+    private var nextSource = 0L
     private val completions = ArrayDeque<Long>()
     private val arrivals = ArrayDeque<Long>()
     private val mutableInput = MutableStateFlow(CameraInputStats())
@@ -118,6 +136,8 @@ class LiveController<Frame : AutoCloseable>(
     private var acceptedYoloNs: Long? = null
 
     /** Test observer at the serialization boundary, including payloads deferred to a writer. */
+    internal var beforePublication: (() -> Unit)? = null
+
     internal var beforeDiagnosticSerialization: ((String) -> Unit)? = null
 
     private fun observedPayload(type: String, payload: () -> String): () -> String {
@@ -159,12 +179,14 @@ class LiveController<Frame : AutoCloseable>(
     private fun updateTimeline(now: Long, reason: String, token: Long?, frame: Long?, motionFrame: Long?,
                                stamp: FrameStamp?, kind: String?, box: NormalizedBox?,
                                yoloFrame: Long? = null, yoloStamp: FrameStamp? = null,
-                               yoloAccepted: Long? = null, detectorFrame: Long? = null, diagnosticToken: Long? = diagnostics?.currentToken()) {
+                               yoloAccepted: Long? = null, detectorFrame: Long? = null, diagnosticToken: Long? = diagnostics?.currentToken(),
+                               readyNs: Long? = null, signalNs: Long? = null) {
         val capturedGeneration = generation
         val capturedSource = source
         timelinePayload = { publication, why ->
             "{\"publication_clock\":\"elapsed_realtime_ns\",\"publication_ns\":${quoted(publication)},\"reason\":${jsonString(why)}," +
                 "\"generation\":${quoted(capturedGeneration)},\"source_id\":${quoted(capturedSource)}," +
+                "\"timing_semantics\":\"stateflow_assignment_v1\",\"result_ready_ns\":${quoted(readyNs)},\"signal_publication_ns\":${quoted(signalNs)},\"state_publication_ns\":${quoted(now)},\"observation_publication_ns\":${quoted(now)}," +
                 "\"frame_id\":${quoted(frame)},\"motion_frame_id\":${quoted(motionFrame)}," +
                 "\"capture_ns\":${quoted(stamp?.captureNs)},\"timestamp_source\":${jsonString(stamp?.timebase?.name?.lowercase())}," +
                 "\"analyzer_entry_ns\":${quoted(stamp?.analyzerEntryNs)},\"timing_issue\":${jsonString(stamp?.timingIssue(publication))}," +
@@ -178,16 +200,24 @@ class LiveController<Frame : AutoCloseable>(
         updateTimeline(now, reason, token, null, null, null, null, null)
     }
     private fun metadata(extra: String): String = "{\"mode\":\"${if (trackingEnabled) "yolo_lk" else "yolo"}\",\"confidence\":$confidence,\"nms_iou\":${ru.university.dronecv.detection.yolo.PostprocessConfig().iouThreshold},\"nms_max_detections\":${ru.university.dronecv.detection.yolo.PostprocessConfig().maxDetections},\"model_input_size\":${mutableState.value.result?.modelInputSize},\"backend\":\"onnxruntime_cpu_sequential\",\"intra_op_threads\":${mutableThreads.value.threads},\"yolo_period_ns\":${quoted(tracking?.session?.yoloPeriodNs)},\"confirmation_ttl_ns\":${quoted(tracking?.session?.confirmationTtlNs)},\"retry_ns\":${quoted(tracking?.session?.retryNs)},\"coordinate_timeout_ns\":${quoted(MAX_TRACKING_SILENCE_NS)},\"lk\":{\"max_points\":${ru.university.dronecv.tracking.LkParameters.MAX_POINTS},\"min_points\":${ru.university.dronecv.tracking.LkParameters.MIN_POINTS},\"corner_quality\":${ru.university.dronecv.tracking.LkParameters.CORNER_QUALITY},\"corner_distance\":${ru.university.dronecv.tracking.LkParameters.CORNER_DISTANCE},\"window\":${ru.university.dronecv.tracking.LkParameters.WINDOW},\"pyramid_levels\":${ru.university.dronecv.tracking.LkParameters.PYRAMID_LEVELS},\"iterations\":${ru.university.dronecv.tracking.LkParameters.ITERATIONS},\"epsilon\":${ru.university.dronecv.tracking.LkParameters.EPSILON},\"forward_back_error\":${ru.university.dronecv.tracking.LkParameters.FORWARD_BACK_ERROR},\"inlier_distance\":${ru.university.dronecv.tracking.LkParameters.INLIER_DISTANCE},\"retained_fraction\":${ru.university.dronecv.tracking.LkParameters.RETAINED_FRACTION},\"min_correlation\":${ru.university.dronecv.tracking.LkParameters.MIN_CORRELATION}},\"camera_context\":$extra}"
-    fun startDiagnostics(extra: String = "null", start: () -> Unit) = synchronized(lock) {
-        if (closed || !active) return@synchronized
+    fun startDiagnostics(extra: String = "null", start: () -> Unit): Unit = publicationTransaction {
+        if (publicationDepth > 1) {
+            deferredControls.addLast { startDiagnostics(extra, start) }
+            return@publicationTransaction
+        }
+        if (closed || !active) return@publicationTransaction
         start()
         eventTime?.invoke()?.let {
             diagnostics?.event(diagnostics?.currentToken(), "metadata", metadata(extra), it)
             timeline(it, "initial_snapshot", null)
         }
     }
-    fun startRecording(extra: String = "null") = synchronized(lock) {
-        if (closed || !active) return@synchronized
+    fun startRecording(extra: String = "null"): Unit = publicationTransaction {
+        if (publicationDepth > 1) {
+            deferredControls.addLast { startRecording(extra) }
+            return@publicationTransaction
+        }
+        if (closed || !active) return@publicationTransaction
         motion?.start()
         eventTime?.invoke()?.let {
             motion?.event(motion?.token(), "metadata", metadata(extra))
@@ -204,17 +234,17 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     /** Called before copying, so a threshold/Stop change during preparation cannot retag an old frame. */
-    fun beginFrame(sourceId: Long, stamp: FrameStamp): LiveFrameToken? = synchronized(lock) {
+    fun beginFrame(sourceId: Long, stamp: FrameStamp): LiveFrameToken? = publicationTransaction {
         val token = LiveFrameToken(generation, sourceId, diagnostics?.currentToken(), motion?.token())
-        if (!valid(token)) return@synchronized null
+        if (!valid(token)) return@publicationTransaction null
         inputEvent(token, CameraInputEvent.RECEIVED)
-        if (!valid(token)) return@synchronized null
+        if (!valid(token)) return@publicationTransaction null
         arrivals.addLast(stamp.analyzerEntryNs)
         while (arrivals.size > 30) arrivals.removeFirst()
         val span = stamp.analyzerEntryNs - arrivals.first()
         mutableInput.value = mutableInput.value.copy(fps = if (arrivals.size > 1 && span > 0)
             (arrivals.size - 1) * 1_000_000_000.0 / span else null)
-        if (!valid(token)) return@synchronized null
+        if (!valid(token)) return@publicationTransaction null
         if (stamp.ageAt(stamp.analyzerEntryNs)?.let { it > maxAnalyzerAgeMs } == true) {
             inputEvent(token, CameraInputEvent.STALE)
             token.diagnosticToken?.let { diagnostics?.discardStale(it) }
@@ -223,9 +253,9 @@ class LiveController<Frame : AutoCloseable>(
         } else token
     }
 
-    fun noFrameBuffer(token: LiveFrameToken) = synchronized(lock) { inputEvent(token, CameraInputEvent.NO_BUFFER) }
+    fun noFrameBuffer(token: LiveFrameToken) = publicationTransaction { inputEvent(token, CameraInputEvent.NO_BUFFER) }
 
-    fun captureFailed(token: LiveFrameToken, message: String) = synchronized(lock) {
+    fun captureFailed(token: LiveFrameToken, message: String) = publicationTransaction {
         inputEvent(token, CameraInputEvent.ERROR)
         fail(token.generation, message)
     }
@@ -259,11 +289,11 @@ class LiveController<Frame : AutoCloseable>(
                 captureFailed(token, "Некорректное время копирования кадра.")
                 return
             }
-            val schedule = synchronized(lock) {
+            val schedule = publicationTransaction {
                 inputEvent(token, CameraInputEvent.COPIED, preparationMs)
                 if (!valid(token)) {
                     inputEvent(token, CameraInputEvent.INVALIDATED)
-                    return@synchronized null
+                    return@publicationTransaction null
                 }
                 val next = Pending(frame, token, stamp, preparationMs, nanoTime())
                 val previous = pending
@@ -290,7 +320,7 @@ class LiveController<Frame : AutoCloseable>(
                 captureFailed(token, "Некорректное время копирования кадра.")
                 return
             }
-            val accepted = synchronized(lock) {
+            val accepted = publicationTransaction {
                 inputEvent(token, CameraInputEvent.COPIED, preparationMs)
                 valid(token).also { if (!it) inputEvent(token, CameraInputEvent.INVALIDATED) }
             }
@@ -301,7 +331,7 @@ class LiveController<Frame : AutoCloseable>(
             val observation = live.session.observe(gray) ?: return
             live.latestToken = token
             publishTracking(live, token, observation, gray, TrackingSampleKind.FRAME, start)
-            if (!synchronized(lock) { valid(token) }) return
+            if (!publicationTransaction { valid(token) }) return
             val request = live.session.requestYolo(!live.inFlight, checkNotNull(eventTime)()) ?: return
             live.inFlight = true
             try {
@@ -344,7 +374,7 @@ class LiveController<Frame : AutoCloseable>(
                            result: LiveInference?) {
         var replayScheduled = false
         try {
-            if (!synchronized(lock) { valid(token) } || result == null) return
+            if (!publicationTransaction { valid(token) } || result == null) return
             check(result.width == request.anchor.cropWidth && result.height == request.anchor.cropHeight) {
                 "Размер кадра YOLO не совпадает с кадром трекера."
             }
@@ -352,13 +382,13 @@ class LiveController<Frame : AutoCloseable>(
             worker.execute {
                 try {
                     val start = nanoTime()
-                    val correction = if (synchronized(lock) { valid(token) }) plan.replay(nanoTime) else null
+                    val correction = if (publicationTransaction { valid(token) }) plan.replay(nanoTime) else null
                     val replayMs = (nanoTime() - start) / 1e6
                     var transferred = false
                     try {
                         transferred = onVision(live, token) {
                             try {
-                                if (!synchronized(lock) { valid(token) }) return@onVision
+                                if (!publicationTransaction { valid(token) }) return@onVision
                                 if (correction == null) {
                                     live.session.rejectCorrection(request)
                                     return@onVision
@@ -418,8 +448,8 @@ class LiveController<Frame : AutoCloseable>(
 
     private fun publishTracking(live: LiveTracking<Frame>, token: LiveFrameToken, observation: TrackingObservation,
                                 geometry: GrayFrame, kind: TrackingSampleKind, start: Long, extraMs: Double = 0.0) =
-        synchronized(lock) {
-            if (!valid(token)) return@synchronized
+        publicationTransaction {
+            if (!valid(token)) return@publicationTransaction
             val now = checkNotNull(eventTime)()
             val silenceDeadline = now + MAX_TRACKING_SILENCE_NS
             val displayUntil = if (observation.estimate == null) silenceDeadline else
@@ -428,29 +458,48 @@ class LiveController<Frame : AutoCloseable>(
                 (displayUntil <= now ||
                     now - observation.stamp.analyzerEntryNs > maxAnalyzerAgeMs * 1e6 ||
                     observation.stamp.ageAt(now)?.let { it > maxAnalyzerAgeMs } == true)) {
-                if (mutableState.value.tracking?.box != null) {
-                    motion?.publication(token.motionToken, null, null, "clear", now)
+                val hadBox = mutableState.value.tracking?.box != null
+                val cleared = mutableState.value.copy(tracking = null, trackingFps = null, revision = ++revision)
+                val clearedNs = checkNotNull(eventTime)()
+                mutableState.value = cleared
+                if (!valid(token)) return@publicationTransaction
+                if (hadBox) {
+                    motion?.publication(token.motionToken, null, null, "clear", clearedNs)
                     val deadline = live.session.confirmationDeadlineNs(observation)
-                    clearTimeline(now, if (deadline != null && now >= deadline) "classification_expired" else "stale_result")
+                    clearTimeline(clearedNs, if (deadline != null && now >= deadline) "classification_expired" else "stale_result")
                 } else {
                     discarded(now, token, observation.stamp, "stale_result")
                 }
-                mutableState.value = mutableState.value.copy(tracking = null, trackingFps = null, revision = ++revision)
-                return@synchronized
+                return@publicationTransaction
             }
             val end = nanoTime()
-            val signal = TrackingSignal(observation, kind, geometry.cropWidth, geometry.cropHeight, now,
+            val readyNs = checkNotNull(eventTime)()
+            val preparedSignal = TrackingSignal(observation, kind, geometry.cropWidth, geometry.cropHeight, now,
                 extraMs + (end - start) / 1e6, geometry.width, geometry.height, displayUntil)
-            val fps = live.fps(signal)
-            val b = signal.box?.let { NormalizedBox((it.left / signal.width).toFloat(), (it.top / signal.height).toFloat(), (it.right / signal.width).toFloat(), (it.bottom / signal.height).toFloat()) }
-            motion?.publication(token.motionToken, token.motionFrame, b, if (b == null) "clear" else "lk", now)
+            val fps = live.fps(preparedSignal)
+            val b = preparedSignal.box?.let { NormalizedBox((it.left / preparedSignal.width).toFloat(), (it.top / preparedSignal.height).toFloat(), (it.right / preparedSignal.width).toFloat(), (it.bottom / preparedSignal.height).toFloat()) }
+            beforePublication?.invoke()
+            val publicationNs = checkNotNull(eventTime)()
+            if (observation.estimate != null && (publicationNs >= displayUntil ||
+                    publicationNs - observation.stamp.analyzerEntryNs > maxAnalyzerAgeMs * 1e6 ||
+                    observation.stamp.ageAt(publicationNs)?.let { it > maxAnalyzerAgeMs } == true)) {
+                mutableState.value = mutableState.value.copy(tracking = null, trackingFps = null, revision = ++revision)
+                if (valid(token)) {
+                    motion?.publication(token.motionToken, null, null, "clear", publicationNs)
+                    clearTimeline(publicationNs, "stale_result")
+                }
+                return@publicationTransaction
+            }
+            val signal = preparedSignal.copy(dispatchNs = publicationNs, resultReadyNs = readyNs)
+            mutableState.value = mutableState.value.copy(tracking = signal, trackingFps = fps, revision = ++revision)
+            if (!valid(token)) return@publicationTransaction
+            motion?.publication(token.motionToken, token.motionFrame, b, if (b == null) "clear" else "lk", publicationNs)
             val obs = signal.observation
-            updateTimeline(now, obs.reason ?: if (kind == TrackingSampleKind.CORRECTION) "correction" else if (b == null) "searching" else "update",
+            updateTimeline(publicationNs, obs.reason ?: if (kind == TrackingSampleKind.CORRECTION) "correction" else if (b == null) "searching" else "update",
                 motion?.token(), obs.key.sequence, token.motionFrame.takeIf { token.motionToken == motion?.token() }, obs.stamp,
                 if (kind == TrackingSampleKind.CORRECTION) "correction" else "lk", b,
                 obs.lastYoloKey?.sequence, obs.lastYoloStamp, obs.lastYoloAcceptedNs,
-                if (kind == TrackingSampleKind.CORRECTION) obs.lastYoloKey?.sequence else null, diagnostics?.currentToken())
-            mutableState.value = mutableState.value.copy(tracking = signal, trackingFps = fps, revision = ++revision)
+                if (kind == TrackingSampleKind.CORRECTION) obs.lastYoloKey?.sequence else null, diagnostics?.currentToken(), readyNs = readyNs)
             token.diagnosticToken?.let { diagnostics?.tracking(it, end, signal) }
         }
 
@@ -479,8 +528,8 @@ class LiveController<Frame : AutoCloseable>(
     private fun schedulePump(epoch: Long) {
         try { worker.execute { runPending(epoch) } }
         catch (_: java.util.concurrent.RejectedExecutionException) {
-            synchronized(lock) {
-                if (epoch != pumpEpoch) return@synchronized
+            publicationTransaction {
+                if (epoch != pumpEpoch) return@publicationTransaction
                 val id = pending?.token?.generation
                 pumpScheduled = false
                 clearPending()
@@ -491,7 +540,7 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     private fun runPending(epoch: Long) {
-        val next = synchronized(lock) {
+        val next = publicationTransaction {
             if (epoch != pumpEpoch) return
             pending.also { pending = null }
         }
@@ -499,7 +548,7 @@ class LiveController<Frame : AutoCloseable>(
             if (next != null) analyze(next.frame, next.token.source, next.stamp, next.token,
                 next.preparationMs, next.queuedNs)
         } finally {
-            val again = synchronized(lock) {
+            val again = publicationTransaction {
                 if (epoch != pumpEpoch) false
                 else if (pending == null) { pumpScheduled = false; false } else true
             }
@@ -507,13 +556,15 @@ class LiveController<Frame : AutoCloseable>(
         }
     }
 
-    fun configure(enabled: Boolean, threshold: Float, stopReason: String = "detection_stop") = synchronized(lock) {
+    fun configure(enabled: Boolean, threshold: Float, stopReason: String = "detection_stop"): Unit = publicationTransaction {
         require(threshold in 0.01f..1f)
-        if (closed || (enabled && mutableThreads.value.switching) || (active == enabled && confidence == threshold)) return@synchronized
-        if (active && (enabled != active || threshold != confidence)) {
-            eventTime?.invoke()?.let { clearTimeline(it, if (!enabled) stopReason else "configuration_changed") }
-            motion?.stop(if (!enabled) stopReason else "Detection configuration changed")
+        if (publicationDepth > 1) {
+            deferredControls.addLast { configure(enabled, threshold, stopReason) }
+            return@publicationTransaction
         }
+        if (closed || (enabled && mutableThreads.value.switching) || (active == enabled && confidence == threshold)) return@publicationTransaction
+        val clearReason = if (active && (enabled != active || threshold != confidence))
+            if (!enabled) stopReason else "configuration_changed" else null
         val wasActive = active
         active = enabled
         confidence = threshold
@@ -528,48 +579,57 @@ class LiveController<Frame : AutoCloseable>(
         mutableInput.value = CameraInputStats()
         mutableSignals.value = null
         if (generation == configuredGeneration && !closed) {
-            mutableState.value = LiveState(
-                phase = if (active) LivePhase.STARTING else LivePhase.STOPPED,
-                revision = ++revision,
-            )
+            val next = LiveState(phase = if (active) LivePhase.STARTING else LivePhase.STOPPED, revision = ++revision)
+            val publicationNs = eventTime?.invoke()
+            mutableState.value = next
+            if (generation == configuredGeneration && clearReason != null) {
+                publicationNs?.let { clearTimeline(it, clearReason) }
+                motion?.stop(if (!enabled) stopReason else "Detection configuration changed")
+            }
         }
     }
 
     /** Apply only after stopping detection and recording; all session work is ordered on the ML worker. */
-    fun requestThreads(threads: Int): Boolean = synchronized(lock) {
+    fun requestThreads(threads: Int): Boolean = publicationTransaction {
         require(threads in setOf(1, 2, 4))
-        if (closed) return@synchronized false
+        if (closed) return@publicationTransaction false
         if (active || busy || diagnostics?.currentToken() != null || mutableThreads.value.switching) {
             if (!mutableThreads.value.switching) mutableThreads.value = mutableThreads.value.copy(
                 error = "Остановите детекцию и дождитесь завершения обработки кадра.")
-            return@synchronized false
+            return@publicationTransaction false
         }
-        if (threads == mutableThreads.value.threads) return@synchronized true
+        if (threads == mutableThreads.value.threads) return@publicationTransaction true
         val previous = mutableThreads.value.threads
         mutableThreads.value = ThreadConfiguration(previous, switching = true)
         worker.execute {
-            if (synchronized(lock) { closed }) return@execute
+            if (publicationTransaction { closed }) return@execute
             try {
                 backend.changeThreads(threads)
-                synchronized(lock) { if (!closed) mutableThreads.value = ThreadConfiguration(threads) }
+                publicationTransaction { if (!closed) mutableThreads.value = ThreadConfiguration(threads) }
             } catch (e: Exception) {
-                synchronized(lock) { if (!closed) mutableThreads.value = ThreadConfiguration(previous, error =
+                publicationTransaction { if (!closed) mutableThreads.value = ThreadConfiguration(previous, error =
                     "Не удалось применить $threads поток(а): ${e.message ?: e.javaClass.simpleName}. " +
                     if (e.suppressed.isEmpty()) "Прежняя настройка сохранена." else "Восстановление сессии тоже не удалось; повторите запуск.") }
             } catch (e: OutOfMemoryError) {
-                synchronized(lock) { if (!closed) mutableThreads.value = ThreadConfiguration(previous, error =
+                publicationTransaction { if (!closed) mutableThreads.value = ThreadConfiguration(previous, error =
                     if (e.suppressed.isEmpty()) "Недостаточно памяти; прежняя настройка сохранена." else "Недостаточно памяти; восстановление сессии не удалось.") }
             }
         }
         true
     }
 
-    fun updateThreshold(threshold: Float) = synchronized(lock) { configure(active, threshold) }
+    fun updateThreshold(threshold: Float) = publicationTransaction { configure(active, threshold) }
 
     /** A new binding cannot accept callbacks left queued by an older use case. */
-    fun newSource(): Long = synchronized(lock) {
-        configure(false, confidence)
-        ++source
+    fun newSource(): Long = publicationTransaction {
+        val reserved = maxOf(nextSource, source) + 1
+        nextSource = reserved
+        val change = {
+            configure(false, confidence)
+            source = reserved
+        }
+        deferredControls.addLast(change)
+        reserved
     }
 
     /** Synchronous ML-worker entry for owned frames; CameraX uses LiveFrameCapture/offerFrame instead. */
@@ -580,7 +640,7 @@ class LiveController<Frame : AutoCloseable>(
     private fun analyze(frame: Frame, sourceId: Long?, stamp: FrameStamp?, ticket: LiveFrameToken?,
                         preparationMs: Double, queuedNs: Long?, forTracking: Boolean = false): LiveInference? {
         try {
-            val request = synchronized(lock) {
+            val request = publicationTransaction {
                 if (closed || !active || busy || (ticket != null && !valid(ticket)) || (sourceId != null && sourceId != source) ||
                     mutableState.value.phase == LivePhase.ERROR) null
                 else { busy = true; generation to confidence }
@@ -589,15 +649,15 @@ class LiveController<Frame : AutoCloseable>(
             try {
                 if (stamp?.ageAt(stamp.analyzerEntryNs)?.let { it > maxAnalyzerAgeMs } == true) {
                     if (token != null) diagnostics?.discardStale(token)
-                    synchronized(lock) { eventTime?.invoke()?.let { discarded(it, ticket, stamp, "stale_capture") } }
+                    publicationTransaction { eventTime?.invoke()?.let { discarded(it, ticket, stamp, "stale_capture") } }
                     return null
                 }
                 val start = nanoTime()
                 if (queuedNs != null && ((start - queuedNs) / 1_000_000.0 > maxAnalyzerAgeMs ||
                     (stamp != null && eventTime != null && stamp.ageAt(eventTime())?.let { it > maxAnalyzerAgeMs } == true))) {
-                    synchronized(lock) { if (ticket != null) inputEvent(ticket, CameraInputEvent.STALE) }
+                    publicationTransaction { if (ticket != null) inputEvent(ticket, CameraInputEvent.STALE) }
                     if (token != null) diagnostics?.discardStale(token)
-                    synchronized(lock) { eventTime?.invoke()?.let { discarded(it, ticket, stamp, "stale_queue") } }
+                    publicationTransaction { eventTime?.invoke()?.let { discarded(it, ticket, stamp, "stale_queue") } }
                     return null
                 }
                 if (token != null) diagnostics?.received(token)
@@ -605,10 +665,11 @@ class LiveController<Frame : AutoCloseable>(
                 val result = rawResult.copy(detections = rawResult.detections.visibleDetections())
                 val end = nanoTime()
                 val processingMs = preparationMs + (end - start) / 1_000_000.0
-                return synchronized(lock) {
+                return publicationTransaction {
                     if (!closed && active && generation == request.first) {
                         val selected = selectTarget(result.detections, result.width, result.height)
                         val selectedDetection = result.detections.highestConfidenceVisibleDetection()
+                        val readyNs = eventTime?.invoke()
                         completions.addLast(end)
                         while (completions.size > 30 ||
                             (completions.size > 2 && end - completions.first() > 3_000_000_000L)) {
@@ -618,13 +679,15 @@ class LiveController<Frame : AutoCloseable>(
                         val fps = if (completions.size > 1 && elapsed > 0)
                             (completions.size - 1) * 1_000_000_000.0 / elapsed else null
                         val previous = mutableState.value
-                        val signal = if (!forTracking && stamp != null && eventTime != null) targetSignal(++frameId, source, stamp,
+                        val preparedSignal = if (!forTracking && stamp != null && eventTime != null) targetSignal(++frameId, source, stamp,
                             eventTime(), result.width, result.height, selected) else null
                         val next = previous.copy(
                             phase = LivePhase.RUNNING, result = result, pipelineMs = processingMs, fps = fps,
                             completedFrames = previous.completedFrames + 1,
-                            revision = if (forTracking) previous.revision else ++revision, target = signal,
+                            revision = if (forTracking) previous.revision else ++revision, target = preparedSignal,
                         )
+                        beforePublication?.invoke()
+                        val signal = preparedSignal?.copy(dispatchNs = checkNotNull(eventTime)(), resultReadyNs = readyNs)
                         mutableSignals.value = signal
                         if (token != null && result.conversionMs != null && result.preprocessMs != null && result.postprocessMs != null) {
                             diagnostics?.completed(token, end, result.conversionMs, result.preprocessMs,
@@ -634,7 +697,10 @@ class LiveController<Frame : AutoCloseable>(
                         // An unconfined signal subscriber may synchronously stop/reconfigure this controller.
                         if (!closed && active && generation == request.first) {
                             if (!forTracking && ticket != null && eventTime != null && valid(ticket)) {
+                                val stateReady = next.copy(target = signal)
                                 val now = eventTime()
+                                mutableState.value = stateReady
+                                if (!valid(ticket)) return@publicationTransaction result
                                 if (selectedDetection != null) motion?.detection(ticket.motionToken, ticket.motionFrame, selectedDetection, now)
                                 motion?.publication(ticket.motionToken, ticket.motionFrame, selectedDetection?.box, if (selectedDetection == null) "clear" else "yolo", now)
                                 if (selectedDetection != null) {
@@ -644,9 +710,9 @@ class LiveController<Frame : AutoCloseable>(
                                 }
                                 updateTimeline(now, if (selectedDetection == null) "no_detection" else "update", motion?.token(),
                                     signal?.frameId, ticket.motionFrame.takeIf { ticket.motionToken == motion?.token() }, stamp, "yolo", selectedDetection?.box,
-                                    acceptedYoloFrame, acceptedYoloStamp, acceptedYoloNs, signal?.frameId, diagnostics?.currentToken())
+                                    acceptedYoloFrame, acceptedYoloStamp, acceptedYoloNs, signal?.frameId, diagnostics?.currentToken(), readyNs, signal?.dispatchNs)
                             }
-                            mutableState.value = next
+                            if (forTracking || ticket == null || eventTime == null) mutableState.value = next.copy(target = signal)
                         }
                         result
                     } else null
@@ -658,17 +724,15 @@ class LiveController<Frame : AutoCloseable>(
                 fail(request.first, "Недостаточно памяти. Остановите детекцию и повторите запуск.")
                 return null
             } finally {
-                synchronized(lock) { busy = false }
+                publicationTransaction { busy = false }
             }
         } finally {
             frame.close()
         }
     }
 
-    private fun fail(id: Long, message: String, release: Boolean = true) = synchronized(lock) {
-        if (closed || !active || generation != id) return@synchronized
-        eventTime?.invoke()?.let { clearTimeline(it, "detector_error") }
-        motion?.stop("Detector error: $message")
+    private fun fail(id: Long, message: String, release: Boolean = true) = publicationTransaction {
+        if (closed || !active || generation != id) return@publicationTransaction
         onFailure?.invoke(message)
         val failureGeneration = ++generation
         invalidatePending()
@@ -676,47 +740,66 @@ class LiveController<Frame : AutoCloseable>(
         if (release) worker.execute { backend.close() }
         mutableSignals.value = null
         if (generation == failureGeneration && !closed && active) {
-            mutableState.value = LiveState(LivePhase.ERROR, error = message, revision = ++revision)
+            val next = LiveState(LivePhase.ERROR, error = message, revision = ++revision)
+            val publicationNs = eventTime?.invoke()
+            mutableState.value = next
+            if (generation != failureGeneration) return@publicationTransaction
+            publicationNs?.let { clearTimeline(it, "detector_error") }
+            motion?.stop("Detector error: $message")
         }
     }
 
     /** Clear boxes if the camera stops supplying frames without reporting an error. */
-    fun expire(revision: Long) = synchronized(lock) {
+    fun expire(revision: Long): Unit = publicationTransaction {
+        if (publicationDepth > 1) {
+            deferredControls.addLast { expire(revision) }
+            return@publicationTransaction
+        }
         val current = mutableState.value
         val expiredGeneration = generation
-        if (current.revision != revision) return@synchronized
+        if (current.revision != revision) return@publicationTransaction
         if (tracking != null && trackingEnabled) {
-            if (current.tracking?.box != null && eventTime != null) {
-                val now = eventTime()
+            val next = current.copy(tracking = null, trackingFps = null)
+            val now = eventTime?.invoke()
+            mutableState.value = next
+            if (generation != expiredGeneration) return@publicationTransaction
+            if (current.tracking?.box != null && now != null) {
                 motion?.publication(motion.token(), null, null, "clear", now)
                 val confirmationDeadline = tracking.session.confirmationDeadlineNs(current.tracking.observation)
                 clearTimeline(now, if (confirmationDeadline != null && now >= confirmationDeadline) "classification_expired" else "no_update_timeout")
             }
-            mutableState.value = current.copy(tracking = null, trackingFps = null)
         } else if (current.result != null) {
-            if (eventTime != null) {
-                val now = eventTime()
-                motion?.publication(motion.token(), null, null, "clear", now)
-                clearTimeline(now, "no_update_timeout")
-            }
             if (mutableSignals.value === current.target) mutableSignals.value = null
             if (generation == expiredGeneration && mutableState.value.revision == revision) {
-                mutableState.value = current.copy(result = null, fps = null, pipelineMs = null, target = null)
+                val next = current.copy(result = null, fps = null, pipelineMs = null, target = null)
+                val publicationNs = eventTime?.invoke()
+                mutableState.value = next
+                if (generation != expiredGeneration) return@publicationTransaction
+                publicationNs?.let { now ->
+                    motion?.publication(motion.token(), null, null, "clear", now)
+                    clearTimeline(now, "no_update_timeout")
+                }
             }
         }
     }
 
-    override fun close() = synchronized(lock) {
-        if (closed) return@synchronized
-        eventTime?.invoke()?.let { clearTimeline(it, "screen_closed") }
-        motion?.stop("Camera screen closed")
+    override fun close(): Unit = publicationTransaction {
+        if (publicationDepth > 1) {
+            deferredControls.addLast { close() }
+            return@publicationTransaction
+        }
+        if (closed) return@publicationTransaction
         closed = true
         active = false
         generation++
         source++
         invalidatePending()
         mutableSignals.value = null
-        mutableState.value = LiveState(revision = ++revision)
+        val next = LiveState(revision = ++revision)
+        val publicationNs = eventTime?.invoke()
+        mutableState.value = next
+        publicationNs?.let { clearTimeline(it, "screen_closed") }
+        motion?.stop("Camera screen closed")
         val closingGeneration = generation
         tracking?.let { live ->
             try { live.executor.execute { guardVision(closingGeneration) { live.session.close() } } }
