@@ -126,6 +126,7 @@ internal fun StringBuilder.appendTrackingSample(offsetMs: Double, signal: Tracki
     append("\"quality\":${quality?.let { "{\"points\":${it.points},\"initial_points\":${it.initialPoints},\"retained_fraction\":${it.retainedFraction},\"median_fb_error_px\":${it.medianFbErrorPx},\"correlation\":${it.correlation}}" }},")
     append("\"classification\":\"${o.classification.name.lowercase()}\",\"last_yolo_confidence\":${o.lastYoloConfidence},")
     append("\"last_yolo_frame\":${o.lastYoloStamp?.stampJson(quoteLongs)},\"confirmation_age_ms\":${signal.confirmationAgeMs},")
+    signal.resultReadyNs?.let { append("\"timing_semantics\":\"stateflow_assignment_v1\",\"result_ready_ns\":${longJson(it, quoteLongs)},\"state_publication_ns\":${longJson(signal.dispatchNs, quoteLongs)},") }
     append("\"frame\":${o.stamp.stampJson(quoteLongs)},\"signal_dispatch_ns\":${longJson(signal.dispatchNs, quoteLongs)},\"work_ms\":${signal.workMs},")
     append("\"timing_issue\":${signal.timingIssue?.let(::q) ?: "null"},\"capture_to_signal_ms\":${signal.captureToSignalMs},")
     append("\"capture_to_analyzer_ms\":${signal.captureToAnalyzerMs},\"analyzer_to_signal_ms\":${signal.analyzerToSignalMs}}")

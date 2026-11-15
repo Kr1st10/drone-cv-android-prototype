@@ -5,10 +5,39 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from timeline_analysis import read_timeline
+from timeline_analysis import read_timeline, publication_timing
 
 
 class TimelineAnalysisTest(unittest.TestCase):
+    def test_assignment_times_and_late_snapshot_preserve_observation(self):
+        base = 90071992547409930
+        data = dict(timing_semantics='stateflow_assignment_v1', reason='update',
+                    publication_ns=str(base+30), state_publication_ns=str(base+30),
+                    observation_publication_ns=str(base+30), result_ready_ns=str(base+10),
+                    signal_publication_ns=str(base+20))
+        publication_timing(data)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'run.ndjson'
+            data.update(reason='initial_snapshot', publication_ns=str(base+100))
+            rows = [('header', {'start_ns': str(base+100)}), ('state', data),
+                    ('session_end', dict(stop_ns=str(base+200), recording_complete=True,
+                                         dropped_count='0', accepted_count='2', written_count='2'))]
+            path.write_text(''.join(json.dumps(dict(schema='dronecv-session-timeline-1',
+                session_id='s', event_id=str(i), event_ns=str(base+100), type=kind, data=value))+'\n'
+                for i, (kind, value) in enumerate(rows, 1)))
+            result = read_timeline(path)
+            self.assertTrue(result['recording_complete'], result['errors'])
+            state = result['intervals'][-1]
+            self.assertEqual(state['start_ns'], str(base+100))
+            self.assertEqual(state['state_publication_ns'], str(base+30))
+            self.assertEqual(state['result_ready_ns'], str(base+10))
+        for field in ('result_ready_ns', 'signal_publication_ns', 'state_publication_ns'):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                publication_timing({**data, field: str(base+300)})
+        legacy = {'publication_ns': str(base+100)}
+        publication_timing(legacy)
+        self.assertNotIn('state_publication_ns', legacy)
+
     def test_long_export_and_incomplete_tail(self):
         base = 90071992547409930
         with tempfile.TemporaryDirectory() as tmp:
