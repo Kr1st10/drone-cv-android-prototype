@@ -113,7 +113,7 @@
   function reportMetadata(run, journal, points) {
     const records=journal.metadata_records || [{type:'legacy_journal',data:Object.fromEntries(
       Object.entries(journal).filter(([key])=>!['frames','publications','detections','calibration_image'].includes(key)))}];
-    const fields=['git_sha','git_dirty','app_version','model_asset','model_sha256','model_name','mode','confidence','nms_iou','nms_max_detections','model_input_size',
+    const fields=['git_sha','git_dirty','app_version','version_code','build_type','model_asset','model_sha256','model_name','mode','confidence','nms_iou','nms_max_detections','model_input_size',
       'backend','intra_op_threads','inter_op_threads','execution_mode','execution_provider','lk','yolo_period_ns','confirmation_ttl_ns','retry_ns','coordinate_timeout_ns',
       'device','android_release','android_sdk','camera_context'];
     const values=Object.fromEntries(fields.map(key=>[key,[]]));
@@ -123,7 +123,7 @@
       const d=record.data;
       for(const key of fields) for(const source of [d,d?.metadata,d?.camera_context,d?.metadata?.camera_context,
         d?.model && {model_asset:d.model.asset,model_sha256:d.model.sha256,model_name:d.model.name,confidence:d.model.confidence,
-          nms_iou:d.model.nms_iou,backend:d.model.backend,intra_op_threads:d.model.intra_op_threads,
+          nms_iou:d.model.nms_iou,nms_max_detections:d.model.nms_max_detections,backend:d.model.backend,intra_op_threads:d.model.intra_op_threads,
           inter_op_threads:d.model.inter_op_threads,execution_mode:d.model.execution_mode,execution_provider:d.model.execution_provider}]) {
         if(source?.[key]!=null && !values[key].some(v=>canonical(v.value)===canonical(source[key])))
           values[key].push({value:source[key],source_type:record.type,event_id:record.event_id??null});
