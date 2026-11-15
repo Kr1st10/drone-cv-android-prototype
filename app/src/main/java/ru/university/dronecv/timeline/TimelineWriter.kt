@@ -16,7 +16,7 @@ class TimelineWriter(
     private val onFinishing: () -> Unit = {},
     private val onClosed: (Boolean, String?) -> Unit = { _, _ -> },
 ) {
-    private data class Entry(val id: Long, val time: Long, val type: String, val data: String)
+    private data class Entry(val id: Long, val time: Long, val type: String, val data: () -> String)
     private sealed interface Completion {
         data class Report(val entry: Entry, val data: () -> String) : Completion
         data class Footer(val entry: Entry) : Completion
@@ -44,7 +44,10 @@ class TimelineWriter(
 
     init { require(capacity > 0) }
 
-    @Synchronized fun record(type: String, data: String, time: Long = clock()): Boolean {
+    fun record(type: String, data: String, time: Long = clock()): Boolean = record(type, { data }, time)
+
+    /** Admit an immutable payload snapshot in event order; serialize only on this session's writer. */
+    @Synchronized fun record(type: String, data: () -> String, time: Long = clock()): Boolean {
         if (end != null) return false
         val entry = Entry(++nextId, time, type, data)
         if (failure == null && queue.offer(entry)) { accepted++; highWater = maxOf(highWater, queue.size); lastWasDropped = false; return true }
@@ -52,8 +55,8 @@ class TimelineWriter(
         if (!lastWasDropped) missingRanges++
         lastWasDropped = true
         if (dropped == 1L) onIssue("Переполнение очереди записи")
-        if (firstMissing == null) firstMissing = entry
-        lastMissing = entry
+        if (firstMissing == null) firstMissing = entry.copy(data = { "" })
+        lastMissing = entry.copy(data = { "" })
         return false
     }
 
@@ -63,11 +66,11 @@ class TimelineWriter(
         if (end != null) return
         onFinishing()
         finalRecord?.let { (type, data) ->
-            finalEntry = Entry(++nextId, stopNs, type, "")
+            finalEntry = Entry(++nextId, stopNs, type, { "" })
             finalData = data
             accepted++
         }
-        end = Entry(++nextId, stopNs, "session_end", "{\"stop_ns\":\"$stopNs\",\"experiment_status\":\"${if (interrupted) "interrupted" else "not_observed"}\",\"interrupted\":$interrupted,\"reason\":${reason?.let(::quote) ?: "null"}")
+        end = Entry(++nextId, stopNs, "session_end", { "{\"stop_ns\":\"$stopNs\",\"experiment_status\":\"${if (interrupted) "interrupted" else "not_observed"}\",\"interrupted\":$interrupted,\"reason\":${reason?.let(::quote) ?: "null"}" })
     }
 
     fun awaitFinished() { finished.await() }
@@ -95,7 +98,7 @@ class TimelineWriter(
         }
     }
 
-    private fun line(entry: Entry): String = "{\"schema\":\"dronecv-session-timeline-1\",\"session_id\":${quote(session)},\"event_id\":\"${entry.id}\",\"event_ns\":\"${entry.time}\",\"type\":${quote(entry.type)},\"data\":${entry.data}}\n"
+    private fun line(entry: Entry): String = "{\"schema\":\"dronecv-session-timeline-1\",\"session_id\":${quote(session)},\"event_id\":\"${entry.id}\",\"event_ns\":\"${entry.time}\",\"type\":${quote(entry.type)},\"data\":${entry.data()}}\n"
 
     /** Select exactly one operation against finish(); the report remains pending until its write succeeds. */
     @Synchronized private fun nextCompletion(): Completion? {
@@ -104,7 +107,8 @@ class TimelineWriter(
         finalEntry?.let { return Completion.Report(it, checkNotNull(finalData)) }
         check(finalData == null && accepted == written) { "Incomplete timeline before footer" }
         val first = firstMissing; val last = lastMissing
-        return Completion.Footer(e.copy(data = e.data + ",\"recording_complete\":${dropped == 0L},\"accepted_count\":\"$accepted\",\"written_count\":\"$written\",\"queue_high_water\":$highWater,\"missing_ranges\":\"$missingRanges\",\"missing_bounds_exact\":${missingRanges <= 1},\"dropped_count\":\"$dropped\",\"missing_first_event_id\":${first?.id?.let { "\"$it\"" } ?: "null"},\"missing_last_event_id\":${last?.id?.let { "\"$it\"" } ?: "null"},\"missing_first_ns\":${first?.time?.let { "\"$it\"" } ?: "null"},\"missing_last_ns\":${last?.time?.let { "\"$it\"" } ?: "null"}}"))
+        val footerData = e.data() + ",\"recording_complete\":${dropped == 0L},\"accepted_count\":\"$accepted\",\"written_count\":\"$written\",\"queue_high_water\":$highWater,\"missing_ranges\":\"$missingRanges\",\"missing_bounds_exact\":${missingRanges <= 1},\"dropped_count\":\"$dropped\",\"missing_first_event_id\":${first?.id?.let { "\"$it\"" } ?: "null"},\"missing_last_event_id\":${last?.id?.let { "\"$it\"" } ?: "null"},\"missing_first_ns\":${first?.time?.let { "\"$it\"" } ?: "null"},\"missing_last_ns\":${last?.time?.let { "\"$it\"" } ?: "null"}}"
+        return Completion.Footer(e.copy(data = { footerData }))
     }
 
     private fun runWriter() {
@@ -119,7 +123,7 @@ class TimelineWriter(
                     afterCompletionSelection?.invoke()
                     when (completion) {
                         is Completion.Report -> {
-                            out.write(line(completion.entry.copy(data = completion.data())))
+                            out.write(line(completion.entry.copy(data = completion.data)))
                             synchronized(this) { finalEntry = null; finalData = null; written++ }
                         }
                         is Completion.Footer -> { out.write(line(completion.entry)); footerWritten = true; break }
@@ -132,9 +136,10 @@ class TimelineWriter(
         catch (_: OutOfMemoryError) { failure = "Недостаточно памяти при записи журнала"; onIssue("Ошибка записи: $failure") }
         finally {
             finalData = null
+            queue.clear() // Failed writers must release deferred snapshots as well as serialized strings.
             try {
                 val complete = synchronized(this) {
-                    failure?.let { failureRecord = line(Entry(++nextId, clock(), "recording_failure", "{\"reason\":${quote(it)}}")) }
+                    failure?.let { failureRecord = line(Entry(++nextId, clock(), "recording_failure", { "{\"reason\":${quote(it)}}" })) }
                     closedSuccessfully && footerWritten && end != null && finalEntry == null &&
                         failure == null && dropped == 0L && accepted == written
                 }

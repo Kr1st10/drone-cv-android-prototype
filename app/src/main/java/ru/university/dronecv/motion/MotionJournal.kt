@@ -40,6 +40,11 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
     @Synchronized fun event(token: Long?, type: String, payloadJson: String) {
         if (token != null && valid(token)) writer?.record(type, payloadJson)
     }
+    /** True only for a matching recording backed by a timeline writer. */
+    @Synchronized fun hasTimeline(token: Long?): Boolean = token != null && valid(token) && writer != null
+    @Synchronized fun event(token: Long?, type: String, payload: () -> String) {
+        if (token != null && valid(token)) writer?.record(type, payload)
+    }
     data class Ui(val mode: String = "yolo_lk", val recording: Boolean = false, val report: String? = null, val issue: String? = null, val sessionId: Long = 0)
     private val mutableUi = MutableStateFlow(Ui())
     val ui = mutableUi.asStateFlow()

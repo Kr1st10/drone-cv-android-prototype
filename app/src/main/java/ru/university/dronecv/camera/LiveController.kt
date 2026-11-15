@@ -15,6 +15,14 @@ import ru.university.dronecv.diagnostics.DiagnosticFrames
 import ru.university.dronecv.motion.MotionJournal
 import ru.university.dronecv.detection.NormalizedBox
 
+private fun quoted(value: Long?): String = value?.let { "\"$it\"" } ?: "null"
+private fun jsonString(value: String?): String = value?.let {
+    "\"" + it.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+} ?: "null"
+private fun boxJson(box: NormalizedBox?): String = box?.let {
+    "[${it.left},${it.top},${it.right},${it.bottom}]"
+} ?: "null"
+
 enum class LivePhase { STOPPED, STARTING, RUNNING, ERROR }
 
 data class LiveInference(
@@ -109,26 +117,45 @@ class LiveController<Frame : AutoCloseable>(
     private var acceptedYoloStamp: FrameStamp? = null
     private var acceptedYoloNs: Long? = null
 
-    private fun quoted(value: Long?): String = value?.let { "\"$it\"" } ?: "null"
-    private fun jsonString(value: String?): String = value?.let {
-        "\"" + it.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-    } ?: "null"
-    private fun boxJson(box: NormalizedBox?): String = box?.let {
-        "[${it.left},${it.top},${it.right},${it.bottom}]"
-    } ?: "null"
+    /** Test observer at the serialization boundary, including payloads deferred to a writer. */
+    internal var beforeDiagnosticSerialization: ((String) -> Unit)? = null
+
+    private fun observedPayload(type: String, payload: () -> String): () -> String {
+        val observer = beforeDiagnosticSerialization
+        return { observer?.invoke(type); payload() }
+    }
+
     private fun timeline(now: Long, reason: String, token: Long? = motion?.token(), diagnosticToken: Long? = diagnostics?.currentToken()) {
-        val payload = timelinePayload?.invoke(now, reason) ?: "{\"publication_clock\":\"elapsed_realtime_ns\",\"publication_ns\":${quoted(now)},\"reason\":${jsonString(reason)},\"generation\":${quoted(generation)},\"source_id\":${quoted(source)},\"frame_id\":null,\"box\":null}"
-        motion?.event(token, "state", payload)
-        diagnostics?.event(diagnosticToken, "state", payload, now)
+        val hasMotion = motion?.hasTimeline(token) == true
+        val hasDiagnostic = diagnostics?.hasTimeline(diagnosticToken) == true
+        if (!hasMotion && !hasDiagnostic) return
+        val snapshot = timelinePayload
+        val capturedGeneration = generation
+        val capturedSource = source
+        val payload = observedPayload("state") {
+            snapshot?.invoke(now, reason) ?: "{\"publication_clock\":\"elapsed_realtime_ns\",\"publication_ns\":${quoted(now)},\"reason\":${jsonString(reason)},\"generation\":${quoted(capturedGeneration)},\"source_id\":${quoted(capturedSource)},\"frame_id\":null,\"box\":null}"
+        }
+        if (hasMotion) motion?.event(token, "state", payload)
+        if (hasDiagnostic) diagnostics?.event(diagnosticToken, "state", payload, now)
     }
     private fun discarded(now: Long, token: LiveFrameToken?, stamp: FrameStamp?, reason: String) {
-        val payload = "{\"reason\":${jsonString(reason)},\"clock\":\"elapsed_realtime_ns\",\"time_ns\":${quoted(now)}," +
-            "\"generation\":${quoted(token?.generation ?: generation)},\"source_id\":${quoted(token?.source ?: source)}," +
-            "\"capture_ns\":${quoted(stamp?.captureNs)},\"timestamp_source\":${jsonString(stamp?.timebase?.name?.lowercase())}," +
-            "\"analyzer_entry_ns\":${quoted(stamp?.analyzerEntryNs)}}"
-        motion?.event(token?.motionToken, "discard", payload)
-        diagnostics?.event(token?.diagnosticToken, "discard", payload, now)
+        val motionToken = token?.motionToken
+        val diagnosticToken = token?.diagnosticToken
+        val hasMotion = motion?.hasTimeline(motionToken) == true
+        val hasDiagnostic = diagnostics?.hasTimeline(diagnosticToken) == true
+        if (!hasMotion && !hasDiagnostic) return
+        val capturedGeneration = token?.generation ?: generation
+        val capturedSource = token?.source ?: source
+        val payload = observedPayload("discard") {
+            "{\"reason\":${jsonString(reason)},\"clock\":\"elapsed_realtime_ns\",\"time_ns\":${quoted(now)}," +
+                "\"generation\":${quoted(capturedGeneration)},\"source_id\":${quoted(capturedSource)}," +
+                "\"capture_ns\":${quoted(stamp?.captureNs)},\"timestamp_source\":${jsonString(stamp?.timebase?.name?.lowercase())}," +
+                "\"analyzer_entry_ns\":${quoted(stamp?.analyzerEntryNs)}}"
+        }
+        if (hasMotion) motion?.event(motionToken, "discard", payload)
+        if (hasDiagnostic) diagnostics?.event(diagnosticToken, "discard", payload, now)
     }
+
     private fun updateTimeline(now: Long, reason: String, token: Long?, frame: Long?, motionFrame: Long?,
                                stamp: FrameStamp?, kind: String?, box: NormalizedBox?,
                                yoloFrame: Long? = null, yoloStamp: FrameStamp? = null,
@@ -205,9 +232,22 @@ class LiveController<Frame : AutoCloseable>(
 
     /** Takes ownership even on rejection. One current pump and one replaceable pending snapshot exist. */
     fun offerFrame(frame: Frame, token: LiveFrameToken, stamp: FrameStamp, preparationMs: Double) {
-        if (frame is CameraFrameSnapshot) {
-            val geometry = "{\"source_id\":${quoted(token.source)},\"generation\":${quoted(token.generation)},\"analyzer_entry_ns\":${quoted(stamp.analyzerEntryNs)},\"source_width\":${frame.sourceWidth},\"source_height\":${frame.sourceHeight},\"crop\":[${frame.cropLeft},${frame.cropTop},${frame.cropRight},${frame.cropBottom}],\"rotation_degrees\":${frame.rotationDegrees}}"
-            eventTime?.invoke()?.let { diagnostics?.event(token.diagnosticToken, "frame_geometry", geometry, it) }
+        if (frame is CameraFrameSnapshot && diagnostics?.hasTimeline(token.diagnosticToken) == true) {
+            // Capture scalar metadata only: the writer must never retain the leased image.
+            val sourceId = token.source
+            val frameGeneration = token.generation
+            val sourceWidth = frame.sourceWidth
+            val sourceHeight = frame.sourceHeight
+            val cropLeft = frame.cropLeft
+            val cropTop = frame.cropTop
+            val cropRight = frame.cropRight
+            val cropBottom = frame.cropBottom
+            val rotation = frame.rotationDegrees
+            eventTime?.invoke()?.let { now ->
+                diagnostics.event(token.diagnosticToken, "frame_geometry", observedPayload("frame_geometry") {
+                    "{\"source_id\":${quoted(sourceId)},\"generation\":${quoted(frameGeneration)},\"analyzer_entry_ns\":${quoted(stamp.analyzerEntryNs)},\"source_width\":$sourceWidth,\"source_height\":$sourceHeight,\"crop\":[$cropLeft,$cropTop,$cropRight,$cropBottom],\"rotation_degrees\":$rotation}"
+                }, now)
+            }
         }
         try { token.motionToken?.let { token.motionFrame = motionFrame?.invoke(frame, it, stamp) } }
         catch (e: Exception) { frame.close(); captureFailed(token, e.message ?: e.javaClass.simpleName); return }

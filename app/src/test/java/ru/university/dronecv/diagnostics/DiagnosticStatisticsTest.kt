@@ -4,6 +4,48 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DiagnosticStatisticsTest {
+    @Test fun lazyEventsRejectAbsentAndObsoleteRecipientsBeforeSerialization() {
+        val store = DiagnosticFrames()
+        var calls = 0
+        val payload = { calls++; "{}" }
+        store.event(null, "state", payload, 1L)
+        val first = store.start(1L)
+        store.event(first, "state", payload, 1L) // Recording without a timeline still collects metrics.
+        assertEquals(0, calls)
+        val events = mutableListOf<String>()
+        store.timeline = { type, data, _ -> events += type; data() }
+        store.event(first, "state", payload, 1L)
+        store.stop(first, 1L, false, null)
+        val second = store.start(1L)
+        store.event(first, "discard", payload, 1L)
+        store.event(null, "state", payload, 1L)
+        assertEquals(1, calls)
+        store.event(second, "state", payload, 1L)
+        assertEquals(listOf("state", "state"), events)
+        assertEquals(2, calls)
+        store.stop(second, 1L, false, null)
+        assertFalse(store.hasTimeline(second))
+    }
+
+    @Test fun trackingLongRepresentationMatchesLegacyJsonAndNdjsonIncludingNullableStamps() {
+        val stamp = ru.university.dronecv.camera.FrameStamp(Long.MAX_VALUE - 2,
+            ru.university.dronecv.camera.CaptureTimebase.ELAPSED_REALTIME, Long.MAX_VALUE - 1)
+        val observation = ru.university.dronecv.tracking.TrackingObservation(
+            ru.university.dronecv.tracking.FrameKey(-1, Long.MIN_VALUE, Long.MAX_VALUE), stamp,
+            ru.university.dronecv.tracking.VisualPhase.SEARCHING, null, null,
+            ru.university.dronecv.tracking.ClassConfirmation.NONE, null, null, null)
+        val signal = ru.university.dronecv.camera.TrackingSignal(observation,
+            ru.university.dronecv.camera.TrackingSampleKind.FRAME, 100, 100, Long.MAX_VALUE, 0.0)
+        for (s in listOf(signal, signal.copy(observation = observation.copy(lastYoloStamp = stamp, trackId = Long.MAX_VALUE)))) {
+            val legacy = buildString { appendTrackingSample(0.0, s) }
+            val expected = legacy.replace(Regex("\"(sequence|generation|source_id|track_id|capture_ns|analyzer_entry_ns|signal_dispatch_ns)\":(-?[0-9]+)")) {
+                "\"${it.groupValues[1]}\":\"${it.groupValues[2]}\""
+            }
+            assertEquals(expected, buildString { appendTrackingSample(0.0, s, quoteLongs = true) })
+            assertTrue(legacy.contains("\"signal_dispatch_ns\":${Long.MAX_VALUE}"))
+        }
+    }
+
     @Test fun summaryAndPercentile() {
         assertNull(durationSummary(emptyList()))
         assertNull(durationSummary(listOf(1.0, 2.0))!!.p95)
