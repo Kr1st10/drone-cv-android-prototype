@@ -55,6 +55,8 @@
   #motionPhotoPreview { display:block; width:240px; height:140px; max-width:100%; object-fit:contain; background:white; }
   #motionPhotoPreview[hidden] { visibility:hidden; }
   #motionSection input[type=number] { max-width:7em; }
+  #motionSection select { max-width:100%; }
+  #motionSection p { overflow-wrap:anywhere; }
   body.motion-mode #settings { box-sizing:border-box; width:min(1142px,94vw); }
   body.motion-mode nav button[aria-selected=true], #motionSection button.primary { background:#176b37; border-color:#32824e; color:#fff; }
   #motionSection button, #motionStop { cursor:pointer; }
@@ -172,7 +174,10 @@
     <label>Журнал для калибровки <select id="reportSelect"></select></label>
     <p>Эталон подбирается по ID из журнала, четыре метки распознаются на сохранённом JPEG. Если эталона нет в браузере, загрузите его файл. Для старых эталонов или неудачного распознавания включите ручные точки на настоящем кадре.</p>
     <canvas id="reportCanvas" style="display:block;max-width:100%;height:auto;cursor:crosshair"></canvas>
-    <p id="reportStatus" class="warn"></p>
+    <p id="reportSyncStatus" class="muted" aria-live="polite">Читаемость sync-кода: журнал не загружен.</p>
+    <p id="reportTimingStatus" class="muted" aria-live="polite">Временное сопоставление: журнал не загружен.</p>
+    <p id="reportCalibrationStatus" class="muted" aria-live="polite">Камерой не проверено.</p>
+    <p id="reportStatus" class="warn" aria-live="polite"></p>
     <button id="reportReset">Ручная калибровка заново</button><button id="reportCalculate">Пересчитать отчёт</button><button id="reportExport" disabled>Экспорт отчёта JSON</button>
     <pre id="reportOutput" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
     <p class="muted">Эталоны сохраняются в IndexedDB этого браузера. Экспортируйте резервную копию для переноса. Прерванные запуски помечены неполными. Esc, скрытие страницы и смена геометрии прерывают движение.</p>
@@ -362,6 +367,7 @@
 <script src="motion-ui.js" defer></script>
 <script src="motion-report.js"></script>
 <script src="motion-report-v4.js"></script>
+<script src="motion-journal-status.js"></script>
 <script src="motion-report-ui.js" defer></script>
 <script>
 "use strict";
