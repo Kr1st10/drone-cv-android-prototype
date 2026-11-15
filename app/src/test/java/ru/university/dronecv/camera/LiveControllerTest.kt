@@ -242,6 +242,89 @@ class LiveControllerTest {
         controller.close(); worker.drain(); file.delete()
     }
 
+    private fun cameraScreenSource(): String {
+        val root = generateSequence(java.io.File(checkNotNull(System.getProperty("user.dir")))) { it.parentFile }
+            .first { java.io.File(it, "app/src/main").isDirectory }
+        return java.io.File(root, "app/src/main/java/ru/university/dronecv/camera/CameraScreen.kt").readText()
+    }
+
+    @Test fun cameraScreenFinalizesDetectorErrorsOnlyThroughOnFailure() {
+        val screen = cameraScreenSource()
+        assertFalse("ERROR observation must not independently stop diagnostics",
+            screen.contains("LaunchedEffect(liveState.phase)"))
+        assertTrue(screen.contains("onFailure = { diagnostics.stop(true,"))
+        for (reason in listOf("Camera screen disposed", "Activity paused or screen turned off",
+                "Detection stopped", "Confidence changed", "Camera error:")) {
+            assertTrue("Missing independent stop route: $reason", screen.contains(reason))
+        }
+    }
+
+    @Test fun errorObserverCannotPreemptCoordinatedFinalization() = kotlinx.coroutines.runBlocking {
+        var now = 1_000_000_000L
+        val worker = Worker()
+        val backend = Backend()
+        val frames = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        val file = kotlin.io.path.createTempFile("error-observer", ".ndjson").toFile()
+        val writer = ru.university.dronecv.timeline.TimelineWriter(file, { now })
+        writer.record("header", """{"start_ns":"$now","started_epoch_ms":"123","diagnostic_report_required":true,"device":"test","android_release":"16","android_sdk":36,"app_version":"test","build_type":"unknown","warmup":{"method":"manual","completed_frames_before_session":0},"model_sha256":"hash","confidence":0.5,"intra_op_threads":2}""", now)
+        var token = 0L
+        var stops = 0
+        var observedError = false
+        // Replay the screen's phase-effect wiring with an immediate observer, without Compose scheduling.
+        val independentPhaseStop = cameraScreenSource().contains("LaunchedEffect(liveState.phase)")
+        fun stop(reason: String) {
+            val snapshot = frames.stop(token, now, true, reason) ?: return
+            stops++
+            frames.timeline = null
+            val report = ru.university.dronecv.diagnostics.DiagnosticReport(123, "test", "16", 36,
+                "test", "model", "hash", .5f, snapshot, emptyList())
+            writer.finish(now, true, reason, "diagnostic_report" to { report.toJson() })
+        }
+        lateinit var controller: LiveController<Frame>
+        controller = LiveController(backend, worker, frames, eventTime = { now }, nanoTime = { now }, onFailure = {
+            assertTrue(observedError)
+            assertEquals(LivePhase.ERROR, controller.state.value.phase)
+            stop("Detector error: $it")
+            stop("Repeated stop")
+        })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        controller.startDiagnostics {
+            token = frames.start(now)
+            frames.timeline = { type, data, _ -> writer.record(type, data, now) }
+        }
+        val observer = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            controller.state.collect {
+                if (it.phase == LivePhase.ERROR) {
+                    observedError = true
+                    if (independentPhaseStop) stop("Detector error: ${it.error}")
+                }
+            }
+        }
+        fun offer() {
+            val stamp = FrameStamp(now, CaptureTimebase.ELAPSED_REALTIME, now)
+            controller.offerFrame(Frame(), controller.beginFrame(source, stamp)!!, stamp, 0.0)
+            worker.drain()
+        }
+        offer()
+        backend.onInfer = { now += 9_000_000L; error("observer-failure") }
+        offer()
+        writer.awaitFinished()
+        val rows = file.readLines()
+        val clears = rows.filter { it.contains("\"reason\":\"detector_error\"") }
+        assertEquals(1, clears.size)
+        assertTrue(clears.single().contains("\"box\":null"))
+        assertTrue(clears.single().contains("\"state_publication_ns\":\"1009000000\""))
+        assertTrue(rows.indexOf(clears.single()) < rows.indexOfFirst { it.contains("\"type\":\"diagnostic_report\"") })
+        assertTrue(rows.indexOf(clears.single()) < rows.indexOfFirst { it.contains("\"type\":\"session_end\"") })
+        assertEquals(1, stops)
+        assertNull(writer.error())
+        System.getenv("DRONE_ERROR_OBSERVER_FIXTURE")?.let { file.copyTo(java.io.File(it), overwrite = true) }
+        observer.cancel()
+        controller.close(); worker.drain(); file.delete()
+        Unit
+    }
+
     @Test fun obsoleteDetectorErrorCannotStopNewDiagnosticSession() {
         val worker = Worker()
         val backend = Backend()

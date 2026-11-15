@@ -1,5 +1,12 @@
 # PROJECT_STATE.md
 
+## Единственный путь завершения при ошибке детектора — 2026-11-16
+
+- Перед работой удалённый HEAD PR №47 сверён: `5cd8adc`, гонка оставалась. Исправление в прежней отдельной копии `/tmp/dron-publication-timing`; посторонние изменения основной папки сохранены.
+- Из CameraScreen удалён только дублирующий `LaunchedEffect(liveState.phase)`, напрямую завершавший диагностику при ERROR раньше приёма очистки. Финализация принятой ошибки идёт через onFailure после ERROR → приём detector_error. LiveController, граница stateflow_assignment_v1, writer, модель и параметры CV не менялись. Пользовательские, camera-error, Stop/restart, lifecycle/dispose пути сохранены. [Контракт](docs/reference/data-model.md#границы-публикации-stateflow).
+- На исходном HEAD две проверки failed: воспроизведение phase-effect немедленным StateFlow-наблюдателем с реальными DiagnosticFrames/TimelineWriter получило 0 вместо 1 detector_error; source-contract CameraScreen обнаружил независимый эффект. После удаления только production-effect те же проверки passed. Тест читает привязку эффекта из CameraScreen и воспроизводит её без Compose scheduling; отдельная source-проверка защищает onFailure и остальные маршруты. Это не отдельный runtime Compose-тест ERROR.
+- Итоговый локальный Gradle-набор `assembleDebug testDebugUnitTest assembleDebugAndroidTest lintDebug` успешен: **248 JVM passed, 2 parity skipped**, 0 failures/errors. Проверены null-рамка, исходная метка, ERROR до callback, повторный stop, clear перед report/footer; прежние obsolete-error, Stop/restart, source и close regressions прошли. Свежий ERROR-журнал прошёл штатные Python timeline/diagnostic analysis и JavaScript importer. `git diff --check` выполнен. CI итогового SHA проверяется после push отдельно. AndroidTest локально только скомпилированы; телефон и аппаратные метрики не измерялись.
+
 ## Исправления ревью PR №47 — 2026-11-16
 
 - Удалённая ветка `codex/publication-timing` сверена перед работой: HEAD `7ab4b01`, замечания не были исправлены. Использована прежняя отдельная копия `/tmp/dron-publication-timing`; посторонние изменения основной папки сохранены.

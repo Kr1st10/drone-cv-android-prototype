@@ -75,9 +75,6 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
     val liveState by controller.state.collectAsStateWithLifecycle()
     val threadState by controller.threadConfiguration.collectAsStateWithLifecycle()
     LaunchedEffect(threadState.threads) { onThreadsChanged(threadState.threads) }
-    LaunchedEffect(liveState.phase) {
-        if (liveState.phase == LivePhase.ERROR) diagnostics.stop(true, "Detector error: ${liveState.error}")
-    }
     val hasCameraHardware = remember {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
