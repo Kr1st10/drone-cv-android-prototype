@@ -74,6 +74,7 @@ class LiveController<Frame : AutoCloseable>(
     val motion: MotionJournal? = null,
     private val motionFrame: ((Frame, Long, FrameStamp) -> Long?)? = null,
     private val onFailure: ((String) -> Unit)? = null,
+    private val packagedMetadataFields: String? = null,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     init {
@@ -118,6 +119,8 @@ class LiveController<Frame : AutoCloseable>(
     private var generation = 0L
     private var revision = 0L
     private var source = 0L
+    // Own scalar snapshot only; never retain a frame lease for an inventory export.
+    private var latestFrameGeometry: (() -> String)? = null
     private var nextSource = 0L
     private val completions = ArrayDeque<Long>()
     private val arrivals = ArrayDeque<Long>()
@@ -199,7 +202,12 @@ class LiveController<Frame : AutoCloseable>(
     private fun clearTimeline(now: Long, reason: String, token: Long? = motion?.token()) {
         updateTimeline(now, reason, token, null, null, null, null, null)
     }
-    private fun metadata(extra: String): String = "{\"mode\":\"${if (trackingEnabled) "yolo_lk" else "yolo"}\",\"confidence\":$confidence,\"nms_iou\":${ru.university.dronecv.detection.yolo.PostprocessConfig().iouThreshold},\"nms_max_detections\":${ru.university.dronecv.detection.yolo.PostprocessConfig().maxDetections},\"model_input_size\":${mutableState.value.result?.modelInputSize},\"backend\":\"onnxruntime_cpu_sequential\",\"intra_op_threads\":${mutableThreads.value.threads},\"yolo_period_ns\":${quoted(tracking?.session?.yoloPeriodNs)},\"confirmation_ttl_ns\":${quoted(tracking?.session?.confirmationTtlNs)},\"retry_ns\":${quoted(tracking?.session?.retryNs)},\"coordinate_timeout_ns\":${quoted(MAX_TRACKING_SILENCE_NS)},\"lk\":{\"max_points\":${ru.university.dronecv.tracking.LkParameters.MAX_POINTS},\"min_points\":${ru.university.dronecv.tracking.LkParameters.MIN_POINTS},\"corner_quality\":${ru.university.dronecv.tracking.LkParameters.CORNER_QUALITY},\"corner_distance\":${ru.university.dronecv.tracking.LkParameters.CORNER_DISTANCE},\"window\":${ru.university.dronecv.tracking.LkParameters.WINDOW},\"pyramid_levels\":${ru.university.dronecv.tracking.LkParameters.PYRAMID_LEVELS},\"iterations\":${ru.university.dronecv.tracking.LkParameters.ITERATIONS},\"epsilon\":${ru.university.dronecv.tracking.LkParameters.EPSILON},\"forward_back_error\":${ru.university.dronecv.tracking.LkParameters.FORWARD_BACK_ERROR},\"inlier_distance\":${ru.university.dronecv.tracking.LkParameters.INLIER_DISTANCE},\"retained_fraction\":${ru.university.dronecv.tracking.LkParameters.RETAINED_FRACTION},\"min_correlation\":${ru.university.dronecv.tracking.LkParameters.MIN_CORRELATION}},\"camera_context\":$extra}"
+    private fun metadata(extra: String): String = "{${packagedMetadataFields?.let { "$it," } ?: ""}\"mode\":\"${if (trackingEnabled) "yolo_lk" else "yolo"}\",\"confidence\":$confidence,\"nms_iou\":${ru.university.dronecv.detection.yolo.PostprocessConfig().iouThreshold},\"nms_max_detections\":${ru.university.dronecv.detection.yolo.PostprocessConfig().maxDetections},\"model_input_size\":${mutableState.value.result?.modelInputSize},\"model_input_size_source\":\"latest retained inference result; null means unavailable (not measured or result cleared)\",\"backend\":\"ONNX Runtime CPU, intra-op ${mutableThreads.value.threads}, inter-op 1\",\"inter_op_threads\":1,\"execution_mode\":\"SEQUENTIAL\",\"execution_provider\":\"CPU\",\"intra_op_threads\":${mutableThreads.value.threads},\"yolo_period_ns\":${quoted(tracking?.session?.yoloPeriodNs)},\"confirmation_ttl_ns\":${quoted(tracking?.session?.confirmationTtlNs)},\"retry_ns\":${quoted(tracking?.session?.retryNs)},\"coordinate_timeout_ns\":${quoted(MAX_TRACKING_SILENCE_NS)},\"lk\":{\"max_points\":${ru.university.dronecv.tracking.LkParameters.MAX_POINTS},\"min_points\":${ru.university.dronecv.tracking.LkParameters.MIN_POINTS},\"corner_quality\":${ru.university.dronecv.tracking.LkParameters.CORNER_QUALITY},\"corner_distance\":${ru.university.dronecv.tracking.LkParameters.CORNER_DISTANCE},\"window\":${ru.university.dronecv.tracking.LkParameters.WINDOW},\"pyramid_levels\":${ru.university.dronecv.tracking.LkParameters.PYRAMID_LEVELS},\"iterations\":${ru.university.dronecv.tracking.LkParameters.ITERATIONS},\"epsilon\":${ru.university.dronecv.tracking.LkParameters.EPSILON},\"forward_back_error\":${ru.university.dronecv.tracking.LkParameters.FORWARD_BACK_ERROR},\"inlier_distance\":${ru.university.dronecv.tracking.LkParameters.INLIER_DISTANCE},\"retained_fraction\":${ru.university.dronecv.tracking.LkParameters.RETAINED_FRACTION},\"min_correlation\":${ru.university.dronecv.tracking.LkParameters.MIN_CORRELATION}},\"camera_context\":$extra}"
+    /** Snapshot current controls at the caller boundary, never on a frame callback. */
+    fun exportMetadata(extra: String = "null"): String = publicationTransaction {
+        metadata(extra).dropLast(1) + ",\"frame_geometry\":${latestFrameGeometry?.invoke() ?: "null"}," +
+            "\"frame_geometry_source\":\"latest received frame of current generation/source; null means not measured; not a recording-wide value\"}"
+    }
     fun startDiagnostics(extra: String = "null", start: () -> Unit): Unit = publicationTransaction {
         if (publicationDepth > 1) {
             deferredControls.addLast { startDiagnostics(extra, start) }
@@ -262,7 +270,7 @@ class LiveController<Frame : AutoCloseable>(
 
     /** Takes ownership even on rejection. One current pump and one replaceable pending snapshot exist. */
     fun offerFrame(frame: Frame, token: LiveFrameToken, stamp: FrameStamp, preparationMs: Double) {
-        if (frame is CameraFrameSnapshot && diagnostics?.hasTimeline(token.diagnosticToken) == true) {
+        if (frame is CameraFrameSnapshot) {
             // Capture scalar metadata only: the writer must never retain the leased image.
             val sourceId = token.source
             val frameGeneration = token.generation
@@ -274,9 +282,12 @@ class LiveController<Frame : AutoCloseable>(
             val cropBottom = frame.cropBottom
             val rotation = frame.rotationDegrees
             eventTime?.invoke()?.let { now ->
-                diagnostics.event(token.diagnosticToken, "frame_geometry", observedPayload("frame_geometry") {
+                val payload = observedPayload("frame_geometry") {
                     "{\"source_id\":${quoted(sourceId)},\"generation\":${quoted(frameGeneration)},\"analyzer_entry_ns\":${quoted(stamp.analyzerEntryNs)},\"source_width\":$sourceWidth,\"source_height\":$sourceHeight,\"crop\":[$cropLeft,$cropTop,$cropRight,$cropBottom],\"rotation_degrees\":$rotation}"
-                }, now)
+                }
+                synchronized(lock) { if (valid(token)) latestFrameGeometry = payload }
+                diagnostics?.event(token.diagnosticToken, "frame_geometry", payload, now)
+                motion?.event(token.motionToken, "frame_geometry", payload)
             }
         }
         try { token.motionToken?.let { token.motionFrame = motionFrame?.invoke(frame, it, stamp) } }
@@ -520,6 +531,7 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     private fun invalidatePending() {
+        latestFrameGeometry = null
         pumpEpoch++
         pumpScheduled = false
         clearPending()

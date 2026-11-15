@@ -68,6 +68,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
         }
         LiveController(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads,
             eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking, motion = motion,
+            packagedMetadataFields = ru.university.dronecv.PackagedBuild.metadataFields,
             motionFrame = { frame, token, stamp -> recordMotionFrame(motion, frame, token, stamp) },
             onFailure = { diagnostics.stop(true, "Detector error: $it") })
     }
