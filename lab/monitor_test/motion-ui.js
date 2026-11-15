@@ -7,12 +7,13 @@
   const saved = MotionGallery.load('motion_settings', {});
   let selectedId = typeof saved?.photo_id === 'string' ? saved.photo_id : null;
   parameters.forEach(key => { if (typeof saved?.[key] === 'string') $(key).value = saved[key]; });
-  let runs = [], lastScenario = null, active = null, attempt = null, finishing = false, refreshVersion = 0;
+  let runs = [], lastLocalRun = null, lastScenario = null, active = null, attempt = null, finishing = false, refreshVersion = 0;
   let seriesId = id(), ready=false, saveFailure=null;
   function id() { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0].toString(16).padStart(8, '0'); }
   function freshRunId() { let x; do { x = id(); } while (runs.some(r => r.run_id === x)); return x; }
   function sampleCount() { return runs.reduce((n, r) => n + r.samples.length, 0); }
   function status(message) { $('motionStatus').textContent = message; }
+  function rememberLocalRun(run){runs.push(run);lastLocalRun=run;$('motionHistoryStatus').textContent='Последний локальный запуск: '+run.run_id;}
   function persist() {
     if(!MotionGallery.save('motion_settings', { photo_id: selectedId, ...Object.fromEntries(parameters.map(key => [key, $(key).value])) })) status('Не удалось сохранить настройки. Освободите место и повторите.');
     const p=$('motionAreaPreview'),c=p.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,p.width,p.height);c.strokeStyle='#111';c.lineWidth=2;
@@ -23,7 +24,8 @@
     $('motionStart').disabled = busy || limit || !ready;
     $('motionRepeat').disabled = busy || limit || !lastScenario || !ready;
     $('motionNewSeries').disabled = busy;
-    $('motionExport').disabled = $('motionExportLast').disabled = !runs.length;
+    $('motionExport').disabled = !runs.length;
+    $('motionExportLast').disabled = !lastLocalRun;
     inputs.forEach(key => $(key).disabled = busy);
     $('motionUpload').disabled = busy;
     $('motionBounds').disabled = busy || !MotionGallery.images().some(m => m.id === selectedId);
@@ -79,7 +81,7 @@
     if (active) {
       const current = active; active = null; cancelAnimationFrame(current.raf);
       current.run.complete = !reason; current.run.abort_reason = reason || null;
-      runs.push(current.run);
+      rememberLocalRun(current.run);
       flush(current);
       current.writes=current.writes.then(()=>MotionStore.end(current.key,current.run));
       current.finalWrite=current.writes.catch(e=>{saveFailure=e;});
@@ -123,7 +125,13 @@
       saveFailure=null;
       operation='storage';
       const key=await MotionStore.begin(run);
-      if(pending.cancelled){run.abort_reason='старт отменён';await MotionStore.end(key,run);await returnToSettings();return;}
+      if(pending.cancelled){
+        run.abort_reason='старт отменён';rememberLocalRun(run);
+        try{await MotionStore.end(key,run);}catch(e){saveFailure=e;}
+        await returnToSettings();
+        status(saveFailure?`Ошибка сохранения: ${saveFailure.message}. Экспортируйте эталон до закрытия страницы.`:'Запуск прерван до первого кадра. Эталон сохранён как неполный.');
+        return;
+      }
       lastScenario = { values: structuredClone(v), viewport: vp };
       $('settings').classList.add('hidden');
       active = { run, plan, image, viewport: vp, start: null, raf: 0,key,saved:0,writes:Promise.resolve() };
@@ -160,7 +168,7 @@
   $('motionRepeat').onclick = () => start(true);
   $('motionStop').onclick = () => finish('остановлено оператором');
   $('motionNewSeries').onclick = () => { runs = []; seriesId = id(); refresh(); status('Новая серия. Ранее записанные эталоны остаются в IndexedDB.'); };
-  $('motionExportLast').onclick = () => { const run = runs.at(-1); if (run) MotionGallery.download(`motion-${run.run_id}.json`, JSON.stringify(run, null, 2), 'application/json'); };
+  $('motionExportLast').onclick = () => { const run = lastLocalRun; if (run) MotionGallery.download(`motion-${run.run_id}.json`, JSON.stringify(run, null, 2), 'application/json'); };
   $('motionExport').onclick = () => { if (runs.length) MotionGallery.download(`motion-series-${seriesId}.json`, JSON.stringify({ schema: 'dronecv-motion-series-1', runs }, null, 2), 'application/json'); };
   document.addEventListener('keydown', e => { if (active || attempt || finishing) { e.stopImmediatePropagation(); if (e.key === 'Escape') { e.preventDefault(); finish('остановлено оператором'); } } }, true);
   document.addEventListener('visibilitychange', () => { if (document.hidden) finish('страница скрыта'); });
@@ -169,6 +177,6 @@
   window.addEventListener('beforeunload', e => { if (active || finishing || saveFailure) { e.preventDefault(); e.returnValue = ''; } });
   window.MotionUI = { refresh };
   status('Настройте движение и нажмите «Старт».');
-  MotionStore.list().then(async stored=>{runs=stored;lastScenario=await MotionStore.settings()||null;ready=true;update();}).catch(e=>{status('Хранилище эталонов недоступно: '+e.message);});
+  MotionStore.history().then(async history=>{runs=history.runs;lastLocalRun=history.last_local_run;lastScenario=await MotionStore.settings()||null;ready=true;update();$('motionHistoryStatus').textContent=lastLocalRun?'Последний локальный запуск: '+lastLocalRun.run_id:history.chronology_unknown?'Порядок прежних записей неизвестен. Экспортируйте все записи кнопкой «Экспорт серии»; последний запуск не выбран произвольно.':'Локальных запусков ещё нет. Импорт эталонов не назначает последний запуск.';}).catch(e=>{status('Хранилище эталонов недоступно: '+e.message);});
   refresh();
 })();
