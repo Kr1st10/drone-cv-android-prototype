@@ -1,5 +1,13 @@
 # PROJECT_STATE.md
 
+## Подготовка диагностики вне обработки кадров — 2026-11-15
+
+- От `origin/main` @ `1da09b0` создана ветка `codex/diagnostics-hot-path` в отдельной копии `/Users/macbookair/Documents/cb/dron-cv-diagnostics`. Посторонние изменения исходной папки сохранены; существующие PR не меняются.
+- Геометрия требует токена текущей диагностики с timeline; state/discard проверяют оба независимых канала. Последнее состояние сохраняется без записи. JSON этих событий, tracking и diagnostic_frame формируется на существующем writer из неизменяемых метаданных после приёма под прежними блокировками. Порядок, токены, generation/source, исходные времена initial_snapshot, подтверждение YOLO и границы памяти сохранены. Tracking сериализует Long напрямую: строки NDJSON, числа прежнего JSON. Счётчики и ограниченные выборки работают без timeline. [Контракт](docs/reference/data-model.md#поток-диагностической-сессии-dronecv-session-timeline-1).
+- Локально JBR 21 / SDK 35: `assembleDebug testDebugUnitTest assembleDebugAndroidTest lintDebug` успешно; 236 JVM passed, 2 parity skipped (Python fixtures отсутствуют), 0 failures/errors. Проверенная прежняя ONNX установлена штатным скриптом; SHA-256 модели в APK совпал. Lint без ошибок, предупреждения конфигурации/зависимостей остаются. Добавлены 9 регрессий с управляемыми часами/очередями/latch, включая четыре сочетания каналов, поздний снимок, Stop/rebind при заблокированном serializer, повторный старт диагностики во время infer, старые токены, границы очереди и ошибки отложенного payload.
+- Свежие Kotlin/controller/correction/archive fixtures проверены штатными анализаторами и импортёрами: Python 66 passed и 15 subtests passed, 0 skipped; Node timeline import (включая Kotlin NDJSON), motion report и center error прошли. Проверены модель APK, локальные ссылки затронутых документов, текст и diff; отдельный визуальный рендер Markdown не запускался. Системный Python без pytest; полный набор выполнен существующим временным окружением `/private/tmp/dronecv-pr35-venv`.
+- GitHub Actions проверяются после публикации нового PR. Device-тесты локально только скомпилированы. Установка, аппаратные испытания, FPS и качество обнаружения не измерялись. Параметры YOLO/LK, TTL, история, исполнители CV и семантика времени публикации не менялись.
+
 ## Ошибка центра в отчёте движения — 2026-11-13
 
 - От актуальной `origin/main` @ `5037a9c` создана ветка `codex/motion-center-error` в отдельной рабочей копии `/private/tmp/dronecv-motion-center`. Проверен открытый PR №41: другая ML-задача. Посторонние изменения исходной папки сохранены.
