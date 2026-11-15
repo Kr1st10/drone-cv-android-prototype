@@ -32,7 +32,7 @@
     const firstVisible = ordered.find(s => s.visible)?.elapsed_ms;
     const hiddenIndex = ordered.findIndex((s,i) => i > 0 && ordered[i-1].visible && s.phase === 'disappearance');
     const hide = hiddenIndex < 0 ? null : ordered[hiddenIndex].elapsed_ms;
-    const returned = hiddenIndex < 0 ? null : ordered.slice(hiddenIndex+1).find(s => s.visible)?.elapsed_ms;
+    const returned = hiddenIndex < 0 ? null : ordered.slice(hiddenIndex+1).find(s => s.visible)?.elapsed_ms ?? null;
     const finalHidden = ordered.find(s => s.phase === 'blank_after')?.elapsed_ms ?? run.duration_ms;
     const endObserved = timed && frames.length ? Math.min(run.duration_ms, frames.at(-1).capture_ns/1e6-hi) : null;
     const matched = f => f?.marker?.run_id === run.run_id ? samples.get(f.marker.step_id) : null;
@@ -61,7 +61,8 @@
       if (!timed) return unavailable('Недостаточная или несовместимая синхронизация.');
       if (!full) return unavailable('Неполная запись или незавершённый эталон.');
       if (endObserved <= start) return unavailable('Запись не охватывает начало оцениваемой фазы.');
-      const potential = candidates.filter(p => p.published_ns/1e6-lo >= start && p.published_ns/1e6-hi < limit);
+      const mayBeInPhase = p => p.published_ns/1e6-lo >= start && p.published_ns/1e6-hi < limit;
+      const potential = candidates.filter(mayBeInPhase);
       const possible = kind === 'clear' ? potential : potential.filter(p => correctAtPublication(p,start,false));
       const certain = kind === 'clear' ? potential.filter(p => p.published_ns/1e6-hi >= start && p.published_ns/1e6-lo < limit) : potential.filter(p => correctAtPublication(p,start,true));
       let lower = possible.length ? Math.max(0,possible[0].published_ns/1e6-hi-start) : Math.max(0,Math.min(limit,endObserved)-start);
@@ -69,16 +70,23 @@
       // acquisition. It cannot prove an event, or a later lower bound.
       if(kind !== 'clear') for(const p of potential) {
         const f=frameById.get(p.frame_id);
-        if(p.bbox && (!matched(f) || !Number.isFinite(f?.capture_ns) || p.state_known===false)) {
+        if(p.state_known===false || p.bbox && (!matched(f) || !Number.isFinite(f?.capture_ns))) {
           lower=Math.min(lower,Math.max(0,p.published_ns/1e6-hi-start));
         }
+      }
+      // Unknown coordinate state may conceal an earlier removal, regardless
+      // of the serialized box value. Only a later known clear proves an upper
+      // bound; the unknown publication itself never proves absence.
+      if(kind === 'clear') for(const p of pubs) {
+        if(p.state_known === false && mayBeInPhase(p)) lower=Math.min(lower,Math.max(0,p.published_ns/1e6-hi-start));
       }
       const upper = certain.length ? Math.max(0,certain[0].published_ns/1e6-lo-start) : null;
       return { status: upper === null ? 'right_censored' : 'bounded', lower_ms: lower, upper_ms: upper,
         reason: upper === null ? 'Событие не подтверждено до конца доступного интервала наблюдения.' : 'Границы учитывают все совместимые смещения часов; это публикация координат, не показ рамки дисплеем.' };
     }
     const capture = firstVisible === undefined ? unavailable('Нет видимой цели.') : eventBounds(pubs,firstVisible,hide ?? run.duration_ms,'correct');
-    let cleanup = unavailable('Нет эпизода исчезновения.'), reacquisition = unavailable('Нет повторного появления.');
+    const missingReturn = () => unavailable('Повторное появление не было зафиксировано в фактических шагах эталона.');
+    let cleanup = unavailable('Нет эпизода исчезновения.'), reacquisition = missingReturn();
     if (hide !== null && timed && full) {
       // All possible disappearance instants must have a known existing box.
       const a = (hide+lo)*1e6, b = (hide+hi)*1e6;
@@ -88,19 +96,29 @@
       const inCoverage = frames.length && frames[0].capture_ns <= a && frames.at(-1).capture_ns >= b;
       const existed = inCoverage && state.every(p => p && p.bbox && p.state_known !== false);
       const absent = inCoverage && state.every(p => p && !p.bbox && p.state_known !== false);
-      const clears = pubs.filter((p,i) => p.source === 'clear' && p.bbox === null && p.state_known !== false &&
-        i > 0 && pubs[i-1].bbox && p.published_ns/1e6-hi >= hide);
+      const clears = pubs.filter(p => p.source === 'clear' && p.bbox === null && p.state_known !== false &&
+        p.published_ns/1e6-hi >= hide);
       cleanup = existed ? eventBounds(clears,hide,finalHidden,'clear') :
         absent ? { status:'not_applicable',lower_ms:null,upper_ms:null,reason:'До исчезновения координат не было; очистка не измеряется.' } :
           unavailable('Наличие рамки перед исчезновением не подтверждено для всех смещений часов.');
       if (returned !== null) {
-        const confirmedClear = pubs.find(p => !p.bbox && p.state_known !== false && p.published_ns/1e6-hi >= hide && p.published_ns/1e6-lo < finalHidden);
-        reacquisition = confirmedClear ? eventBounds(pubs.filter(p => p.published_ns > confirmedClear.published_ns),returned,finalHidden,'correct') :
+        // A clear publication remains the known coordinate state until the
+        // next publication. Choose a witness inside that interval after even
+        // the latest possible disappearance, for every compatible offset.
+        let absenceWitness = null;
+        for(let i=0;i<pubs.length;i++) {
+          const p=pubs[i];
+          if(p.bbox !== null || p.state_known === false) continue;
+          const end=i+1<pubs.length ? pubs[i+1].published_ns : journal.stop_ns;
+          const witness=Math.max(p.published_ns,b);
+          if(witness<end && witness<(finalHidden+lo)*1e6) {absenceWitness=witness;break;}
+        }
+        reacquisition = absenceWitness !== null ? eventBounds(pubs.filter(p => p.published_ns > absenceWitness),returned,finalHidden,'correct') :
           { status:'no_confirmed_absence',lower_ms:null,upper_ms:null,reason:'Отсутствие координат после исчезновения не подтверждено; сохранившаяся рамка не является повторным захватом.' };
       }
     } else if (hide !== null) {
       cleanup = unavailable(!timed ? 'Недостаточная или несовместимая синхронизация.' : 'Неполная запись или незавершённый эталон.');
-      reacquisition = { ...cleanup };
+      reacquisition = full && returned === null ? missingReturn() : { ...cleanup };
     }
     const result = { ...visible, criterion_version:'motion-scenario-v4', denominator:'all_visible_time_including_stationary_and_turns',
       stationary, movement, capture, cleanup, reacquisition };
