@@ -325,8 +325,21 @@
         j.publications.push({original_frame_id:d.frame_id,published_ns:relative(d.published_ns,'published_ns'),bbox:d.bbox,source:d.source});
       } else if(row.type==='state') {
         const initial=d.reason==='initial_snapshot';
+        if(d.timing_semantics!=null) {
+          if(d.timing_semantics!=='stateflow_assignment_v1')throw Error('Неизвестная семантика времени состояния.');
+          const boundary=integer(d.publication_ns,'publication_ns'),state=integer(d.state_publication_ns,'state_publication_ns');
+          const observation=integer(d.observation_publication_ns,'observation_publication_ns');
+          const ready=d.result_ready_ns==null?null:integer(d.result_ready_ns,'result_ready_ns');
+          const signal=d.signal_publication_ns==null?null:integer(d.signal_publication_ns,'signal_publication_ns');
+          if(observation!==state || state>boundary || (!initial && state!==boundary) ||
+            (ready!==null && ready>state) || (signal!==null && signal>state) ||
+            (ready!==null && signal!==null && ready>signal))throw Error('Нарушен порядок подготовки и публикации состояния.');
+        }
         states.push({original_frame_id:initial?null:d.motion_frame_id??null,controller_frame_id:d.frame_id??null,
           published_ns:relative(d.publication_ns,'publication_ns'),bbox:d.box??null,
+          timing_semantics:d.timing_semantics??null,result_ready_ns:d.result_ready_ns??null,
+          signal_publication_ns:d.signal_publication_ns??null,state_publication_ns:d.state_publication_ns??null,
+          observation_publication_ns:d.observation_publication_ns??null,
           source:d.box==null?'clear':d.result_source==='yolo'?'yolo':'lk',
           state_known:Object.hasOwn(d,'box'),initial_snapshot:initial});
       } else if(row.type==='session_end') {footer=d;try {j.stop_ns=relative(d.stop_ns,'stop_ns');} catch (_) {broken=true;footer=null;}}

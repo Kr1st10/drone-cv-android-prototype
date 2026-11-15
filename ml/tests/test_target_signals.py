@@ -24,6 +24,26 @@ def report():
 
 
 class TargetSignalValidation(unittest.TestCase):
+    def test_assignment_boundaries_are_optional_and_validated(self):
+        d = report()
+        signal = d['frames'][0]['target_signal']
+        self.assertNotIn('timing_semantics', signal)
+        legacy, errors = self.check(d)
+        self.assertFalse(errors)
+        self.assertEqual(legacy['timing_semantics_counts'],
+                         dict(stateflow_assignment_v1=0, historical_dispatch_boundary=1))
+        signal.update(timing_semantics='stateflow_assignment_v1', result_ready_ns='1100000000',
+                      signal_publication_ns='1150000000')
+        current, errors = self.check(d)
+        self.assertFalse(errors)
+        self.assertEqual(current['timing_semantics_counts'],
+                         dict(stateflow_assignment_v1=1, historical_dispatch_boundary=0))
+        signal['result_ready_ns'] = '1150000001'
+        self.assertTrue(any('processing/publication' in e for e in self.check(d)[1]))
+        signal['result_ready_ns'] = '1100000000'
+        signal['signal_publication_ns'] = '1140000000'
+        self.assertTrue(any('processing/publication' in e for e in self.check(d)[1]))
+
     def check(self, d):
         errors = []
         result = analyzer.analyze_target_signals(d, errors)

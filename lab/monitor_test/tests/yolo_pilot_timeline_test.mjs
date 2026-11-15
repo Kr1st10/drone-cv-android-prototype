@@ -77,6 +77,26 @@ for (const [name, present, count] of [
   });
 }
 
+test('versioned publication boundaries preserve distinct times without upgrading legacy samples', () => {
+  const log=fixture();
+  const state=log.result(1,true);
+  state.data={...state.data,timing_semantics:'stateflow_assignment_v1',
+    result_ready_ns:String(base+second-1n),signal_publication_ns:String(base+second),
+    state_publication_ns:String(base+second),observation_publication_ns:String(base+second)};
+  const newer=log.result(2,true);
+  newer.data={...newer.data,timing_semantics:'stateflow_assignment_v1',
+    result_ready_ns:String(base+2n*second-1n),signal_publication_ns:String(base+2n*second),
+    state_publication_ns:String(base+2n*second),observation_publication_ns:String(base+2n*second)};
+  log.result(3,true);log.finish();
+  const result=pilot.analyzeText(log.text(),'0');
+  assert.equal(result.summary.checked,3);
+  assert.equal(result.samples[0].timing_semantics,'stateflow_assignment_v1');
+  assert.equal(result.samples[0].result_ready_ns,String(base+second-1n));
+  assert.equal(result.samples[2].timing_semantics,null);
+  state.data.result_ready_ns=String(base+second+1n);
+  assert.equal(pilot.analyzeText(log.text(),'0').summary.checked,2);
+});
+
 test('NDJSON 19 distinct states, ignores initial snapshot, repeated result, timer and LK', () => {
   const log = fixture();
   const first = log.result(1, true);

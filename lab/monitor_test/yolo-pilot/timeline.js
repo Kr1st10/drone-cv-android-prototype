@@ -88,6 +88,13 @@
         uint(d.source_id) === null || uint(d.generation) === null ||
         uint(d.frame_id) === null || d.frame_id === '0' || d.detector_frame_id !== d.frame_id) return null;
     const candidate = d.reason === 'update';
+    const assignment = d.timing_semantics === 'stateflow_assignment_v1';
+    if(d.timing_semantics != null && !assignment) return null;
+    if(assignment) {
+      const ready=uint(d.result_ready_ns), signal=uint(d.signal_publication_ns);
+      if(d.state_publication_ns!==d.publication_ns || d.observation_publication_ns!==d.state_publication_ns ||
+          ready===null || signal===null || ready>signal || signal>time) return null;
+    }
     if (candidate) {
       if (!validBox(d.box) || d.last_yolo_frame_id !== d.detector_frame_id ||
           d.last_yolo_accepted_ns !== d.publication_ns ||
@@ -102,6 +109,8 @@
         offset_ms: Number(time - start) / 1e6,
         offset_ns: String(time - start),
         publication_ns: d.publication_ns,
+        timing_semantics:d.timing_semantics??null,result_ready_ns:d.result_ready_ns??null,
+        signal_publication_ns:d.signal_publication_ns??null,state_publication_ns:d.state_publication_ns??null,
         source_id: d.source_id, generation: d.generation, frame_id: d.frame_id,
         analyzer_entry_ns: d.analyzer_entry_ns, capture_ns: capture !== null && capture > 0n && capture <= entry ? d.capture_ns : null,
         candidate, confidence: null, state_event_id: event.event_id, diagnostic_row: event.line,

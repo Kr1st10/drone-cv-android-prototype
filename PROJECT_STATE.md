@@ -1,5 +1,13 @@
 # PROJECT_STATE.md
 
+## Готовность и публикация результатов — 2026-11-15
+
+- После слияния PR №46 (`main @ 9a1e350`) создана отдельная копия `/tmp/dron-publication-timing`, ветка `codex/publication-timing`; посторонние изменения основной копии сохранены. Writer по-прежнему сериализует immutable payload вне обработки кадров и блокировки контроллера.
+- Готовность результата отделена от границ публикации: YOLO — `signals`, затем отдельно `state`; LK/коррекции — `state`. Метка берётся непосредственно перед присваиванием после подготовки; работа подписчиков `signals` учитывается только в последующей границе `state`. Очистка и expiry имеют собственную границу. Reentrant controls выполняются после завершения state/timeline transaction, в порядке очереди; вложенная смена источника не откатывает ID. TTL, пороги, история и CV workers сохранены.
+- Optional `timing_semantics=stateflow_assignment_v1` уточняет экспорт. Late initial_snapshot сохраняет исходные готовность/публикацию, времена текущего наблюдения LK и запроса YOLO; начало записи не омолаживает изображение/подтверждение. Исторические журналы читаются без восстановления отсутствующих времён. NDJSON сохраняет строковые Long; неизвестная экспозиция остаётся null с причиной. [Контракт](docs/reference/data-model.md#границы-публикации-stateflow).
+- Локально JBR 21 / SDK 35: `assembleDebug testDebugUnitTest assembleDebugAndroidTest lintDebug` успешно; **242 JVM passed, 2 parity skipped**, 0 failures/errors (нет Python parity fixtures). Добавлены 5 controller и 1 LK regression с управляемыми часами/очередями; существующие тесты writer/Stop/source сохранены. Проверенная ONNX и SHA-256 в APK подтверждены; экспорт/обучение не выполнялись.
+- На свежих Kotlin fixtures Python-анализаторы: **69 passed, 18 subtests passed**. Node timeline import, pilot (9 tests), motion report, center error прошли. `git diff --check` выполнен. GitHub Actions проверяются после push отдельно от локальных результатов. AndroidTest только скомпилированы; телефон, отрисовка, FPS и качество обнаружения не измерялись.
+
 ## Подготовка диагностики вне обработки кадров — 2026-11-15
 
 - От `origin/main` @ `1da09b0` создана ветка `codex/diagnostics-hot-path` в отдельной копии `/Users/macbookair/Documents/cb/dron-cv-diagnostics`. Посторонние изменения исходной папки сохранены; существующие PR не меняются.
