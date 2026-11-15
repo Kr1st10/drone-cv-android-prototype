@@ -48,3 +48,29 @@ const expected=Motion.sampleMotion(short.base,1000+(returnedAt-3500)*short.base.
 assert.deepEqual(sample(short,returnedAt,1,run).image_rect_px,expected.image_rect_px.map((v,i)=>v+short.offset[i%2]),
   'short routes continue their elapsed route clock through disappearance, including turns');
 console.log('simple motion scenario geometry and timeline tests passed');
+
+// Canvas pixels remain physical units; only workspace and CSS controls scale with DPR.
+for(const [width,height] of [[1024,768],[1280,800],[1366,768],[1920,1080]])for(const dpr of [1,1.5,2]){
+  const w=width*dpr,h=height*dpr;
+  const config={...input,width:w,height:h,workspace:{x:w*.05,y:h*.05,width:w*.9,height:h*.9},
+    sync_module_px:18,image_width:2400,image_height:1600,bbox:[1306,604,1593,895],control_width_px:80*dpr,control_height_px:32*dpr};
+  const p=plan(config);
+  assert.equal(p.marker.module_px,18);assert.equal(p.base.marker,null);
+  const a=config.workspace,inside=r=>r[0]>=a.x&&r[1]>=a.y&&r[2]<=a.x+a.width&&r[3]<=a.y+a.height;
+  const rect=([x,y,w,h])=>[x,y,x+w,y+h];
+  const fixed=[rect(p.sync_backing),rect(p.control_rect),...p.calibration_markers.map(t=>rect([t.x,t.y,t.size,t.size]))];
+  assert.ok(fixed.every(inside));
+  fixed.forEach((r,i)=>assert.ok(fixed.slice(i+1).every(s=>!overlap(r,s))));
+  for(let t=0;t<p.duration_ms;t+=17){
+    const s=sample(p,t,t,run);if(!s.visible)continue;
+    assert.ok(inside(s.image_rect_px));assert.ok(fixed.every(r=>!overlap(r,s.image_rect_px)));
+    const [l,top,r,b]=s.image_rect_px;
+    assert.ok(Math.abs((r-l)/(b-top)-1.5)<1e-9,'whole photo keeps aspect ratio');
+    assert.ok(Math.abs(s.bbox_screen_px[2]-s.bbox_screen_px[0]-40)<1e-9);
+    assert.ok(Math.abs(s.bbox_screen_px[0]-(l+1306*p.base.scale))<1e-9);
+  }
+}
+const legacy=Motion.planMotion(input),explicitLegacy=Motion.planMotion(input,{reserveMarker:true});
+assert.deepEqual(legacy,explicitLegacy,'existing callers retain their marker and route');
+assert.ok(legacy.marker);assert.ok(legacy.legs[0].from[1]>40);
+console.log('40/18 default geometry: four resolutions x DPR 1/1.5/2, whole photo, target and control separation passed');

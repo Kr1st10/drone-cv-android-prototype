@@ -36,6 +36,46 @@ try{
   assert.match(await page.textContent('#syncCheckStatus'),/Камерой не проверено/);
   const frames=run.steps.flatMap(s=>[s.elapsed_ms,s.elapsed_ms+(s.step_id===0?9999:999)].map((t)=>({frame_id:t,capture_ns:(t+100)*1e6,analyzer_ns:(t+101)*1e6,marker:{run_id:run.run_id,step_id:s.step_id}})));
   const journal={schema:'dronecv-motion-android-1',recording_complete:true,complete:true,truncated:false,stop_ns:16e9,frames,detections:[],publications:[],geometry:{width:1280,height:800},calibration_image:{data_url:jpeg,width:1280,height:800}};
+  // Invalid input must not become an active journal or poison later finalization.
+  await upload({schema:'dronecv-motion-android-1',frames:[null]});
+  assert.match(await page.textContent('#reportStatus'),/frames\[0\].*null/);
+  await start();await tick(0);await page.click('#motionStop');await clean();
+  assert.ok(await page.isEnabled('#motionStart'));
+  await upload({schema:'dronecv-motion-android-1',frames:[null]});
+  await start();await tick(0);await tick(10000);for(let i=0;i<5;i++)await tick(1000);await clean();
+  assert.equal((await exported()).complete,true);
+  await start();await tick(0);await page.click('#motionStop');await clean();
+  console.log('PASS malformed import -> stop/natural completion -> next sync and movement controls enabled');
+
+  await upload({...journal,calibration_image:null});
+  await page.evaluate(()=>{window.originalAnalyze=SyncCheck.analyze;SyncCheck.analyze=()=>{throw Error('synthetic render failure');};});
+  await start();await tick(0);await page.click('#motionStop');await clean();
+  assert.match(await page.textContent('#motionStatus'),/сохранена.*Ошибка отображения.*synthetic render failure/);
+  let retained=await exported();
+  assert.ok(await page.evaluate(id=>MotionGallery.load('sync_reading_checks_v1',[]).some(r=>r.run_id===id),retained.run_id));
+  assert.ok(await page.isEnabled('#motionStart'));
+  await page.evaluate(()=>{SyncCheck.analyze=originalAnalyze;});
+  await start();await tick(0);await page.click('#motionStop');await clean();
+  console.log('PASS render failure preserves successful save/export, clears scene and allows next launch');
+
+  for(const throws of [false,true]){
+    await page.evaluate(throws=>{window.originalSave=MotionGallery.save;MotionGallery.save=(key,value)=>{if(key==='sync_reading_checks_v1'){if(throws)throw Error('synthetic storage failure');return false;}return originalSave(key,value);};},throws);
+    await start();await tick(0);await page.click('#motionStop');await clean();
+    assert.match(await page.textContent('#motionStatus'),/Не удалось сохранить в браузере.*Экспортируйте/);
+    retained=await exported();assert.equal(retained.steps.length,1);
+    assert.ok(await page.isEnabled('#motionStart'));
+    await page.evaluate(()=>{MotionGallery.save=originalSave;});
+    await start();await tick(0);await page.click('#motionStop');await clean();
+  }
+  // Exercise the outer finalization boundary as well as the normal render guard.
+  await page.evaluate(()=>{window.originalCheckSave=SyncCheckUI.save;SyncCheckUI.save=r=>{originalCheckSave(r);throw Error('synthetic refresh boundary failure');};});
+  await start();await tick(0);await page.click('#motionStop');await clean();
+  assert.match(await page.textContent('#motionStatus'),/Ошибка завершения.*synthetic refresh boundary failure/);
+  assert.ok(await page.isEnabled('#motionStart'));await exported();
+  await page.evaluate(()=>{SyncCheckUI.save=originalCheckSave;});
+  await start();await tick(0);await page.click('#motionStop');await clean();
+  console.log('PASS storage false/throw keeps memory export; finalization finally restores both modes');
+  await page.selectOption('#syncCheckSelect',run.run_id);
   await upload(journal);assert.match(await page.textContent('#syncCheckStatus'),/Проверено камерой: прочитано 6 из 6/);assert.match(await page.textContent('#syncCheckStatus'),/4 из 4 найдены/);assert.match(await page.textContent('#reportTimingStatus'),/эталон траектории не требуется/);assert.equal(await page.isEnabled('#reportExport'),false);
   await page.screenshot({path:'/private/tmp/dronecv-sync-results.png',fullPage:true});
   await upload({...journal,calibration_image:null});assert.match(await page.textContent('#syncCheckStatus'),/настоящий JPEG не подтверждён/);assert.match(await page.textContent('#syncCheckStatus'),/Угловые метки: недостаточно данных/);
@@ -66,14 +106,36 @@ try{
   await page.click('#motionBounds');
   for(const [i,id] of ['boundX1','boundY1','boundX2','boundY2'].entries())await page.fill('#'+id,String(bounds[i]));
   await page.click('#saveBounds');
-  // The original photo has large margins: 40 px target does not fit with 18 px cells.
-  await page.click('#motionStart');await clean();assert.match(await page.textContent('#motionStatus'),/Маршрут не помещается/);
+  // First motion uses the documented 40/18 settings, including the whole civ01 photo.
+  await upload({schema:'dronecv-motion-android-1',frames:[null]});
+  assert.equal(await page.inputValue('#motionWidth'),'40');
   assert.equal(await page.inputValue('#motionSyncSize'),'18');
-  await page.fill('#motionWidth','20');await page.click('#motionStart');
+  await page.click('#motionStart');
   await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});
   for(let i=0;i<1000;i++){if(!await page.evaluate(()=>!!document.fullscreenElement))break;await tick(100);}
   await clean();const motion=(await page.evaluate(()=>MotionStore.list())).at(-1);
-  assert.equal(motion.complete,true);assert.equal(motion.marker.module_px,18);assert.ok(motion.samples.some(s=>s.visible));
+  assert.equal(motion.complete,true);assert.equal(motion.marker.module_px,18);assert.equal(motion.scenario.target_width_px,40);assert.ok(motion.samples.some(s=>s.visible));
+  // Repeat uses the saved experiment, even after fields are edited.
+  await page.locator('#motionSection details').first().locator('summary').click();
+  await page.fill('#motionWidth','20');await page.fill('#motionSyncSize','6');
+  await page.click('#motionRepeat');await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});
+  await tick(0);await page.click('#motionStop');await clean();
+  const repeated=await page.evaluate(()=>MotionStore.history());
+  assert.equal(repeated.last_local_run.scenario.target_width_px,40);assert.equal(repeated.last_local_run.marker.module_px,18);
+  await page.fill('#motionWidth','40');await page.fill('#motionSyncSize','18');
+  for(const [width,height] of [[1024,768],[1366,768],[1920,1080]]){
+    await page.setViewportSize({width,height});await page.click('#motionStart');
+    await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});
+    for(let i=0;i<1000;i++){if(!await page.evaluate(()=>!!document.fullscreenElement))break;await tick(100);}
+    await clean();const current=(await page.evaluate(()=>MotionStore.history())).last_local_run;
+    assert.equal(current.complete,true);assert.equal(current.scenario.target_width_px,40);assert.equal(current.marker.module_px,18);
+  }
+  await page.setViewportSize({width:1280,height:800});await page.fill('#motionAreaHeight','50');
+  await page.click('#motionStart');await clean();assert.match(await page.textContent('#motionStatus'),/Маршрут не помещается/);
+  assert.equal(await page.inputValue('#motionWidth'),'40');assert.equal(await page.inputValue('#motionSyncSize'),'18');assert.equal(await page.inputValue('#motionAreaHeight'),'50');
+  await page.fill('#motionAreaHeight','90');await page.click('#motionStart');
+  await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});await tick(0);await page.click('#motionStop');await clean();
+  await page.fill('#motionSyncSize','6');await page.reload();await page.click('[data-section=motion]');assert.equal(await page.inputValue('#motionSyncSize'),'6');
   assert.deepEqual(errors,[]);
-  console.log('sync browser: presets, no-photo start, 10s + five actual steps, separate persistence, cancel/complete/cleanup, journals/JPEG/tags, mobile fit failure passed');
+  console.log('sync browser: imports/recovery, save/render faults, 40/18 on four resolutions, repeat, old 6px profile, presets, timeline/JPEG/tags and impossible geometry passed');
 }finally{await browser.close();}

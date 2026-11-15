@@ -6,6 +6,11 @@
   const finite=Number.isFinite;
   function framesOf(journal){
     if(journal?.schema!=='dronecv-motion-android-1'||!Array.isArray(journal.frames))throw Error('Неподдерживаемый журнал Android.');
+    const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
+    journal.frames.forEach((f,i)=>{
+      if(!object(f))throw Error(`Кадр frames[${i}]: ожидается объект, получено ${f===null?'null':Array.isArray(f)?'массив':typeof f}.`);
+      if(f.marker!=null&&(!object(f.marker)||typeof f.marker.run_id!=='string'||!Number.isInteger(f.marker.step_id)||f.marker.step_id<0||f.marker.step_id>0xffffffff))throw Error(`Кадр frames[${i}]: marker должен быть null или объектом со строковым run_id и uint32 step_id.`);
+    });
     return journal.frames;
   }
   function completeness(journal){
@@ -78,5 +83,5 @@
       offset_uncertainty_ms:timing_status==='compatible'?(hi-lo)/1e6:null,timing_status,reason,
       ...details,reference_complete,completeness_reason};
   }
-  return {codeReadability,timing};
+  return {framesOf,codeReadability,timing};
 });

@@ -46,8 +46,11 @@
     return c.ambiguous?'Метки распознаны неоднозначно':c.missing.length?`Не найдена ${names[c.missing[0]]} метка (${4-c.missing.length} из 4 найдены)`:'4 из 4 найдены';
   }
   function renderSelected(){
+    try{renderSelectedResult();}catch(e){status('Не удалось показать результат журнала: '+e.message);}
+  }
+  function renderSelectedResult(){
     const j=journals[selected];
-    SyncCheckUI.renderJournal(j||null);
+    try{SyncCheckUI.renderJournal(j||null);}catch(e){$('syncCheckStatus').textContent='Не удалось показать журнал: '+e.message;}
     if(!j){$('reportSyncStatus').textContent='Читаемость sync-кода: журнал не загружен.';$('reportTimingStatus').textContent='Временное сопоставление: журнал не загружен.';$('reportCalibrationStatus').textContent=$('motionCameraStatus').textContent='Камерой не проверено.';return;}
     try{const r=MotionJournalStatus.codeReadability(j.data);$('reportSyncStatus').textContent=`${j.name}: sync-код считан в ${r.read_frames} из ${r.total_frames} кадров; доля прочитанных кодов по всему файлу ${r.total_frames?(100*r.read_frames/r.total_frames).toFixed(1)+'%':'недостаточно данных'}; без кода ${r.missing_markers}; run_id: ${r.run_ids.join(', ')||'не обнаружены'}. ${r.recording_complete&&r.experiment_complete&&!r.truncated?'Запись и опыт завершены.':'Журнал или опыт неполный. '+(r.completeness_reason||'')}`;}catch(e){$('reportSyncStatus').textContent=`${j.name}: читаемость недоступна: ${e.message}`;}
     let run;
@@ -117,7 +120,7 @@
   };
   $('reportJournals').onchange=async e=>{
     const token=++version;++viewVersion;invalidate();journals=[];runs=[];selected=0;pending=[];referenceNotice='';processing=true;image=null;canvas.width=canvas.height=0;$('reportSelect').disabled=true;$('reportSelect').replaceChildren();renderSelected();status('Чтение журналов…');
-    try{const loaded=await Promise.all([...e.target.files].map(async f=>({name:f.name,data:await parseJournal(f),points:[],manual:false,processed:false,calibration:null,image_error:null})));if(token!==version)return;if(loaded.some(j=>j.data.schema!=='dronecv-motion-android-1'||!Array.isArray(j.data.frames)))throw Error('Неверный журнал Android.');
+    try{const loaded=await Promise.all([...e.target.files].map(async f=>{const data=await parseJournal(f);try{MotionJournalStatus.framesOf(data);}catch(e){throw Error(`${f.name}: ${e.message}`);}return {name:f.name,data,points:[],manual:false,processed:false,calibration:null,image_error:null};}));if(token!==version)return;
       journals=loaded;const select=$('reportSelect');journals.forEach((j,i)=>{const o=document.createElement('option');o.value=i;o.textContent=j.name;select.append(o);});renderSelected();
       try{const stored=await MotionStore.list();if(token!==version)return;runs=stored;}catch(e){if(token!==version)return;referenceNotice='Хранилище эталонов недоступно: '+e.message;}
       await processAll(token);}

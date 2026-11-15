@@ -23,6 +23,13 @@ assert.throws(()=>layout({...base,sync_module_px:32,workspace:{x:0,y:0,width:115
 console.log('sync check: clock bounds, phases, zero/foreign/unknown/untimed reads; all preset sizes and route separation passed');
 
 const {timelineImporter}=require('../motion-report.js');
+const {framesOf}=require('../motion-journal-status.js');
+for(const bad of [null,42,'frame',[],{marker:[]},{marker:{run_id:42,step_id:0}},{marker:{run_id:'12345678',step_id:-1}}]){
+ assert.throws(()=>framesOf({schema:'dronecv-motion-android-1',frames:[bad]}),/frames\[0\]/);
+}
+const allowed={schema:'dronecv-motion-android-1',recording_complete:false,frames:[{}, {marker:null,capture_ns:null},frame(0,0)]};
+assert.equal(framesOf(allowed),allowed.frames,'missing marker/time and incomplete records are valid structures');
+assert.doesNotThrow(()=>framesOf({...allowed,frames:[{marker:{run_id:'legacy-id',step_id:0}}]}),'historical string IDs remain importable');
 for(const gap of [false,true]){
  const p=timelineImporter(),base=1000000000n;let id=0;
  const push=(type,data)=>p.push({schema:'dronecv-session-timeline-1',session_id:'s',event_id:String(++id),event_ns:String(base),type,data});

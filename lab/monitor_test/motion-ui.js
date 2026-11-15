@@ -80,6 +80,7 @@
   async function finish(reason) {
     if (finishing || (!active && !attempt)) return;
     finishing = true;
+    try {
     if (attempt) { attempt.cancelled = true; }
     if (active) {
       const current = active; active = null; cancelAnimationFrame(current.raf);
@@ -88,9 +89,10 @@
         current.run.end_ms=current.start===null?null:Math.max(0,performance.now()-current.start);
         // RAF timestamps and performance.now share the browser monotonic clock.
         current.run.end_ms=Math.max(current.run.end_ms||0,current.lastElapsed||0);
-        attempt=null;await returnToSettings();
-        const ok=SyncCheckUI.save(current.run);if(!ok)saveFailure=Error('Не удалось сохранить проверку чтения');finishing=false;update();
-        status((reason?'Проверка прервана: '+reason:'Проверка завершена')+'. '+(ok?'Запись проверки сохранена отдельно от движения.':'Не удалось сохранить в браузере. Экспортируйте проверку до закрытия страницы.'));return;
+        attempt=null;
+        const result=SyncCheckUI.save(current.run);if(!result.saved)saveFailure=Error('Не удалось сохранить проверку чтения');
+        await returnToSettings();
+        status((reason?'Проверка прервана: '+reason:'Проверка завершена')+'. '+(result.saved?'Запись проверки сохранена отдельно от движения.':'Не удалось сохранить в браузере. Экспортируйте проверку до закрытия страницы.')+(result.displayError?' Ошибка отображения: '+result.displayError:''));return;
       }
       rememberLocalRun(current.run);
       flush(current);
@@ -103,15 +105,18 @@
     await returnToSettings();
     if(finishing.finalWrite)await finishing.finalWrite;
     try{await MotionStore.settings(lastScenario);}catch(e){saveFailure=e;}
-    finishing = false; update();
     status(saveFailure?`Ошибка сохранения: ${saveFailure.message}. Экспортируйте эталон до закрытия страницы.`:reason ? `Запуск прерван: ${reason}. Эталон сохранён как неполный.` : 'Запуск завершён. Эталон сохранён в браузере.');
+    } catch(e) {
+      status('Ошибка завершения: '+e.message);
+      await returnToSettings();
+    } finally { finishing=false;update(); }
   }
   function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
   async function startCheck(){
     if(attempt||active||finishing)return;
     const pending={cancelled:false};attempt=pending;update();
     try{
-      persist();stage.classList.remove('hidden');await stage.requestFullscreen();
+      saveFailure=null;persist();stage.classList.remove('hidden');await stage.requestFullscreen();
       if(pending.cancelled){await returnToSettings();return;}
       if(document.hidden||document.fullscreenElement!==stage)throw Error('Страница скрыта или полный экран закрыт.');
       const vp=viewport();canvas.width=vp.width;canvas.height=vp.height;

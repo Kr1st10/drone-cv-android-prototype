@@ -4,8 +4,8 @@
   let checks=MotionGallery.load(key,[]),journal=null;
   if(!Array.isArray(checks))checks=[];
   let selected=checks.at(-1)?.run_id||null;
-  function render(){
-    const run=checks.find(r=>r.run_id===selected),j=journal;
+  function render(j=journal){
+    const run=checks.find(r=>r.run_id===selected);
     $('syncCheckExport').disabled=!run;
     if(!j){$('syncCheckStatus').textContent=run?`Проверка ${run.run_id}: ${run.complete?'завершена':'прервана'}, шаги ${run.steps.map(s=>s.step_id).join(', ')||'не показаны'}. Камерой не проверено. Импортируйте журнал телефона.`:'Камерой не проверено. Запустите проверку и импортируйте журнал телефона.';return;}
     const data=j.data,r=SyncCheck.analyze(run,data),integrity=data.event_integrity;
@@ -24,8 +24,16 @@
     ].join('\n');
   }
   function refresh(){const select=$('syncCheckSelect');select.replaceChildren();for(const r of checks){const o=document.createElement('option');o.value=r.run_id;o.textContent=`${r.run_id} — ${r.complete?'завершена':'прервана'}`;select.append(o);}select.value=selected||'';render();}
-  $('syncCheckSelect').onchange=()=>{selected=$('syncCheckSelect').value;render();};
+  function display(work){try{work();return null;}catch(e){$('syncCheckStatus').textContent='Не удалось показать результат: '+e.message;return e.message;}}
+  $('syncCheckSelect').onchange=()=>{selected=$('syncCheckSelect').value;display(()=>render());};
   $('syncCheckExport').onclick=()=>{const run=checks.find(r=>r.run_id===selected);if(run)MotionGallery.download(`sync-check-${run.run_id}.json`,JSON.stringify(run,null,2),'application/json');};
-  window.SyncCheckUI={hasId:id=>checks.some(r=>r.run_id===id),save(run){checks.push(run);selected=run.run_id;const ok=MotionGallery.save(key,checks);refresh();return ok;},renderJournal(j){journal=j;render();}};
-  refresh();
+  window.SyncCheckUI={hasId:id=>checks.some(r=>r.run_id===id),save(run){
+    checks.push(run);selected=run.run_id;
+    let saved=false;try{saved=MotionGallery.save(key,checks);}catch(_){}
+    const displayError=display(refresh);
+    // The in-memory record remains exportable even when persistence or analysis fails.
+    $('syncCheckExport').disabled=false;
+    return {saved,displayError};
+  },renderJournal(j){return display(()=>{if(j)MotionJournalStatus.framesOf(j.data);render(j);journal=j;});}};
+  display(refresh);
 })();

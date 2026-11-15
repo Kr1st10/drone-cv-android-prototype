@@ -20,7 +20,7 @@
     const geometry=layout(input),c=structuredClone(input),a=c.workspace,size=c.calibration_size_px,m=c.sync_module_px,gap=16;
     const offset=[a.x+size+2*gap,a.y+Math.max(size,12*m)+2*gap];
     const bottomBand=Math.max(size,c.control_height_px||32);
-    let base;try{base=Motion.planMotion({...c,width:a.width-2*size-4*gap,height:a.height-Math.max(size,12*m)-bottomBand-4*gap});}catch(e){throw Error('Маршрут не помещается в оставшейся области после размещения меток и sync-кода. Увеличьте рабочую область или измените параметры движения. '+e.message);}
+    let base;try{base=Motion.planMotion({...c,width:a.width-2*size-4*gap,height:a.height-Math.max(size,12*m)-bottomBand-4*gap},{reserveMarker:false});}catch(e){throw Error('Маршрут не помещается в оставшейся области после размещения меток и sync-кода. Увеличьте рабочую область или измените параметры движения. '+e.message);}
     const movement_ms=Math.max(7000,base.lap_ms*c.laps);
     c.version='simple-motion-v1';c.calibration_ms=2000;c.stationary_ms=1500;c.movement_ms=movement_ms;c.disappearance_ms=1000;
     c.disappearance_start_ms=c.calibration_ms+c.stationary_ms+movement_ms*.35;c.hidden_motion='continue';c.final_blank_ms=1500;
