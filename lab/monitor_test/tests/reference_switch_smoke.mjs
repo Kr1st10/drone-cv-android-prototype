@@ -43,10 +43,11 @@ try {
   for(const id of ['cabinet_front','cabinet_top','cabinet_front','cabinet_oblique_candidate']){const e=document.getElementById('referencePhotoSelect');e.value=id;e.dispatchEvent(new Event('change'));}
  });
  await settle();await page.waitForTimeout(250);assert.equal((await snap()).photo_id,'cabinet_oblique_candidate');assert.equal((await snap()).calibration_id,calibration);
+ const widths=await page.evaluate(()=>Object.fromEntries(DroneReferences.profiles[0].photos.map(p=>[p.id,p.width])));
  const frames=await page.evaluate(()=>{window.sampleReference=false;return window.framesSeen;});assert.ok(frames.length>25);
  for(const s of frames){
   assert.equal(s.calibration_id,calibration);
-  if(s.load_state==='ready'){assert.ok(s.equivalent_distance_m>0);assert.doesNotMatch(s.readout,/нет данных|Загрузка/);assert.equal(s.natural,s.photo_id==='cabinet_front'?1010:s.photo_id==='cabinet_top'?920:905);}
+  if(s.load_state==='ready'){assert.ok(s.equivalent_distance_m>0);assert.doesNotMatch(s.readout,/нет данных|Загрузка/);assert.equal(s.natural,widths[s.photo_id]);}
   else {assert.equal(s.equivalent_distance_m,null);assert.match(s.readout,/Загрузка/);}
  }
  const cdp=await page.context().newCDPSession(page);
