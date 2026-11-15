@@ -114,8 +114,9 @@ class LiveTrackingIntegrationTest {
     @Test fun `independent timeline channels serialize only for receivers and preserve late snapshots`() {
         for (diagnosticOn in listOf(false, true)) for (motionOn in listOf(false, true)) {
             val file = kotlin.io.path.createTempFile("diagnostic-channels", ".ndjson").toFile()
-            val journal = MotionJournal(clock = { 1_100_000_000L }, fileFactory = { file })
-            val f = Fixture(trackingCapacity = 1, journal = journal)
+            lateinit var f: Fixture
+            val journal = MotionJournal(clock = { f.now }, fileFactory = { file })
+            f = Fixture(trackingCapacity = 1, journal = journal)
             val serialized = java.util.concurrent.ConcurrentLinkedQueue<String>()
             f.controller.beforeDiagnosticSerialization = { serialized.add(it) }
             var trackingSerializations = 0
@@ -124,6 +125,7 @@ class LiveTrackingIntegrationTest {
             f.start()
             f.acquire() // Latest observation exists before either recording starts.
             val original = f.controller.state.value.tracking!!
+            f.now = 1_090_000_000L // Recording begins after the last observation, before the next frame.
             assertTrue(serialized.isEmpty())
             if (diagnosticOn) f.controller.startDiagnostics {
                 f.diagnostic.start(f.now)
@@ -146,6 +148,7 @@ class LiveTrackingIntegrationTest {
             for (states in listOf(diagnosticStates, motionStates).filter { it.isNotEmpty() }) {
                 assertEquals(3, states.size)
                 assertTrue(states.first().contains("\"reason\":\"initial_snapshot\""))
+                assertTrue(states.first().contains("\"publication_ns\":\"1090000000\""))
                 assertTrue(states.first().contains("\"capture_ns\":\"${original.observation.stamp.captureNs}\""))
                 assertTrue(states.first().contains("\"analyzer_entry_ns\":\"${original.observation.stamp.analyzerEntryNs}\""))
                 assertTrue(states.first().contains("\"last_yolo_capture_ns\":\"995000000\""))
