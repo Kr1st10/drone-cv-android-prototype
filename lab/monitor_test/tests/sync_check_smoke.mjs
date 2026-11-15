@@ -7,7 +7,7 @@ const {chromium}=createRequire(path.join(process.cwd(),'x.js'))('playwright');
 const root=path.resolve(process.argv[2]),browser=await chromium.launch({executablePath:process.env.CHROMIUM,args:['--allow-file-access-from-files']});
 const page=await browser.newPage({viewport:{width:1280,height:800},acceptDownloads:true}),errors=[];
 page.on('pageerror',e=>{errors.push(String(e));console.error(e);});page.on('dialog',d=>d.accept());
-await page.addInitScript(()=>{let now=0,next=1;const callbacks=new Map();window.requestAnimationFrame=fn=>{const k=next++;callbacks.set(k,fn);return k;};window.cancelAnimationFrame=k=>callbacks.delete(k);window.advanceSync=ms=>{now+=ms;const work=[...callbacks.values()];callbacks.clear();work.forEach(fn=>fn(now));};});
+await page.addInitScript(()=>{let now=0,next=1;const callbacks=new Map(),wallNow=performance.now.bind(performance);performance.now=()=>now;window.delaySync=ms=>{const start=wallNow();while(wallNow()-start<ms){}now+=ms;};window.requestAnimationFrame=fn=>{const k=next++;callbacks.set(k,fn);return k;};window.cancelAnimationFrame=k=>callbacks.delete(k);window.advanceSync=ms=>{now+=ms;const work=[...callbacks.values()];callbacks.clear();work.forEach(fn=>fn(now));};});
 const tick=ms=>page.evaluate(ms=>advanceSync(ms),ms);
 async function start(){await page.click('#syncCheckStart');await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});}
 async function clean(){await page.waitForFunction(()=>!document.fullscreenElement&&!document.getElementById('syncCheckStart').disabled&&document.getElementById('motionCanvas').width===0,null,{polling:50});}
@@ -36,6 +36,36 @@ try{
   assert.match(await page.textContent('#syncCheckStatus'),/Камерой не проверено/);
   const frames=run.steps.flatMap(s=>[s.elapsed_ms,s.elapsed_ms+(s.step_id===0?9999:999)].map((t)=>({frame_id:t,capture_ns:(t+100)*1e6,analyzer_ns:(t+101)*1e6,marker:{run_id:run.run_id,step_id:s.step_id}})));
   const journal={schema:'dronecv-motion-android-1',recording_complete:true,complete:true,truncated:false,stop_ns:16e9,frames,detections:[],publications:[],geometry:{width:1280,height:800},calibration_image:{data_url:jpeg,width:1280,height:800}};
+  await upload({...journal,calibration_image:null});
+  for(const stall of ['storage','analysis'])for(const mode of ['natural','stop']){
+    await page.evaluate(stall=>{
+      window.endEvents=[];window.endSave=MotionGallery.save;window.endAnalyze=SyncCheck.analyze;
+      MotionGallery.save=(key,value)=>{if(key==='sync_reading_checks_v1'){endEvents.push({kind:'storage',width:document.getElementById('motionCanvas').width,end:value.at(-1).end_ms});if(stall==='storage')delaySync(500);}return endSave(key,value);};
+      SyncCheck.analyze=(...args)=>{endEvents.push({kind:'analysis',width:document.getElementById('motionCanvas').width});if(stall==='analysis')delaySync(500);return endAnalyze(...args);};
+    },stall);
+    await start();await tick(0);await tick(10000);for(let i=0;i<4;i++)await tick(1000);
+    if(mode==='natural')await tick(1000);else {await tick(250);await page.click('#motionStop');}
+    await clean();const current=await exported();
+    assert.equal(current.end_ms,mode==='natural'?15000:14250);assert.equal(current.complete,mode==='natural');
+    const events=await page.evaluate(()=>{MotionGallery.save=endSave;SyncCheck.analyze=endAnalyze;return endEvents;});
+    assert.deepEqual(events.map(e=>e.kind),['storage','analysis']);assert.ok(events.every(e=>e.width===0),'slow work begins only after code removal');
+    assert.equal(events[0].end,current.end_ms);
+    const timing=await page.evaluate(r=>{
+      const frames=r.steps.flatMap((s,i)=>[s.elapsed_ms+.25,(r.steps[i+1]?.elapsed_ms??r.end_ms)-.25].map(t=>({frame_id:t,capture_ns:(t+100)*1e6,marker:{run_id:r.run_id,step_id:s.step_id}})));
+      return SyncCheck.analyze(r,{frames}).timing;
+    },current);
+    assert.equal(timing,'compatible');
+    await start();await tick(0);await page.click('#motionStop');await clean();
+  }
+  await start();await page.click('#motionStop');await clean();const early=await exported();
+  assert.deepEqual(early.steps,[]);assert.equal(early.end_ms,null);
+  await page.evaluate(()=>{window.endSettings=MotionGallery.settings;MotionGallery.settings=()=>{throw Error('synthetic cleanup failure');};});
+  await start();await tick(0);await tick(250);await page.click('#motionStop');await clean();
+  assert.match(await page.textContent('#motionStatus'),/Ошибка очистки.*synthetic cleanup failure/);
+  const cleanup=await exported();assert.equal(cleanup.end_ms,250);assert.equal(cleanup.steps.length,1);
+  await page.evaluate(()=>{MotionGallery.settings=endSettings;});
+  await start();await tick(0);await page.click('#motionStop');await clean();
+  console.log('PASS 500ms synchronous storage/report delays after removal, compatible timing, natural/Stop, early cancel and cleanup recovery');
   // Invalid input must not become an active journal or poison later finalization.
   await upload({schema:'dronecv-motion-android-1',frames:[null]});
   assert.match(await page.textContent('#reportStatus'),/frames\[0\].*null/);

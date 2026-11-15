@@ -68,6 +68,7 @@ python -m pytest lab/monitor_test/tests -q
 ```bash
 node lab/monitor_test/tests/motion_scenario_test.mjs
 node lab/monitor_test/tests/sync_check_test.mjs
+node lab/monitor_test/tests/sync_check_end_test.mjs
 node lab/monitor_test/tests/motion_calibration_test.mjs
 node lab/monitor_test/tests/motion_report_v4_test.mjs
 node lab/monitor_test/tests/motion_journal_status_test.mjs
@@ -94,6 +95,8 @@ CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monito
 Совместимость настоящего рендера проверяется неизменённым Android-декодером: `python3 lab/monitor_test/tests/motion_decoder_compat.py /absolute/path/to/frame.png 12345678 42`. Здесь `12345678` и `42` должны совпадать с кодом сохранённого PNG; `none` вместо ID ожидает отсутствие единственного валидного кода. Нужны JDK и кеш компилятора Kotlin 2.0.21 из обычной подготовки проекта; runner не редактирует Android и не заменяет device-тесты.
 
 Регрессии ревью `664d52f`: `sync_check_smoke.mjs` проверяет повреждённый импорт → Стоп/естественное завершение → следующий запуск, ошибки анализа/обновления и сохранения с экспортом из памяти. Стандартный `civ01` с целью 40 px и sync 18 px завершается в Chrome на 1024×768, 1280×800, 1366×768 и 1920×1080; проверяются повтор сохранённых 40/18 после изменения полей, восстановление прежних 6 px и отказ невозможной геометрии без изменения настроек. `motion_scenario_test.mjs` проверяет те же разрешения при DPR 1/1.5/2, целое фото, размер/координаты объекта и отсутствие пересечений с углами, sync и Стоп. Свидетельства и ограничения: [проверка стенда](../../lab/monitor_test/tests/simple-motion-verification.md#исправления-ревью-664d52f).
+
+Граница показа sync: `sync_check_end_test.mjs` загружает настоящие JS-модули в Node/VM с имитацией DOM/RAF и монотонных часов. Искусственные синхронные задержки хранения/анализа 500 мс проверяют порядок очистки, точный `end_ms`, совместимость журнала, строгий отказ кадру после снятия кода, Стоп/естественное завершение, раннюю отмену и восстановление обоих режимов после ошибок. Необязательный аргумент git ref позволяет повторить регрессию на старом коде: `node lab/monitor_test/tests/sync_check_end_test.mjs 6d41e8c` ожидаемо завершается с ошибкой. Это не браузерная проверка. Настоящий Chrome проверяется отдельно через `sync_check_smoke.mjs`, который также вводит синхронные задержки по 500 мс и использует общую имитированную шкалу для RAF и `performance.now`. Эти задержки не являются измерениями устройства. [Результаты](../../lab/monitor_test/tests/simple-motion-verification.md#граница-показа-sync-кода).
 
 Полный `pytest lab/monitor_test/tests` включает прежние режимы галереи; отсутствие Node, браузера, Playwright или изображений приводит к пропуску браузерных проверок. Проверки импорта фактических Kotlin-файлов требуют заранее созданных JVM-фикстур, иначе соответствующие проверки пропускаются. Синтетические журналы и изображения проверяют вычисления и программную совместимость. Читаемость меток на 5×, JPEG телефона, реальные размеры в кадре и точность сопровождения принимают отдельно по [протоколу движения](../../lab/monitor_test/PROTOCOL.md#аппаратная-проверка-на-xiaomi).
 

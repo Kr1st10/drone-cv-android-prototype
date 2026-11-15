@@ -25,10 +25,14 @@
   }
   function refresh(){const select=$('syncCheckSelect');select.replaceChildren();for(const r of checks){const o=document.createElement('option');o.value=r.run_id;o.textContent=`${r.run_id} — ${r.complete?'завершена':'прервана'}`;select.append(o);}select.value=selected||'';render();}
   function display(work){try{work();return null;}catch(e){$('syncCheckStatus').textContent='Не удалось показать результат: '+e.message;return e.message;}}
+  function retain(run){
+    if(!checks.includes(run))checks.push(run);
+    selected=run.run_id;$('syncCheckExport').disabled=false;
+  }
   $('syncCheckSelect').onchange=()=>{selected=$('syncCheckSelect').value;display(()=>render());};
   $('syncCheckExport').onclick=()=>{const run=checks.find(r=>r.run_id===selected);if(run)MotionGallery.download(`sync-check-${run.run_id}.json`,JSON.stringify(run,null,2),'application/json');};
-  window.SyncCheckUI={hasId:id=>checks.some(r=>r.run_id===id),save(run){
-    checks.push(run);selected=run.run_id;
+  window.SyncCheckUI={hasId:id=>checks.some(r=>r.run_id===id),retain,save(run){
+    retain(run);
     let saved=false;try{saved=MotionGallery.save(key,checks);}catch(_){}
     const displayError=display(refresh);
     // The in-memory record remains exportable even when persistence or analysis fails.

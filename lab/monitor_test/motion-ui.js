@@ -70,12 +70,16 @@
     ctx.fillStyle = '#000'; bits.forEach((bit, i) => { if (bit) ctx.fillRect(x + (i % 10) * m, y + Math.floor(i / 10) * m, m, m); });
   }
   async function returnToSettings() {
-    // Keep the canvas opaque until fullscreen has exited; then discard its pixels and markers.
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (document.fullscreenElement === stage) { try { await document.exitFullscreen(); } catch (_) {} }
-    canvas.width = canvas.height = 0;
-    stage.classList.add('hidden');
-    MotionGallery.settings();
+    try {
+      // Attempt fullscreen exit even if painting the blank scene fails.
+      try { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+      finally { if (document.fullscreenElement === stage) await document.exitFullscreen(); }
+    } finally {
+      canvas.width = canvas.height = 0;
+      stage.classList.add('hidden');
+      try { MotionGallery.settings(); }
+      finally { $('settings').classList.remove('hidden'); }
+    }
   }
   async function finish(reason) {
     if (finishing || (!active && !attempt)) return;
@@ -86,13 +90,15 @@
       const current = active; active = null; cancelAnimationFrame(current.raf);
       current.run.complete = !reason; current.run.abort_reason = reason || null;
       if(current.check){
-        current.run.end_ms=current.start===null?null:Math.max(0,performance.now()-current.start);
-        // RAF timestamps and performance.now share the browser monotonic clock.
-        current.run.end_ms=Math.max(current.run.end_ms||0,current.lastElapsed||0);
         attempt=null;
+        SyncCheckUI.retain(current.run);
+        canvas.width=0;
+        // The reset removes the code; timestamp it before storage, analysis or awaits.
+        current.run.end_ms=current.start===null?null:Math.max(0,performance.now()-current.start);
+        let cleanupError=null;
+        try { await returnToSettings(); } catch(e) { cleanupError=e.message; }
         const result=SyncCheckUI.save(current.run);if(!result.saved)saveFailure=Error('Не удалось сохранить проверку чтения');
-        await returnToSettings();
-        status((reason?'Проверка прервана: '+reason:'Проверка завершена')+'. '+(result.saved?'Запись проверки сохранена отдельно от движения.':'Не удалось сохранить в браузере. Экспортируйте проверку до закрытия страницы.')+(result.displayError?' Ошибка отображения: '+result.displayError:''));return;
+        status((reason?'Проверка прервана: '+reason:'Проверка завершена')+'. '+(result.saved?'Запись проверки сохранена отдельно от движения.':'Не удалось сохранить в браузере. Экспортируйте проверку до закрытия страницы.')+(cleanupError?' Ошибка очистки: '+cleanupError:'')+(result.displayError?' Ошибка отображения: '+result.displayError:''));return;
       }
       rememberLocalRun(current.run);
       flush(current);
@@ -107,8 +113,9 @@
     try{await MotionStore.settings(lastScenario);}catch(e){saveFailure=e;}
     status(saveFailure?`Ошибка сохранения: ${saveFailure.message}. Экспортируйте эталон до закрытия страницы.`:reason ? `Запуск прерван: ${reason}. Эталон сохранён как неполный.` : 'Запуск завершён. Эталон сохранён в браузере.');
     } catch(e) {
-      status('Ошибка завершения: '+e.message);
-      await returnToSettings();
+      let message='Ошибка завершения: '+e.message;
+      try { await returnToSettings(); } catch(cleanup) { message+='; ошибка очистки: '+cleanup.message; }
+      status(message);
     } finally { finishing=false;update(); }
   }
   function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
@@ -142,7 +149,12 @@
         current.raf=requestAnimationFrame(frame);
       };
       current.raf=requestAnimationFrame(frame);
-    }catch(e){if(!pending.cancelled){finishing=true;await returnToSettings();finishing=false;status('Не удалось начать проверку: '+e.message);}}
+    }catch(e){if(!pending.cancelled){
+      finishing=true;let message='Не удалось начать проверку: '+e.message;
+      try { await returnToSettings(); } catch(cleanup) { message+='; ошибка очистки: '+cleanup.message; }
+      finally { finishing=false; }
+      status(message);
+    }}
     finally{if(attempt===pending)attempt=null;update();}
   }
   async function start(repeat = false) {
