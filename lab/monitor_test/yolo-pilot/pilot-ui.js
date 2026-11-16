@@ -22,8 +22,10 @@ let result = null;
 let revision = 0;
 
 // Each opened pilot retains the conditions serialized when its fullscreen presentation settled.
-function readCapturedStimulus() {
-  const json = new URLSearchParams(location.hash.slice(1)).get('stimulus');
+const stimulusParam = () => new URLSearchParams(location.hash.slice(1)).get('stimulus');
+const initialStimulus = stimulusParam();
+const sameStimulus = () => stimulusParam() === initialStimulus;
+function readCapturedStimulus(json) {
   if (!json) return null;
   try {
     const stimulus = JSON.parse(json);
@@ -42,7 +44,7 @@ function readCapturedStimulus() {
     return null;
   }
 }
-const capturedStimulus = readCapturedStimulus();
+const capturedStimulus = readCapturedStimulus(initialStimulus);
 if (capturedStimulus) {
   for (const field of ['reference', 'view', 'equivalent_range_m', 'monitor_distance_cm', 'background', 'camera']) {
     const input = form.elements[field];
@@ -62,6 +64,11 @@ function clearResult() {
 }
 
 form.addEventListener('input', clearResult);
+window.addEventListener('hashchange', () => {
+  if (sameStimulus()) return;
+  clearResult();
+  location.reload();
+});
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
@@ -83,7 +90,7 @@ form.addEventListener('submit', async event => {
     if (threshold !== '') conditions.confidence_threshold = Number(threshold) / 100;
     statusLine.textContent = 'Читаю журнал…';
     const text = await file.text();
-    if (submitted !== revision) return;
+    if (submitted !== revision || !sameStimulus()) return;
     result = YoloPilot.analyzeText(text, start, conditions, file.name);
     render(result);
   } catch (error) {
@@ -146,8 +153,8 @@ function download(name, mime, data) {
 }
 
 document.querySelector('#csv').addEventListener('click', () => {
-  if (result) download('yolo-pilot.csv', 'text/csv;charset=utf-8', '\uFEFF' + YoloPilot.toCsv(result));
+  if (result && sameStimulus()) download('yolo-pilot.csv', 'text/csv;charset=utf-8', '\uFEFF' + YoloPilot.toCsv(result));
 });
 document.querySelector('#json').addEventListener('click', () => {
-  if (result) download('yolo-pilot.json', 'application/json', JSON.stringify(result, null, 2) + '\n');
+  if (result && sameStimulus()) download('yolo-pilot.json', 'application/json', JSON.stringify(result, null, 2) + '\n');
 });

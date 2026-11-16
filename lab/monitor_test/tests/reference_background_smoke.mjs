@@ -34,7 +34,8 @@ try {
     return href;
   };
   assert.equal(await background(), 'rgb(255, 255, 255)');
-  let pilotRun;
+  let lastRun;
+  const runs = new Map();
   await page.evaluate(() => {
     const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     Object.defineProperty(HTMLImageElement.prototype, 'src', {
@@ -46,7 +47,7 @@ try {
       }
     });
   });
-  for (const number of [2751, 2704]) {
+  for (const number of [2751, 2704, 2755, 2711]) {
     await page.selectOption('#referencePhotoSelect', 'cabinet_img_' + number + '_archive_v4');
     await page.selectOption('#referenceVariant', 'original');
     await ready();
@@ -56,6 +57,7 @@ try {
     assert.equal(await background(), 'rgb(128, 128, 128)');
     const originalRun = await run();
     assert.equal(captured(originalRun).stimulus_variant, 'original');
+    runs.set(number + '_original', originalRun);
     await page.selectOption('#referenceVariant', 'clean');
     const loading = await snap();
     assert.equal(loading.load_state, 'loading');
@@ -73,48 +75,70 @@ try {
       assert.deepEqual(clean[field], original[field], field);
     }
     assert.ok(Math.abs(clean.equivalent_distance_m - 100) < 0.2);
-    pilotRun = await run();
-    assert.equal(captured(pilotRun).stimulus_variant, 'clean');
+    await page.click('#referenceDouble');
+    const double = await snap();
+    assert.ok(Math.abs(double.review_segment_display_mm / clean.review_segment_display_mm - 2) < 0.003);
+    assert.ok(Math.abs(clean.equivalent_distance_m / double.equivalent_distance_m - 2) < 0.003);
+    await page.click('#referenceHalf');
+    lastRun = await run();
+    assert.equal(captured(lastRun).stimulus_variant, 'clean');
+    runs.set(number + '_clean', lastRun);
   }
-  for (const [number, roi] of [[2755, '15-03'], [2711, '45-07']]) {
-    await page.selectOption('#referencePhotoSelect', 'cabinet_img_' + number + '_archive_v4');
-    await ready();
-    assert.equal(await page.inputValue('#referenceVariant'), 'original');
-    assert.equal(await page.locator('#referenceVariant option[value=clean]').isDisabled(), true);
-    assert.match(await page.textContent('#referenceVariantNote'), new RegExp(roi));
-  }
-  // Switch the live gallery after capture and verify that the saved run exports the prior asset.
+  // Leave the gallery on the historical geometry. Its saved link must still point at the last actual show.
   await page.selectOption('#referencePhotoSelect', 'cabinet_top');
   assert.equal(await background(), 'rgb(255, 255, 255)');
-  assert.equal(await page.locator('#referencePilotLink').getAttribute('href'), pilotRun);
+  assert.equal(await page.locator('#referencePilotLink').getAttribute('href'), lastRun);
   const popup = page.waitForEvent('popup');
   await page.click('#referencePilotLink');
   const pilot = await popup;
-  assert.match(await pilot.textContent('#capturedStimulus'), /IMG_2704.*Чистый фон/);
-  assert.equal(await pilot.locator('input[name=reference]').getAttribute('readonly'), '');
-  await pilot.locator('input[name=report]').setInputFiles({
-    name: 'synthetic-report.json', mimeType: 'application/json', buffer: Buffer.from('{"schema_version":1,"frames":[]}')
-  });
-  await pilot.click('button[type=submit]');
-  await pilot.waitForFunction(() => !document.querySelector('#result').hidden);
+  assert.match(await pilot.textContent('#capturedStimulus'), /IMG_2711.*Чистый фон/);
+  const frontLink = new URL(runs.get('2751_clean'));
+  frontLink.searchParams.set('qa', 'hashchange');
+  await pilot.goto(frontLink.href);
+  await pilot.waitForFunction(() => document.querySelector('[name=reference]').value === 'IMG_2751');
+  const analyze = async () => {
+    await pilot.locator('input[name=report]').setInputFiles({
+      name: 'synthetic-report.json', mimeType: 'application/json', buffer: Buffer.from('{"schema_version":1,"frames":[]}')
+    });
+    await pilot.click('button[type=submit]');
+    await pilot.waitForFunction(() => !document.querySelector('#result').hidden);
+  };
   const download = async id => {
     const event = pilot.waitForEvent('download');
     await pilot.click(id);
     return readFile(await (await event).path(), 'utf8');
   };
-  const result = JSON.parse(await download('#json'));
-  const expected = captured(pilotRun);
-  for (const [key, value] of Object.entries(expected)) assert.deepEqual(result.conditions[key], value, key);
-  const csv = await download('#csv');
-  const csvFields = line => line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-    .map(cell => cell.replace(/^"|"$/g, '').replaceAll('""', '"'));
-  const [headers, cells] = csv.replace(/^\uFEFF/, '').split('\r\n').map(csvFields);
-  assert.equal(headers.length, cells.length);
-  for (const [key, value] of Object.entries(expected)) {
-    assert.equal(cells[headers.indexOf(key)], value == null ? '' : Array.isArray(value) ? JSON.stringify(value) : String(value), key);
+  const checkExport = async key => {
+    const result = JSON.parse(await download('#json'));
+    const expected = captured(runs.get(key));
+    assert.equal(expected.asset_revision, 'cabinet_archive_crop_v4');
+    assert.equal(expected.projection_confirmed, false);
+    assert.equal(expected.geometry_status, 'modelled_approximate');
+    assert.ok(expected.stimulus_variant === 'clean' ? expected.mask_revision : expected.mask_revision === null);
+    for (const [field, value] of Object.entries(expected)) assert.deepEqual(result.conditions[field], value, field);
+    const csv = await download('#csv');
+    const csvFields = line => line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map(cell => cell.replace(/^"|"$/g, '').replaceAll('""', '"'));
+    const [headers, cells] = csv.replace(/^\uFEFF/, '').split('\r\n').map(csvFields);
+    assert.equal(headers.length, cells.length);
+    for (const [field, value] of Object.entries(expected)) {
+      assert.equal(cells[headers.indexOf(field)], value == null ? '' : Array.isArray(value) ? JSON.stringify(value) : String(value), field);
+    }
+  };
+  await analyze();
+  await checkExport('2751_clean');
+  for (const key of ['2704_clean', '2755_original', '2755_clean', '2711_original', '2711_clean']) {
+    const link = runs.get(key);
+    const expected = captured(link);
+    await pilot.evaluate(hash => { location.hash = hash; }, new URL(link).hash);
+    await pilot.waitForFunction(id => document.querySelector('[name=reference]').value === id &&
+      document.querySelector('#result').hidden && !document.querySelector('[name=report]').files.length, expected.reference);
+    assert.equal(await pilot.locator('input[name=reference]').getAttribute('readonly'), '');
+    await analyze();
+    await checkExport(key);
   }
   assert.deepEqual(errors, []);
-  console.log('Paired geometry, original/clean decode and fullscreen, unavailable cuts, and captured pilot JSON/CSV: OK');
+  console.log('Paired geometry, original/clean decode and fullscreen, hash changes, and captured pilot JSON/CSV: OK');
 } finally {
   await browser.close();
 }

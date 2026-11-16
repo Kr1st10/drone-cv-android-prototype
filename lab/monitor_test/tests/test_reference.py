@@ -177,8 +177,7 @@ def test_cabinet_paired_stimulus_files():
     for p in photos:
         assert p['original_size_px'] == [1536, 2048]
         assert hashlib.sha256((ROOT / p['source']).read_bytes()).hexdigest() == p['source_sha256']
-        allowed = {'original', 'clean'} if p['source_photo_id'] in {'IMG_2704', 'IMG_2751'} else {'original'}
-        assert set(p['variants']) == allowed
+        assert set(p['variants']) == {'original', 'clean'}
         for variant, asset in p['variants'].items():
             assert asset['id'] == f"{p['id']}_{variant}"
             png = (ROOT / asset['file']).read_bytes()
