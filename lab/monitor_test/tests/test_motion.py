@@ -9,7 +9,7 @@ from test_gallery_smoke import test_gallery_smoke as run_gallery_smoke
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize('script', ['sync_check_smoke.mjs', 'motion_smoke.mjs', 'motion_auto_smoke.mjs', 'motion_calibration_jpeg_smoke.mjs', 'motion_calibration_real_smoke.mjs', 'motion_controls_smoke.mjs', 'motion_store_review_smoke.mjs', 'motion_report_review_smoke.mjs'])
+@pytest.mark.parametrize('script', ['sync_check_smoke.mjs', 'motion_smoke.mjs', 'motion_auto_smoke.mjs', 'motion_calibration_jpeg_smoke.mjs', 'motion_calibration_real_smoke.mjs', 'motion_controls_smoke.mjs', 'motion_store_review_smoke.mjs', 'motion_report_review_smoke.mjs', 'motion_repeat_recovery_smoke.mjs', 'motion_start_cleanup_smoke.mjs'])
 def test_motion_browser(script, tmp_path):
     run_gallery_smoke(script, tmp_path)
 

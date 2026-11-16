@@ -59,7 +59,7 @@ try {
     await p.click('[data-section=motion]');await p.evaluate(()=>{const e=document.getElementById('motionSyncSize');e.value='6';e.dispatchEvent(new Event('input'));});await p.selectOption('#motionPhoto','civ01');const bounds=await p.evaluate(()=>MANIFEST.images.find(m=>m.id==='civ01').object_bbox);
     await p.click('#motionBounds');for(const [i,id] of ['boundX1','boundY1','boundX2','boundY2'].entries())await p.fill('#'+id,String(bounds[i]));await p.click('#saveBounds');
     await p.evaluate(()=>{crypto.getRandomValues=array=>{array[0]=1;return array;};});
-    if(ending.startsWith('pending'))await p.evaluate(failEnd=>{const begin=MotionStore.begin;MotionStore.begin=async run=>{const key=await begin(run);window.reviewBeginStored=true;await new Promise(resolve=>{window.releaseReviewBegin=resolve;});return key;};if(failEnd)MotionStore.end=()=>Promise.reject(new DOMException('injected finalization failure','QuotaExceededError'));},ending==='pending_end_failure');
+    if(ending.startsWith('pending'))await p.evaluate(failEnd=>{const begin=MotionStore.begin;MotionStore.begin=async(...args)=>{const key=await begin(...args);window.reviewBeginStored=true;await new Promise(resolve=>{window.releaseReviewBegin=resolve;});return key;};if(failEnd)MotionStore.end=()=>Promise.reject(new DOMException('injected finalization failure','QuotaExceededError'));},ending==='pending_end_failure');
     await p.click('#motionStart');
     if(ending.startsWith('pending')){
       await p.waitForFunction(()=>window.reviewBeginStored,null,{polling:50});await p.keyboard.press('Escape');await p.waitForFunction(()=>!document.fullscreenElement,null,{polling:50});await p.evaluate(()=>releaseReviewBegin());

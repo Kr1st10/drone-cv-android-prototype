@@ -110,7 +110,6 @@
     update();
     await returnToSettings();
     if(finishing.finalWrite)await finishing.finalWrite;
-    try{await MotionStore.settings(lastScenario);}catch(e){saveFailure=e;}
     status(saveFailure?`Ошибка сохранения: ${saveFailure.message}. Экспортируйте эталон до закрытия страницы.`:reason ? `Запуск прерван: ${reason}. Эталон сохранён как неполный.` : 'Запуск завершён. Эталон сохранён в браузере.');
     } catch(e) {
       let message='Ошибка завершения: '+e.message;
@@ -179,13 +178,15 @@
       if (repeat && !same(vp, lastScenario.viewport)) throw Error('Размер области движения изменился. Для нового размера нажмите «Старт».');
       const [ax,ay,aw,ah]=v.area;
       const button=$('motionStop').getBoundingClientRect();
-      const plan = MotionScenario.plan({ width: vp.width, height: vp.height, control_width_px:button.width*vp.dpr,control_height_px:button.height*vp.dpr,workspace:{x:ax*vp.width/100,y:ay*vp.height/100,width:aw*vp.width/100,height:ah*vp.height/100},calibration_size_px:v.calibration_size_px,sync_module_px:v.sync_module_px, image_width: v.m.width, image_height: v.m.height, bbox: v.bbox, target_width_px: v.target_width_px, max_speed_px_s: v.max_speed_px_s, acceleration_px_s2: v.acceleration_px_s2, laps: v.laps });
+      const plan = repeat ? structuredClone(lastScenario.plan) : MotionScenario.plan({ width: vp.width, height: vp.height, control_width_px:button.width*vp.dpr,control_height_px:button.height*vp.dpr,workspace:{x:ax*vp.width/100,y:ay*vp.height/100,width:aw*vp.width/100,height:ah*vp.height/100},calibration_size_px:v.calibration_size_px,sync_module_px:v.sync_module_px, image_width: v.m.width, image_height: v.m.height, bbox: v.bbox, target_width_px: v.target_width_px, max_speed_px_s: v.max_speed_px_s, acceleration_px_s2: v.acceleration_px_s2, laps: v.laps });
       $('motionStop').style.left=plan.control_rect[0]/vp.dpr+'px';$('motionStop').style.top=plan.control_rect[1]/vp.dpr+'px';$('motionStop').style.right='auto';
       const runId = freshRunId();
       const run = { schema: 'dronecv-motion-run-2', run_id: runId, mode: null, series_id: seriesId, photo: { id: v.m.id, sha256: v.m.sha256 || null, width: v.m.width, height: v.m.height, bbox: v.bbox }, conditions: { ...v.conditions, viewport: vp }, scenario: plan.config, calibration_points: plan.calibration_points, calibration_markers:plan.calibration_markers,sync_backing:plan.sync_backing, marker: plan.marker, duration_ms: plan.duration_ms, complete: false, abort_reason: 'не завершён', samples: [] };
       saveFailure=null;
       operation='storage';
-      const key=await MotionStore.begin(run);
+      const scenario={values:structuredClone(v),viewport:structuredClone(vp),plan:structuredClone(plan)};
+      const key=await MotionStore.begin(run,scenario);
+      lastScenario=scenario;
       if(pending.cancelled){
         run.abort_reason='старт отменён';rememberLocalRun(run);
         try{await MotionStore.end(key,run);}catch(e){saveFailure=e;}
@@ -193,7 +194,6 @@
         status(saveFailure?`Ошибка сохранения: ${saveFailure.message}. Экспортируйте эталон до закрытия страницы.`:'Запуск прерван до первого кадра. Эталон сохранён как неполный.');
         return;
       }
-      lastScenario = { values: structuredClone(v), viewport: vp };
       $('settings').classList.add('hidden');
       active = { run, plan, image, viewport: vp, start: null, raf: 0,key,saved:0,writes:Promise.resolve() };
       const frame = now => {
@@ -211,13 +211,14 @@
     } catch (e) {
       if (!pending.cancelled) {
         finishing = true;
-        await returnToSettings();
-        finishing = false;
         const reason=e.name==='SecurityError' ? operation==='photo'
           ? 'Браузер запретил чтение пикселей фотографии из локального файла. Откройте стенд через http://localhost или выберите фото кнопкой «Заменить фотографию».'
           : operation==='fullscreen' ? 'Браузер запретил полный экран. Откройте стенд в отдельной вкладке и разрешите полноэкранный режим.'
           : 'Браузер запретил доступ к хранилищу эталонов. Откройте стенд через http://localhost и проверьте настройки хранения данных.' : e.message;
-        status(`Не удалось начать: ${reason}`);
+        let message=`Не удалось начать: ${reason}`;
+        try { await returnToSettings(); } catch(cleanup) { message+='; ошибка очистки: '+cleanup.message; }
+        finally { finishing=false; }
+        status(message);
       }
     } finally { if (attempt === pending) attempt = null; update(); }
   }
@@ -240,6 +241,6 @@
   window.addEventListener('beforeunload', e => { if (active || finishing || saveFailure) { e.preventDefault(); e.returnValue = ''; } });
   window.MotionUI = { refresh };
   status('Настройте движение и нажмите «Старт».');
-  MotionStore.history().then(async history=>{runs=history.runs;lastLocalRun=history.last_local_run;lastScenario=await MotionStore.settings()||null;ready=true;update();$('motionHistoryStatus').textContent=lastLocalRun?'Последний локальный запуск: '+lastLocalRun.run_id:history.chronology_unknown?'Порядок прежних записей неизвестен. Экспортируйте все записи кнопкой «Экспорт серии»; последний запуск не выбран произвольно.':'Локальных запусков ещё нет. Импорт эталонов не назначает последний запуск.';}).catch(e=>{status('Хранилище эталонов недоступно: '+e.message);});
+  MotionStore.history().then(history=>{runs=history.runs;lastLocalRun=history.last_local_run;lastScenario=history.last_scenario;ready=true;update();$('motionHistoryStatus').textContent=lastLocalRun?'Последний локальный запуск: '+lastLocalRun.run_id+(lastScenario?'':'. Связанный снимок повторения отсутствует. Начните новый сценарий.'):history.chronology_unknown?'Порядок прежних записей неизвестен. Экспортируйте все записи кнопкой «Экспорт серии»; последний запуск не выбран произвольно.':'Локальных запусков ещё нет. Импорт эталонов не назначает последний запуск.';}).catch(e=>{status('Хранилище эталонов недоступно: '+e.message);});
   refresh();
 })();
