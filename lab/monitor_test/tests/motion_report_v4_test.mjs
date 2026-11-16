@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const {analyze}=createRequire(import.meta.url)('../motion-report-v4.js');
+const require=createRequire(import.meta.url),{analyze}=require('../motion-report-v4.js'),{timelineImporter}=require('../motion-report.js');
 const points=[[0,0],[1,0],[1,1],[0,1]];
 const run_id='12345678';
 function fixture() {
@@ -94,7 +94,55 @@ function noReturnFixture(complete=true) {
   run.complete=complete;journal.complete=complete;
   return {run,journal};
 }
+function lateRecording(empty=false) {
+  const {run,journal,pub}=fixture();journal.frames[0].capture_ns=0;
+  journal.frames=journal.frames.filter(f=>f.capture_ns>=1000e6);
+  journal.publications=[{...pub(1000,empty),frame_id:null,initial_snapshot:true,state_known:true},pub(1100),pub(3200,true),pub(4200),pub(5600,true)];
+  return {run,journal};
+}
+// Real production importer; the trajectory, state events and clocks are synthetic.
+function lateTimeline(empty=false,historicalSnapshot=false) {
+  const {run,journal}=lateRecording(empty),importer=timelineImporter();let id=0;
+  const origin=90071992547409930n,ns=time=>String(origin+BigInt(time)*1000000n);
+  const add=(type,data,time=1000)=>importer.push({schema:'dronecv-session-timeline-1',session_id:'late',event_id:String(++id),event_ns:ns(time),type,data});
+  add('header',{start_ns:ns(1000),mode:'yolo_lk'});
+  add('metadata',{geometry:journal.geometry,calibration_image:journal.calibration_image});
+  add('state',{publication_ns:ns(historicalSnapshot?600:1000),reason:'initial_snapshot',box:empty?null:[.2,.2,.4,.4],frame_id:'6',motion_frame_id:'6',result_source:'yolo'});
+  for(const f of journal.frames)add('frame',{frame_id:String(f.frame_id),capture_ns:ns(f.capture_ns/1e6),analyzer_entry_ns:ns(f.analyzer_ns/1e6),timebase:'elapsed_realtime',marker:f.marker},f.capture_ns/1e6);
+  for(const p of journal.publications.slice(1))add('state',{publication_ns:ns(p.published_ns/1e6),motion_frame_id:p.frame_id===null?null:String(p.frame_id),box:p.bbox,result_source:p.source},p.published_ns/1e6);
+  add('session_end',{stop_ns:ns(6000),recording_complete:true,dropped_count:'0',accepted_count:String(id),written_count:String(id),interrupted:false},6000);
+  return {run,journal:importer.finish()};
+}
 const reviewCases=[
+  ['full first-appearance coverage preserves capture 100–200 ms',()=>{
+    const {run,journal}=fixture();journal.frames[0].capture_ns=0;
+    const r=analyze(run,journal,points);assert.equal(r.capture.status,'bounded');near(r.capture.lower_ms,100);near(r.capture.upper_ms,200);
+  }],
+  ...[false,true].map(empty=>[`late recording with ${empty?'empty':'existing'} initial snapshot cannot bound first capture`,()=>{
+    const {run,journal}=lateRecording(empty),r=analyze(run,journal,points);
+    assert.equal(r.capture.status,'unavailable',JSON.stringify(r.capture));assert.equal(r.capture.lower_ms,null);assert.equal(r.capture.upper_ms,null);
+    assert.match(r.capture.reason,/начало.*видимой фазы/);
+    assert.equal(r.cleanup.status,'bounded');assert.equal(r.reacquisition.status,'bounded');
+    assert.ok(r.expected_ms>0);assert.ok(r.good_ms>0);assert.ok(r.center_error.evaluated_ms>0);assertFiniteNumbers(r);
+  }]),
+  ...[false,true].map(empty=>[`late initial snapshot through timelineImporter (${empty?'empty':'historical existing'})`,()=>{
+    const {run,journal}=lateTimeline(empty,!empty);
+    assert.equal(journal.complete,true);assert.equal(journal.recording_complete,true);assert.equal(journal.truncated,false);
+    const initial=journal.publications.find(p=>p.initial_snapshot);assert.equal(initial.frame_id,null);
+    if(!empty)assert.ok(initial.published_ns<0,'initial publication may predate header.start_ns');
+    const r=analyze(run,journal,points);assert.equal(r.capture.status,'unavailable',JSON.stringify(r.capture));assert.equal(r.capture.lower_ms,null);
+    assert.equal(r.cleanup.status,'bounded');assert.equal(r.reacquisition.status,'bounded');assertFiniteNumbers(r);
+  }]),
+  ['unknown state already active at first appearance cannot exclude earlier capture',()=>{
+    const {run,journal}=fixture();journal.publications[0].state_known=false;
+    const r=analyze(run,journal,points);assert.equal(r.capture.status,'unavailable',JSON.stringify(r.capture));assert.equal(r.capture.lower_ms,null);
+    assert.equal(r.cleanup.status,'bounded');assert.equal(r.reacquisition.status,'bounded');
+  }],
+  ['first-appearance state must be known for all compatible offsets',()=>{
+    const {run,journal,pub}=fixture();journal.frames[0].capture_ns=0;
+    journal.publications.splice(1,0,{...pub(450,true),state_known:false});
+    const r=analyze(run,journal,points);assert.equal(r.capture.status,'unavailable',JSON.stringify(r.capture));assert.equal(r.capture.lower_ms,null);
+  }],
   ['absence interval started before disappearance',()=>{
     const {run,journal}=absentBeforeHide(),r=analyze(run,journal,points);
     assert.equal(r.cleanup.status,'not_applicable');assert.equal(r.reacquisition.status,'bounded');

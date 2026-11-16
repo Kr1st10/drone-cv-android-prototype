@@ -61,6 +61,18 @@
       if (!timed) return unavailable('Недостаточная или несовместимая синхронизация.');
       if (!full) return unavailable('Неполная запись или незавершённый эталон.');
       if (endObserved <= start) return unavailable('Запись не охватывает начало оцениваемой фазы.');
+      if(kind === 'capture') {
+        const a=(start+lo)*1e6,b=(start+hi)*1e6;
+        // Imported clocks are relative to header.start_ns. A historical
+        // initial_snapshot cannot extend recorded state coverage before zero.
+        const recordedFrom=journal.source_schema==='dronecv-session-timeline-1'?0:-Infinity;
+        const prior=pubs.filter(p=>p.published_ns<=a).at(-1);
+        const during=pubs.filter(p=>p.published_ns>a&&p.published_ns<=b);
+        if(!frames.length||Math.max(recordedFrom,frames[0].capture_ns)>a||!prior||
+          [prior,...during].some(p=>p.state_known===false)) {
+          return unavailable('Запись состояния не охватывает начало видимой фазы для всех смещений часов; более ранний захват не исключён.');
+        }
+      }
       const mayBeInPhase = p => p.published_ns/1e6-lo >= start && p.published_ns/1e6-hi < limit;
       const potential = candidates.filter(mayBeInPhase);
       const possible = kind === 'clear' ? potential : potential.filter(p => correctAtPublication(p,start,false));
@@ -84,7 +96,7 @@
       return { status: upper === null ? 'right_censored' : 'bounded', lower_ms: lower, upper_ms: upper,
         reason: upper === null ? 'Событие не подтверждено до конца доступного интервала наблюдения.' : 'Границы учитывают все совместимые смещения часов; это публикация координат, не показ рамки дисплеем.' };
     }
-    const capture = firstVisible === undefined ? unavailable('Нет видимой цели.') : eventBounds(pubs,firstVisible,hide ?? run.duration_ms,'correct');
+    const capture = firstVisible === undefined ? unavailable('Нет видимой цели.') : eventBounds(pubs,firstVisible,hide ?? run.duration_ms,'capture');
     const missingReturn = () => unavailable('Повторное появление не было зафиксировано в фактических шагах эталона.');
     let cleanup = unavailable('Нет эпизода исчезновения.'), reacquisition = missingReturn();
     if (hide !== null && timed && full) {
