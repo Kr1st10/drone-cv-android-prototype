@@ -69,6 +69,7 @@ python -m pytest lab/monitor_test/tests -q
 
 ```bash
 node lab/monitor_test/tests/motion_scenario_test.mjs
+node lab/monitor_test/tests/motion_timeline_test.mjs
 node lab/monitor_test/tests/sync_check_test.mjs
 node lab/monitor_test/tests/sync_check_end_test.mjs
 node lab/monitor_test/tests/motion_calibration_test.mjs
@@ -81,10 +82,15 @@ node lab/monitor_test/tests/timeline_import_test.mjs
 
 Первый набор проверяет фазы, единое время, геометрию области и скрытое продолжение маршрута. Второй использует синтетические изображения с перспективой, разными размерами, пропуском и повтором ID. Третий проверяет новый `motion-scenario-v4`, включая временные доли, очистку, сохранённую рамку, повторный захват, цензурирование и неопределённость часов. В него входят пустое состояние, начавшееся до скрытия, избыточный `clear`, поздняя очистка и отсутствие фактически показанного возвращения. `motion_journal_status_test.mjs` проверяет читаемость без JPEG/эталона, временное сопоставление без пространственных точек и совпадение границ часов с прежним анализатором. Старые IoU, ошибка центра и импорт timeline проверяются отдельно, без изменения критерия `motion-retention-v3`.
 
-Для браузерных сценариев нужны локальные изображения, Chrome/Chromium и Playwright. Укажите каталог с `node_modules/playwright` в `PLAYWRIGHT_NODE_DIR`; запускайте Node из этого каталога, поскольку сценарии используют его для поиска пакета. Пример с абсолютными путями:
+Для браузерных сценариев нужны локальные изображения, Chrome/Chromium и Playwright. Укажите каталог с `node_modules/playwright` в `PLAYWRIGHT_NODE_DIR`; запускайте Node из этого каталога, поскольку сценарии используют его для поиска пакета.
+
+`motion_timeline_test.mjs` проверяет независимость траектории от периода, удержание 100 мс, задержки без вымышленных показов, несколько экспозиций одного кода, текущую и устаревшую рамки, неизвестность времени и границы Stop. `motion_timeline_smoke.mjs` проверяет canvas, fullscreen, IndexedDB, отмену, завершение, обрыв/reload и отказ будущей версии. Отдельная часть использует обычный RAF Chrome без подмены часов. Эти времена относятся к браузерной модели, не физическому дисплею или телефону.
+
+Пример с абсолютными путями:
 
 ```bash
 cd /absolute/path/to/playwright-workdir
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_timeline_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_auto_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_controls_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_calibration_jpeg_smoke.mjs /absolute/path/to/repository/lab/monitor_test
