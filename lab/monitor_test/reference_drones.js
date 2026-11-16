@@ -386,7 +386,7 @@
       clean: ['IMG_2704_clean_v4_crop.png', '3a15824c09621596e407195c9f8f89781c64ab9f6db9774fa8e089093aeae1f2', 'v4_top_local_manual_1'] },
     { number: 2755, crop: [418, 646, 1278, 896], bounds: [440, 672, 1256, 870],
       original: ['IMG_2755_v2.png', '442abcd66752da457093003c2a5147e0d8e51dfa644861905a29c4d1c65b4c78'],
-      clean: ['IMG_2755_clean_v4_crop.png', '2aa81bf04c259552c679771959e32ff976e0294ff8f8c8a8d642df69554675c7', 'v4_oblique_15_local_2'] },
+      clean: ['IMG_2755_clean_v4_crop.png', '62c6c851c76be943cc5f811f21eb8e5b8868fb8e177e14ffb95468ebf737394d', 'v4_oblique_15_local_2'] },
     { number: 2711, crop: [149, 551, 1478, 1478], bounds: [184, 583, 1451, 1444],
       original: ['IMG_2711_archive_crop.png', '8d5a7a44f2b5632f073258adc0a8a777851771eabe0cb39e24e3350c6e5dece5'],
       clean: ['IMG_2711_clean_v4_crop.png', '88900142da4cef430194b1182c4ac5ab4b2c909df3b186c8fbe346f1fadd8749', 'v4_oblique_45_local_2'] }
