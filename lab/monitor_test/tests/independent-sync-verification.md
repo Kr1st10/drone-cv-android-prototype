@@ -4,7 +4,7 @@
 
 ## Локальные проверки
 
-Node 22.22.1, Chrome на macOS, Playwright из `/private/tmp/dronecv-auto-browser`. Изображения взяты из существующей локальной копии; новых загрузок и изменения исходников не было.
+Node 22.22.1, Chrome на macOS, Playwright из `/private/tmp/dronecv-auto-browser`. Изображения взяты из существующей локальной копии; новых загрузок и изменения исходных изображений не было.
 
 ```bash
 node lab/monitor_test/tests/motion_test.mjs
