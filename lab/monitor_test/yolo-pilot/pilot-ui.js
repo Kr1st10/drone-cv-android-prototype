@@ -21,6 +21,39 @@ const integrityLabels = {
 let result = null;
 let revision = 0;
 
+// Each opened pilot retains the conditions serialized when its fullscreen presentation settled.
+function readCapturedStimulus() {
+  const json = new URLSearchParams(location.hash.slice(1)).get('stimulus');
+  if (!json) return null;
+  try {
+    const stimulus = JSON.parse(json);
+    if (!['original', 'clean'].includes(stimulus?.stimulus_variant) ||
+        !/^IMG_\d{4}$/.test(stimulus.source_photo_id) ||
+        ![stimulus.source_sha256, stimulus.asset_sha256].every(value => /^[a-f0-9]{64}$/.test(value)) ||
+        stimulus.background !== 'neutral_gray_808080_v1' || stimulus.background_hex !== '#808080') throw new TypeError();
+    for (const field of ['reference', 'view', 'equivalent_range_m', 'monitor_distance_cm', 'background', 'camera']) {
+      if (typeof stimulus[field] !== (field.endsWith('_m') || field.endsWith('_cm') ? 'number' : 'string')) throw new TypeError();
+    }
+    return stimulus;
+  } catch {
+    document.querySelector('#capturedStimulus').hidden = false;
+    document.querySelector('#capturedStimulus').textContent = 'Условия показа в ссылке повреждены. Откройте пилот из стенда повторно.';
+    form.querySelector('button[type="submit"]').disabled = true;
+    return null;
+  }
+}
+const capturedStimulus = readCapturedStimulus();
+if (capturedStimulus) {
+  for (const field of ['reference', 'view', 'equivalent_range_m', 'monitor_distance_cm', 'background', 'camera']) {
+    const input = form.elements[field];
+    input.value = capturedStimulus[field];
+    input.readOnly = true;
+  }
+  const note = document.querySelector('#capturedStimulus');
+  note.hidden = false;
+  note.textContent = `Условия показа сохранены · ${capturedStimulus.source_photo_id} · ${capturedStimulus.stimulus_variant === 'clean' ? 'Чистый фон' : 'Оригинал'}`;
+}
+
 function clearResult() {
   revision++;
   result = null;
@@ -34,7 +67,8 @@ form.addEventListener('submit', async event => {
   event.preventDefault();
   clearResult();
   const submitted = revision;
-  const { report: file, start, threshold_pct: threshold, ...conditions } = Object.fromEntries(new FormData(form));
+  const { report: file, start, threshold_pct: threshold, ...fields } = Object.fromEntries(new FormData(form));
+  const conditions = { ...fields, ...capturedStimulus };
   try {
     for (const field of ['equivalent_range_m', 'monitor_distance_cm']) {
       conditions[field] = Number(conditions[field]);

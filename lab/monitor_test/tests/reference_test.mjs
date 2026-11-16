@@ -12,8 +12,12 @@ for (const name of ['positive', 'equivalentDistance', 'validBounds', 'physicalWi
   vm.runInContext(script.slice(start, end), ctx);
 }
 const geometry = { physicalWidth: ctx.physicalWidth, equivalentDistance: ctx.equivalentDistance };
+if (process.argv.includes('--paired-photos')) {
+  console.log(JSON.stringify(profiles[0].photos.filter(p => p.variants)));
+  process.exit(0);
+}
 if (process.argv.includes('--cabinet-photos')) {
-  console.log(JSON.stringify(profiles[0].photos.filter(p => p.geometry_revision)));
+  console.log(JSON.stringify(profiles[0].photos.filter(p => p.geometry_revision && !p.variants)));
   process.exit(0);
 }
 if (process.argv.includes('--segment-oracle')) {
@@ -35,7 +39,7 @@ assert.deepEqual(Array.from(profiles.slice(1), p => Array.from(p.dimensions_mm))
 assert.equal(new Set(profiles.map(p => p.id)).size, 4);
 for (const p of profiles) {
   if (p.id !== 'cabinet_reference') assert.match(p.source, /^https:\/\//);
-  assert.equal(p.photos.length, p.id === 'cabinet_reference' ? 7 : 3);
+  assert.equal(p.photos.length, p.id === 'cabinet_reference' ? 11 : 3);
   assert.equal(new Set(p.photos.map(photo => photo.id)).size, p.photos.length);
   for (const photo of p.photos) {
     assert.equal(photo.axis, null); // no verified physical segment was supplied for these real pictures
@@ -43,7 +47,7 @@ for (const p of profiles) {
     if (photo.file) assert.ok(fs.existsSync(new URL('../' + photo.file, import.meta.url)));
   }
 }
-assert.equal(profiles.flatMap(p => p.photos).filter(p => p.file).length, 13);
+assert.equal(profiles.flatMap(p => p.photos).filter(p => p.file).length, 17);
 const profile = { photos: [{ id: 'fixture', file: 'TEST ONLY', width: 1000, height: 500, bounds_px: [100, 50, 400, 200],
   model_confirmed: true, projection_confirmed: true,
   axis: { from: [100, 100], to: [400, 100], real_cm: 57.85, source: 'SYNTHETIC axis — not a real photograph' } }] };
@@ -165,4 +169,18 @@ for (const [number, physical, projection, screenMm, yaw, elevation] of [
   assert.ok(Math.abs(result.equivalent_distance_m - 100) < 1e-9);
   assert.ok(Math.abs(estimate(cabinet, { ...render, scale: render.scale * 2 }, 434, 0.25, geometry).equivalent_distance_m - 50) < 1e-9);
   assert.equal(measure(cabinet, render, 434, 0.25, geometry).equivalent_distance_m, null);
+}
+
+
+for (const paired of cabinet.photos.filter(photo => photo.variants)) {
+  const original = cabinet.photos.find(photo => photo.id === paired.id.replace('_archive_v4', '_v2'));
+  assert.notEqual(paired.id, original.id);
+  assert.equal(paired.geometry_revision, original.geometry_revision);
+  assert.equal(paired.review_segment.projected_mm, original.review_segment.projected_mm);
+  assert.equal(paired.review_segment.physical_mm, original.review_segment.physical_mm);
+  assert.equal(paired.projection_confirmed, false);
+  for (const [i, name] of ['from', 'to'].entries()) {
+    const point = paired.source_points_px[i];
+    assert.deepEqual(Array.from(paired.review_segment[name]), Array.from(point, (coordinate, j) => coordinate - paired.crop_px[j]));
+  }
 }
