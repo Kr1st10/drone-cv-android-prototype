@@ -10,6 +10,7 @@ import ru.university.dronecv.tracking.FrameKey
 import ru.university.dronecv.tracking.GrayFrame
 import ru.university.dronecv.tracking.OpenCvLkTracker
 import ru.university.dronecv.tracking.TrackBox
+import ru.university.dronecv.tracking.TrackingFailure
 import kotlin.random.Random
 
 @RunWith(AndroidJUnit4::class)
@@ -33,9 +34,17 @@ class OpenCvLkInstrumentedTest {
         OpenCvLkTracker().use { tracker ->
             val box = TrackBox(32.0, 24.0, 64.0, 56.0)
             assertNull(tracker.initialize(frame(1, 0, 0, visible = false), box))
+            assertEquals(TrackingFailure.LOW_TEXTURE, tracker.failureReason)
             assertNull(tracker.initialize(frame(1, 0, 0), TrackBox(32.0, 24.0, 38.0, 30.0)))
+            assertEquals(TrackingFailure.INVALID_BOX, tracker.failureReason)
+            val stamp = frame(1, 0, 0).stamp
+            val ramp = GrayFrame.copyOf(FrameKey(1, 2, 1), stamp, 128, 96,
+                ByteArray(128 * 96) { (it % 128 * 2).toByte() })
+            assertNull(tracker.initialize(ramp, box))
+            assertEquals(TrackingFailure.INSUFFICIENT_POINTS, tracker.failureReason)
             assertNotNull(tracker.initialize(frame(1, 0, 0), box))
             assertNull(tracker.update(frame(2, 4, 2, source = 9)))
+            assertEquals(TrackingFailure.STALE_SESSION, tracker.failureReason)
         }
     }
 

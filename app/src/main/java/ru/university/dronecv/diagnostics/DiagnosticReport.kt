@@ -1,5 +1,7 @@
 package ru.university.dronecv.diagnostics
 
+import ru.university.dronecv.tracking.TrackingEventKind
+import ru.university.dronecv.tracking.TrackingFailure
 import ru.university.dronecv.camera.FrameStamp
 import ru.university.dronecv.camera.TrackingSampleKind
 import ru.university.dronecv.camera.TrackingSignal
@@ -95,6 +97,22 @@ private fun StringBuilder.appendTracking(snapshot: TrackingSnapshot, durationNs:
     val fps = if (durationNs > 0) snapshot.trackUpdates * 1e9 / durationNs else null
     append("{\"schema_version\":1,\"observed_frames\":${snapshot.observedFrames},\"track_updates\":${snapshot.trackUpdates},")
     append("\"corrections\":${snapshot.corrections},\"loss_events\":${snapshot.lossEvents},\"unstored_samples\":${snapshot.unstoredSamples},")
+    snapshot.operations?.let { operations ->
+        append("\"operations\":{\"schema_version\":1,\"counts\":{")
+        append(TrackingEventKind.entries.joinToString(",") {
+            "\"${it.name.lowercase()}\":${operations.counts[it] ?: 0}"
+        })
+        append("},\"unfinished_requests\":${operations.unfinishedRequests},\"replay_details_unknown\":${operations.unknownReplayDetails},\"failure_reasons\":{")
+        append(listOf(TrackingEventKind.INITIALIZATION_FAILED,
+            TrackingEventKind.REPLAY_FAILED,
+            TrackingEventKind.REQUEST_REJECTED,
+            TrackingEventKind.TRACK_LOST).joinToString(",") { kind ->
+            "\"${kind.name.lowercase()}\":{" + TrackingFailure.entries.joinToString(",") {
+                "\"${it.name.lowercase()}\":${operations.failures[kind]?.get(it) ?: 0}"
+            } + "}"
+        })
+        append("}},")
+    }
     append("\"updates_fps_session\":$fps,\"timing_summary_ms\":{")
     append("\"update_work\":${summary(updates.map { it.workMs })},")
     append("\"update_capture_to_signal\":${summary(updates.mapNotNull { it.captureToSignalMs })},")

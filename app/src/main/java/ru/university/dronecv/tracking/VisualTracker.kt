@@ -46,6 +46,7 @@ data class TrackEstimate(val box: TrackBox, val quality: TrackQuality)
 
 /** One instance, one owner thread. Null means lost/untrackable; it must clear the previous position. */
 interface VisualTracker : AutoCloseable {
+    val failureReason: TrackingFailure get() = TrackingFailure.UNKNOWN
     fun initialize(frame: GrayFrame, box: TrackBox): TrackEstimate?
     fun update(frame: GrayFrame): TrackEstimate?
     override fun close()

@@ -37,6 +37,8 @@ object LkParameters {
 
 /** Translation-only LK prototype. Native state is confined to its owner; never invoke on the UI thread. */
 class OpenCvLkTracker : VisualTracker {
+    override var failureReason = TrackingFailure.UNKNOWN
+        private set
     private var previous: Mat? = null
     private var points = emptyList<Point>()
     private var initialPoints = 0
@@ -48,8 +50,11 @@ class OpenCvLkTracker : VisualTracker {
 
     override fun initialize(frame: GrayFrame, box: TrackBox): TrackEstimate? {
         close()
-        if (!box.fits(frame) || box.width < 8 || box.height < 8) return null
-        val patch = patch(frame, box) ?: return null
+        failureReason = TrackingFailure.UNKNOWN
+        if (!box.fits(frame) || box.width < 8 || box.height < 8) {
+            failureReason = TrackingFailure.INVALID_BOX; return null
+        }
+        val patch = patch(frame, box) ?: run { failureReason = TrackingFailure.LOW_TEXTURE; return null }
         val mats = NativeMats()
         try {
             val image = mats.own(mat(frame))
@@ -61,7 +66,7 @@ class OpenCvLkTracker : VisualTracker {
             try { roi.setTo(Scalar(255.0)) } finally { roi.release() }
             Imgproc.goodFeaturesToTrack(image, corners, LkParameters.MAX_POINTS, LkParameters.CORNER_QUALITY, LkParameters.CORNER_DISTANCE, mask, 3)
             val found = corners.toList()
-            if (found.size < LkParameters.MIN_POINTS) return null
+            if (found.size < LkParameters.MIN_POINTS) { failureReason = TrackingFailure.INSUFFICIENT_POINTS; return null }
             previous = mats.take(image)
             points = found
             initialPoints = found.size
@@ -81,12 +86,20 @@ class OpenCvLkTracker : VisualTracker {
     }
 
     override fun update(frame: GrayFrame): TrackEstimate? {
+        failureReason = TrackingFailure.UNKNOWN
         val oldFrame = this.frame ?: return null
         val oldBox = box ?: return null
         if (frame.key.generation != oldFrame.key.generation || frame.key.source != oldFrame.key.source ||
             frame.key.sequence <= oldFrame.key.sequence || !frame.sameGeometry(oldFrame) ||
             invalidGap(oldFrame, frame) ||
             frame.stamp.ageAt(frame.stamp.analyzerEntryNs)?.let { it > MAX_FRAME_AGE_MS } == true) {
+            failureReason = when {
+                !frame.sameGeometry(oldFrame) -> TrackingFailure.GEOMETRY_CHANGED
+                invalidGap(oldFrame, frame) -> TrackingFailure.FRAME_GAP
+                frame.key.generation != oldFrame.key.generation || frame.key.source != oldFrame.key.source -> TrackingFailure.STALE_SESSION
+                frame.stamp.ageAt(frame.stamp.analyzerEntryNs)?.let { it > MAX_FRAME_AGE_MS } == true -> TrackingFailure.STALE_CAPTURE
+                else -> TrackingFailure.UNKNOWN
+            }
             close(); return null
         }
         val mats = NativeMats()
@@ -115,17 +128,17 @@ class OpenCvLkTracker : VisualTracker {
                     candidates[i].x in 0.0..(frame.width - 1).toDouble() &&
                     candidates[i].y in 0.0..(frame.height - 1).toDouble()
             }
-            if (valid.size < LkParameters.MIN_POINTS) { close(); return null }
+            if (valid.size < LkParameters.MIN_POINTS) { failureReason = TrackingFailure.UPDATE_QUALITY; close(); return null }
             val dx = median(valid.map { candidates[it].x - points[it].x })
             val dy = median(valid.map { candidates[it].y - points[it].y })
             val inliers = valid.filter { i -> hypot(candidates[i].x - points[i].x - dx,
                 candidates[i].y - points[i].y - dy) <= LkParameters.INLIER_DISTANCE }
-            if (inliers.size < max(LkParameters.MIN_POINTS, ceil(initialPoints * LkParameters.RETAINED_FRACTION).toInt())) { close(); return null }
+            if (inliers.size < max(LkParameters.MIN_POINTS, ceil(initialPoints * LkParameters.RETAINED_FRACTION).toInt())) { failureReason = TrackingFailure.UPDATE_QUALITY; close(); return null }
             val moved = oldBox.translated(dx, dy, frame.width, frame.height)
-            if (moved == null) { close(); return null }
+            if (moved == null) { failureReason = TrackingFailure.UPDATE_QUALITY; close(); return null }
             val patch = patch(frame, moved)
             val correlation = patch?.let { correlation(checkNotNull(template), it) }
-            if (correlation == null || correlation < LkParameters.MIN_CORRELATION) { close(); return null }
+            if (correlation == null || correlation < LkParameters.MIN_CORRELATION) { failureReason = TrackingFailure.UPDATE_QUALITY; close(); return null }
             val quality = TrackQuality(inliers.size, initialPoints, median(inliers.map { errors[it] }), correlation)
             previous?.release()
             previous = mats.take(image)
