@@ -13,6 +13,26 @@ import org.json.JSONObject
 
 @RunWith(AndroidJUnit4::class)
 class CameraInventoryInstrumentedTest {
+    @Test fun exportPreservesUnknownCameraEvidenceAndPackagedBuildWithoutHardware() {
+        val probe = CameraProbeState().apply {
+            requestedZoom = 5f; physicalId = "requested"
+            requestedAf = 1; availableAf = listOf(0, 1)
+        }
+        val report = JSONObject(exportCameraInventory("{}", probe))
+        val metadata = report.getJSONObject("metadata")
+        assertEquals(ru.university.dronecv.BuildConfig.BUILD_GIT_SHA, metadata.getString("git_sha"))
+        assertEquals(ru.university.dronecv.BuildConfig.VERSION_CODE, metadata.getInt("version_code"))
+        val camera = report.getJSONObject("camera_context")
+        assertEquals("latest_context_not_frame_bound", camera.getString("scope"))
+        assertEquals("requested", camera.getString("requested_physical_id"))
+        assertEquals(5.0, camera.getDouble("requested_zoom"), 0.0)
+        for (field in listOf("latest_active_physical_id", "confirmed_zoom", "latest_capture_zoom", "actual_af", "actual_ae", "actual_stabilization")) {
+            assertTrue(field, camera.isNull(field))
+        }
+        assertEquals(1, camera.getInt("requested_af"))
+        assertTrue(camera.getJSONObject("sources").getString("actual_modes").contains("CaptureResult"))
+    }
+
     @Test fun inventoryIsValidJsonAndIncludesCameraIdentifiers() {
         val inst = InstrumentationRegistry.getInstrumentation()
         val context = inst.targetContext

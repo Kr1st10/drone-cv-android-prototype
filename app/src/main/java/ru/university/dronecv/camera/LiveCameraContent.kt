@@ -80,7 +80,7 @@ internal fun LiveCameraContent(
         val panelHeight = minOf(280.dp, maxHeight * 0.5f)
         val panelWidth = minOf(240.dp, maxWidth * 0.45f)
         val camera: @Composable (Modifier) -> Unit = { modifier ->
-            Box(modifier.background(Color.Black)) {
+            Box(modifier.testTag("live-preview-region").background(Color.Black)) {
                 CameraPreview(controller, running, confidence, probe, Modifier.fillMaxSize(),
                     onError = onCameraError, onRecoverableIssue = onCameraIssue,
                     onInterruption = { diagnostics.stop(true, "Camera paused, rebound or interrupted"); controller.motion?.stop("Camera interrupted or rebound") })
@@ -120,6 +120,8 @@ private fun LiveControls(
     val input by controller.input.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
     Column(modifier.background(MaterialTheme.colorScheme.surface).verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(ru.university.dronecv.PackagedBuild.identity.label(), style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.testTag("build-identity"))
         Button(onClick = { onRunningChange(!running) }, enabled = !threadState.switching, modifier = Modifier.fillMaxWidth()) {
             Text(if (running) "Остановить" else "Начать детекцию")
         }
@@ -234,7 +236,7 @@ private fun LiveControls(
         }
         if (probe.loading) Text("Переключение камеры…", style = MaterialTheme.typography.bodySmall)
         probe.warning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-        CameraInventoryPanel(probe)
+        CameraInventoryPanel(probe) { controller.exportMetadata(cameraContext(probe)) }
     }
 }
 
@@ -262,13 +264,12 @@ private fun LiveOverlay(state: LiveState, yoloOnly: Boolean, modifier: Modifier)
 
 private fun format(value: Double) = String.format(Locale.US, "%.1f", value)
 
-private fun cameraContext(probe: CameraProbeState): String {
+internal fun cameraContext(probe: CameraProbeState): String {
     fun q(value: String?): String = value?.let { ru.university.dronecv.timeline.quote(it) } ?: "null"
     return "{\"logical_id\":${q(probe.logicalId)},\"requested_physical_id\":${q(probe.physicalId)}," +
         "\"latest_active_physical_id\":${q(probe.activePhysicalId)},\"requested_zoom\":${probe.requestedZoom}," +
         "\"confirmed_zoom\":${probe.actualZoom},\"latest_capture_zoom\":${probe.captureZoom}," +
         "\"scope\":\"latest_context_not_frame_bound\",\"requested_af\":${probe.requestedAf},\"actual_af\":${probe.actualAf},\"available_af\":${probe.availableAf},\"requested_ae\":${probe.requestedAe},\"actual_ae\":${probe.actualAe},\"available_ae\":${probe.availableAe},\"requested_stabilization\":${probe.requestedStabilization},\"actual_stabilization\":${probe.actualStabilization},\"available_stabilization\":${probe.availableStabilization}, " +
-        "\"git_sha\":${q(ru.university.dronecv.BuildConfig.BUILD_GIT_SHA)},\"git_dirty\":${ru.university.dronecv.BuildConfig.BUILD_GIT_DIRTY}," +
-        "\"app_version\":${q(ru.university.dronecv.BuildConfig.VERSION_NAME)},\"model_asset\":${q(ru.university.dronecv.BuildConfig.DRONE_MODEL_ASSET)}," +
-        "\"model_sha256\":${q(ru.university.dronecv.BuildConfig.DRONE_MODEL_SHA256)},\"device\":${q(android.os.Build.MODEL)},\"android_release\":${q(android.os.Build.VERSION.RELEASE)}}"
+        "\"sources\":{\"logical_id\":\"Camera2CameraInfo\",\"requested_physical_id\":\"UI selection; null means auto\",\"requested_zoom\":\"UI selection\",\"confirmed_zoom\":\"CameraX ZoomState; null means not observed\",\"latest_capture_zoom\":\"latest Camera2 CaptureResult CONTROL_ZOOM_RATIO; null means unavailable or unreported\",\"latest_active_physical_id\":\"latest Camera2 CaptureResult; null means unavailable or unreported\",\"requested_modes\":\"latest Camera2 CaptureRequest; null means not observed\",\"actual_modes\":\"latest Camera2 CaptureResult; null means unavailable or unreported\",\"available_modes\":\"CameraCharacteristics of requested physical ID or bound logical ID; null means unavailable\"}," +
+        "\"device\":${q(android.os.Build.MODEL)},\"android_release\":${q(android.os.Build.VERSION.RELEASE)}}"
 }

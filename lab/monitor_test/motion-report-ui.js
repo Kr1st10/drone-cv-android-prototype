@@ -57,8 +57,16 @@
     const centerText=c=>`Ошибка центра (px upright crop камеры), условно по оценённому времени: средняя ${px(c.mean_px)}, p50 ${px(c.p50_px)}, p95 ${px(c.p95_px)}, наблюдавшийся максимум ${px(c.max_observed_px)}\n`+
       `Оценено ${c.evaluated_ms.toFixed(1)} из ${c.expected_ms.toFixed(1)} мс движения; покрытие ${percent(c.coverage)}; без координат ${c.absent_ms.toFixed(1)} мс; неизвестно ${c.unknown_ms.toFixed(1)} мс\n`+
       `Ограничения ошибки центра: ${Object.keys(c.unknown_reasons_ms).map(reason=>centerReasons[reason]||reason).join('; ') || centerReasons[c.unavailable_reason] || 'нет неоднозначных участков'}; отсутствие координат не имеет численной ошибки.\n`;
+    const buildText=p=>{
+      const f=p.fields, value=k=>Object.hasOwn(p.conflicts,k)?'противоречие':f[k]??'неизвестно';
+      const dirty=Object.hasOwn(p.conflicts,'git_dirty')?'противоречие':f.git_dirty===true?'да':f.git_dirty===false?'нет':'неизвестно';
+      return `Сборка Android: ${value('app_version')} (${value('version_code')}); тип ${value('build_type')}; commit ${value('git_sha')}; локальные изменения: ${dirty}\n`+
+        `Конфигурация: ${value('mode')}; confidence ${value('confidence')}; NMS IoU ${value('nms_iou')}, максимум ${value('nms_max_detections')}; потоки ${value('intra_op_threads')}; вход модели ${value('model_input_size')}\n`+
+        `Модель: ${value('model_asset')}; SHA-256 ${value('model_sha256')}. camera_context: снимок контекста, не покадровые параметры; сведения сохранены в JSON.\n`;
+    };
     $('reportOutput').textContent='Результаты по прогонам\n'+output.runs.map(r=>
       `Прогон ${r.run_id} (${r.mode}); версия критерия: ${r.criterion_version}\n`+
+      buildText(r.provenance.android)+
       centerText(r.center_error)+
       (Object.keys(r.provenance.android.conflicts).length?`Противоречивые метаданные: ${Object.keys(r.provenance.android.conflicts).join(', ')}; исходные варианты сохранены в JSON.\n`:'')+
       `Совместимый интервал смещения часов: ${r.timing_status==='compatible'?r.offset_lower_ms.toFixed(1)+'–'+r.offset_upper_ms.toFixed(1)+' мс':'не определён'}; статус: ${r.timing_status}\n`+
