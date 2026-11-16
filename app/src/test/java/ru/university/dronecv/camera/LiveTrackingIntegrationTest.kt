@@ -14,8 +14,12 @@ import ru.university.dronecv.motion.MotionJournal
 class LiveTrackingIntegrationTest {
     private class Queue : Executor {
         private val tasks = ArrayDeque<Runnable>()
+        var rejectNext = false
         val size get() = tasks.size
-        override fun execute(command: Runnable) { tasks.addLast(command) }
+        override fun execute(command: Runnable) {
+            if (rejectNext) { rejectNext = false; throw java.util.concurrent.RejectedExecutionException("injected") }
+            tasks.addLast(command)
+        }
         fun step() { tasks.removeFirst().run() }
         fun drain() { while (tasks.isNotEmpty()) step() }
     }
@@ -173,6 +177,62 @@ class LiveTrackingIntegrationTest {
             f.start(); f.frame(100); f.ml.drain(); f.vision.drain(); f.ml.drain(); f.vision.drain()
             assertNotNull(f.controller.state.value.tracking!!.box)
             f.controller.close(); f.ml.drain(); f.vision.drain()
+        }
+    }
+
+    @Test fun `dispatch rejection is terminal before failure snapshot and next start recovers`() {
+        for (replay in listOf(false, true)) {
+            val f = Fixture()
+            val id = f.diagnostic.start(f.now)
+            var result: ru.university.dronecv.diagnostics.DiagnosticFrameSnapshot? = null
+            var next = 0L
+            var failures = 0
+            f.onFailure = {
+                failures++
+                result = f.diagnostic.stop(id, f.now, true, "injected executor rejection")
+                next = f.diagnostic.start(f.now)
+            }
+            f.start()
+            if (!replay) f.ml.rejectNext = true
+            f.frame(0)
+            if (replay) {
+                f.ml.step()
+                f.ml.rejectNext = true
+                f.vision.step()
+            }
+            val snapshot = checkNotNull(result)
+            val operations = snapshot.tracking!!.operations!!
+            assertEquals(1L, operations.counts[TrackingEventKind.REQUEST_STARTED])
+            assertEquals(if (replay) 1L else 0L, operations.counts[TrackingEventKind.REPLAY_PLANNED] ?: 0L)
+            assertEquals(1L, operations.counts[TrackingEventKind.REQUEST_REJECTED] ?: 0L)
+            assertEquals(mapOf((if (replay) TrackingFailure.PROCESSING_EXCEPTION else TrackingFailure.CANCELLED) to 1L),
+                operations.failures[TrackingEventKind.REQUEST_REJECTED])
+            assertEquals(0L, operations.unfinishedRequests)
+            assertEquals(if (replay) 1L else 0L, operations.unknownReplayDetails)
+            for (kind in listOf(TrackingEventKind.CORRECTION_ACCEPTED, TrackingEventKind.INITIALIZATION_ATTEMPT,
+                TrackingEventKind.INITIALIZATION_SUCCEEDED, TrackingEventKind.INITIALIZATION_FAILED,
+                TrackingEventKind.REPLAY_SUCCEEDED, TrackingEventKind.REPLAY_FAILED)) {
+                assertEquals(kind.name, 0L, operations.counts[kind] ?: 0L)
+            }
+            assertEquals(LivePhase.ERROR, f.controller.state.value.phase)
+            f.ml.drain(); f.vision.drain()
+            assertEquals(1, failures)
+            assertTrue(f.snapshots.all { it.closes == 1 })
+            assertTrue(f.flows.isEmpty())
+            assertNull(f.diagnostic.stop(next, f.now, false, null)!!.tracking)
+            println("REJECTION_REPORT_FIXTURE=" +
+                DiagnosticReport(0, "test", "test", 35, "test", "model", "sha", .5f, snapshot, emptyList()).toJson())
+            val recovered = f.diagnostic.start(f.now)
+            f.start(); f.frame(100); f.ml.drain(); f.vision.drain(); f.ml.drain(); f.vision.drain()
+            assertNotNull(f.controller.state.value.tracking!!.box)
+            val recovery = f.diagnostic.stop(recovered, f.now, false, null)!!.tracking!!.operations!!
+            assertEquals(1L, recovery.counts[TrackingEventKind.CORRECTION_ACCEPTED])
+            assertNull(recovery.counts[TrackingEventKind.REQUEST_REJECTED])
+            assertEquals(0L, recovery.unfinishedRequests)
+            f.controller.close(); f.ml.drain(); f.vision.drain()
+            assertTrue(f.snapshots.all { it.closes == 1 })
+            assertTrue(f.flows.all { it.closes == 1 })
+            assertEquals(2, f.backendCloses)
         }
     }
 

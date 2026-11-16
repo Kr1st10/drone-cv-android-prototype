@@ -423,6 +423,7 @@ class LiveController<Frame : AutoCloseable>(
             }
             replayScheduled = true
         } catch (_: RejectedExecutionException) {
+            live.session.reject(request, TrackingFailure.PROCESSING_EXCEPTION)
             fail(token.generation, "Worker обработки кадров недоступен.", release = false)
         } catch (e: Throwable) {
             live.session.reject(request, TrackingFailure.PROCESSING_EXCEPTION)

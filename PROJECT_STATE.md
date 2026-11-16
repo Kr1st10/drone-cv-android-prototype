@@ -1,5 +1,13 @@
 # PROJECT_STATE.md
 
+## PR №50: отказ постановки replay до завершения диагностики (2026-11-16)
+
+- Проверен удалённый HEAD `8c157aa`; исправление в отдельной копии `/tmp/drone-pr50`, посторонние изменения сохранены. `handleYolo` регистрирует конечный `request_rejected/processing_exception` через `TrackingSession.reject` перед `fail/onFailure`. Причина соответствует исключению обработки запроса; `finally` повторно исход не добавляет. Контракты формата, модель и параметры CV сохранены.
+- Новая JVM-регрессия с production LiveController/TrackingSession/DiagnosticFrames на исходном коде падает: snapshot из синхронного onFailure содержит `request_rejected=0` вместо 1. После исправления проходит, включая контроль первого dispatch, ERROR, освобождение ресурсов, отсутствие двойного завершения, изоляцию следующей записи и восстановление Start. Для replay snapshot: started=1, planned=1, rejected=1, accepted=0, unfinished=0; initialization/replay outcomes=0, replay_details_unknown=1 по прежней формуле ([контракт](docs/reference/data-model.md#операции-yolo--lk)).
+- JDK 17: `assembleDebug testDebugUnitTest lintDebug assembleDebugAndroidTest` успешно; 259 JVM tests: 257 passed, 2 parity skipped (нет Python fixtures), реальный ORT выполнен. Оба JSON-снимка отказа проверены штатным `analyze_tracking`, ошибок целостности нет. `git diff --check` выполнен. CI нового HEAD проверяется после публикации отдельно.
+- Отказ executor внедрён тестом; практический путь отказа общего process-wide executor в приложении не подтверждён. Device-тесты только скомпилированы, телефон и качество/FPS не проверялись.
+
+
 
 ## Причины отказов YOLO + LK и восстановление — 2026-11-16
 
