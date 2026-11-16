@@ -86,6 +86,7 @@ cd /absolute/path/to/playwright-workdir
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_auto_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_controls_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_calibration_jpeg_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_calibration_real_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_store_review_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_report_review_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 ```
@@ -113,6 +114,8 @@ python3 ml/scripts/analyze_android_sessions.py /absolute/path/to/report.ndjson -
 ```
 
 Анализатор проверяет целостность и пересчитывает производительность из `diagnostic_report` новых NDJSON либо прежнего корневого JSON, не выполняя infer. Для исторических и motion-NDJSON без полного отчёта сохраняется анализ интервалов. Пропуски и отсутствующий конец не позволяют считать запись полной; [контракт формата](../reference/data-model.md#поток-диагностической-сессии-dronecv-session-timeline-1). Ненулевой exit требует разбора errors/config_mismatches. Сопоставление потоков требует новых явных metadata, его условия — [ORT_THREAD_BENCHMARK](../ORT_THREAD_BENCHMARK.md).
+
+`motion_calibration_real_smoke.mjs` проверяет настоящий JPEG Xiaomi и отдельно обозначенные синтетические варианты яркости и поворота, передачу найденных точек в гомографию через UI, пропуски, неоднозначность и ручную разметку. Для полного исходного журнала задайте `CORNER_NDJSON`; без него импортируется синтетический журнал с настоящим JPEG. [Происхождение, SHA-256 и ограничения](../../lab/monitor_test/tests/fixtures/xiaomi-corners.md). Node-набор калибровки дополнительно проверяет перспективу, размеры 16/20 px без наклона и 24/32/48/96 px с наклоном, равномерное и неравномерное затемнение, повреждения, обрезку, отдельные и вложенные дубликаты ID, повторные наблюдения, sync и случайные контрастные объекты. Минимум 16×16 не гарантирует устойчивость при повороте или перспективе.
 
 ## Архив журналов
 

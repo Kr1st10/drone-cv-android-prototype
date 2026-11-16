@@ -38,20 +38,31 @@
     // Removing hull vertices alone biases a corner along its pixel staircase.
     const lines=ordered.map((a,i)=>{
       const b=ordered[(i+1)%4],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);
-      const near=points.filter(p=>{const t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(len*len);return t>.12&&t<.88&&Math.abs(cross(a,b,p))/len<3;});
+      // Keep only the outward envelope in one-pixel tangential bins. A strip
+      // of all component boundaries also includes holes inside small ID cells.
+      // The search depth scales with the projected cell, not the image size.
+      const envelope=new Map(), depth=Math.max(1.5,len/GRID*.6);
+      for(const p of points) {
+        const t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/len, distance=cross(a,b,p)/len;
+        if(t<len*.12||t>len*.88||Math.abs(distance)>depth)continue;
+        const bin=Math.floor(t), previous=envelope.get(bin);
+        if(!previous||distance<previous.distance)envelope.set(bin,{p,distance});
+      }
+      const near=Array.from(envelope.values(),v=>v.p);
       if(near.length<4)return {a,b};
       const x=near.reduce((s,p)=>s+p[0],0)/near.length,y=near.reduce((s,p)=>s+p[1],0)/near.length;
       let xx=0,xy=0,yy=0;for(const p of near){xx+=(p[0]-x)**2;xy+=(p[0]-x)*(p[1]-y);yy+=(p[1]-y)**2;}
       const angle=.5*Math.atan2(2*xy,xx-yy);
       return {a:[x,y],b:[x+Math.cos(angle),y+Math.sin(angle)]};
     });
-    return lines.map((line,i)=>{
+    const refined=lines.map((line,i)=>{
       const previous=lines[(i+3)%4],a=previous.a,b=previous.b,c=line.a,d=line.b;
       const ux=b[0]-a[0],uy=b[1]-a[1],vx=d[0]-c[0],vy=d[1]-c[1],den=ux*vy-uy*vx;
       if(Math.abs(den)<1e-6)return ordered[i];
       const t=((c[0]-a[0])*vy-(c[1]-a[1])*vx)/den;
       return [a[0]+t*ux,a[1]+t*uy];
     });
+    return refined.some((p,i)=>!p.every(Number.isFinite)||cross(p,refined[(i+1)%4],refined[(i+2)%4])<16)?null:refined;
   }
   function project(quad) {
     const [a,b,c,d]=quad, dx1=b[0]-c[0],dx2=d[0]-c[0],dx3=a[0]-b[0]+c[0]-d[0],dy1=b[1]-c[1],dy2=d[1]-c[1],dy3=a[1]-b[1]+c[1]-d[1];
@@ -59,10 +70,39 @@
     const g=(dx3*dy2-dx2*dy3)/det,h=(dx1*dy3-dx3*dy1)/det;
     return (u,v)=>{const den=g*u+h*v+1;if(Math.abs(den)<1e-9)throw Error('Degenerate marker');return [((b[0]-a[0]+g*b[0])*u+(d[0]-a[0]+h*d[0])*v+a[0])/den,((b[1]-a[1]+g*b[1])*u+(d[1]-a[1]+h*d[1])*v+a[1])/den];};
   }
+  function sameLocation(a,b) {
+    const size=Math.min(a.size_px,b.size_px);
+    if(Math.max(a.size_px,b.size_px)>size*1.25||Math.hypot(a.center[0]-b.center[0],a.center[1]-b.center[1])>=size*.25)return false;
+    return a.corners.some((_,shift)=>a.corners.every((p,i)=>{
+      const q=b.corners[(i+shift)%4];return Math.hypot(p[0]-q[0],p[1]-q[1])<size*.25;
+    }));
+  }
   function detect({width,height,data}) {
     if (!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||width*height>16777216||data?.length!==width*height*4)throw Error('Invalid calibration image');
     const count=width*height, mask=new Uint8Array(count), queue=new Int32Array(count), markers=[];
-    for(let p=0;p<count;p++){const i=p*4;mask[p]=(77*data[i]+150*data[i+1]+29*data[i+2])/256<128 ? 1:0;}
+    const stride=width+1, integral=new Uint32Array(stride*(height+1));
+    for(let y=0;y<height;y++) {
+      let row=0;
+      for(let x=0;x<width;x++) {
+        const i=(y*width+x)*4;
+        row+=(77*data[i]+150*data[i+1]+29*data[i+2])>>>8;
+        integral[(y+1)*stride+x+1]=integral[y*stride+x+1]+row;
+      }
+    }
+    // 33/65 px windows span several cells of a small tag but follow screen
+    // shading. The 25% local contrast margin excludes nearly uniform regions.
+    // A global pass preserves larger tags. All passes share the mask/queue.
+    for(const radius of [0,16,32]) {
+    for(let y=0;y<height;y++)for(let x=0;x<width;x++) {
+      const i=(y*width+x)*4;
+      let threshold=128;
+      if(radius) {
+        const l=Math.max(0,x-radius),r=Math.min(width,x+radius+1),t=Math.max(0,y-radius),b=Math.min(height,y+radius+1);
+        const mean=(integral[b*stride+r]-integral[t*stride+r]-integral[b*stride+l]+integral[t*stride+l])/((r-l)*(b-t));
+        threshold=mean*.75;
+      }
+      mask[y*width+x]=(77*data[i]+150*data[i+1]+29*data[i+2])/256<threshold ? 1:0;
+    }
     const black=(x,y)=>x>=0&&y>=0&&x<width&&y<height&&mask[y*width+x]!==0;
     const sample=(p)=>black(Math.round(p[0]),Math.round(p[1])) ? 1:0;
     for(let start=0;start<count;start++) {
@@ -79,7 +119,7 @@
         if(edge && boundary.length<=20000)boundary.push([x,y]);
       }
       const w=maxX-minX+1,h=maxY-minY+1;
-      if(w<16||h<16||w>width*.8||h>height*.8||tail<.15*w*h||boundary.length>20000)continue;
+      if(w<16||h<16||w>width*.8||h>height*.8||tail<.15*w*h||boundary.length>20000||minX===0||minY===0||maxX===width-1||maxY===height-1)continue;
       const quad=quadrilateral(boundary);if(!quad)continue;
       const map=project(quad), grid=Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>sample(map((x+.5)/8,(y+.5)/8))));
       if(grid.some((row,y)=>row.some((bit,x)=>(x===0||y===0||x===7||y===7)&&!bit)))continue;
@@ -94,10 +134,12 @@
       }
       if(matches.length!==1)continue;
       const center=map(.5,.5), size_px=quad.reduce((sum,p,i)=>sum+Math.hypot(p[0]-quad[(i+1)%4][0],p[1]-quad[(i+1)%4][1]),0)/4;
-      markers.push({id:matches[0],corners:quad,center,size_px});
+      const observation={id:matches[0],corners:quad,center,size_px};
+      if(!markers.some(m=>m.id===observation.id&&sameLocation(m,observation)))markers.push(observation);
+    }
     }
     const missing=[0,1,2,3].filter(id=>!markers.some(m=>m.id===id));
-    let ambiguous=markers.some((m,i)=>markers.findIndex(n=>n.id===m.id)!==i), points=null;
+    let ambiguous=markers.some((m,i)=>markers.some((n,j)=>j<i&&(n.id===m.id||sameLocation(m,n)))), points=null;
     if(!missing.length && !ambiguous) {
       const sorted=[0,1,2,3].map(id=>markers.find(m=>m.id===id).center);
       if(sorted.some((p,i)=>cross(p,sorted[(i+1)%4],sorted[(i+2)%4])<16))ambiguous=true;
