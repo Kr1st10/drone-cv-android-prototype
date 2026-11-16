@@ -11,6 +11,27 @@ def integer(value, name):
     return int(value)
 
 
+def publication_timing(data):
+    """Validate only explicitly versioned assignment timings; never upgrade legacy rows."""
+    semantics = data.get('timing_semantics')
+    if semantics is None:
+        return
+    if semantics != 'stateflow_assignment_v1':
+        raise ValueError('unsupported state timing_semantics')
+    boundary = integer(data.get('publication_ns'), 'publication_ns')
+    state = integer(data.get('state_publication_ns'), 'state_publication_ns')
+    observation = integer(data.get('observation_publication_ns'), 'observation_publication_ns')
+    if observation != state or state > boundary or (data.get('reason') != 'initial_snapshot' and state != boundary):
+        raise ValueError('inconsistent state publication boundary')
+    ready = data.get('result_ready_ns')
+    signal = data.get('signal_publication_ns')
+    ready = integer(ready, 'result_ready_ns') if ready is not None else None
+    signal = integer(signal, 'signal_publication_ns') if signal is not None else None
+    if ((ready is not None and ready > state) or (signal is not None and signal > state)
+            or (ready is not None and signal is not None and ready > signal)):
+        raise ValueError('state processing/publication time reversal')
+
+
 def read_timeline(path):
     """Read intervals, rejecting incompatible publication clocks before using time.
 
@@ -80,6 +101,7 @@ def read_timeline(path):
             elif header is None:
                 raise ValueError('missing timeline header')
             elif kind == 'state':
+                publication_timing(data)
                 publication_clock = data.get('publication_clock', 'elapsed_realtime_ns')
                 recording_clock = header.get('clock', 'elapsed_realtime_ns')
                 if publication_clock != 'elapsed_realtime_ns' or recording_clock != 'elapsed_realtime_ns':

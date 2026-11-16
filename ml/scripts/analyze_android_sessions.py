@@ -41,6 +41,31 @@ def check_summary(calculated, exported, label, errors):
             errors.append(label + ': p50 mismatch')
 
 
+def assignment_times(row, dispatch, channel, errors):
+    """Optional metadata never changes the interpretation of historical dispatch fields."""
+    semantics = row.get('timing_semantics')
+    if semantics is None:
+        return
+    if semantics != 'stateflow_assignment_v1':
+        raise ValueError('unsupported signal timing_semantics')
+    def timestamp(key):
+        value = row.get(key)
+        if type(value) is int and value >= 0:
+            return value
+        if isinstance(value, str) and value.isascii() and value.isdecimal():
+            return int(value)
+        raise ValueError('invalid assignment timestamp: ' + key)
+    ready = timestamp('result_ready_ns')
+    publication = timestamp(channel + '_publication_ns')
+    if ready > publication or publication != dispatch:
+        errors.append(channel + ': inconsistent processing/publication boundary')
+
+
+def timing_semantics_counts(rows):
+    measured = sum(row.get('timing_semantics') == 'stateflow_assignment_v1' for row in rows)
+    return {'stateflow_assignment_v1': measured, 'historical_dispatch_boundary': len(rows)-measured}
+
+
 def analyze_target_signals(d, errors):
     version = d.get('target_signal_schema_version')
     if version not in (1, 2):
@@ -52,6 +77,7 @@ def analyze_target_signals(d, errors):
         if s['frame_id'] in seen: errors.append('target_signal: duplicate frame_id')
         seen.add(s['frame_id'])
         capture, entry, dispatch = s['capture_ns'], s['analyzer_entry_ns'], s['signal_dispatch_ns']
+        assignment_times(s, dispatch, 'signal', errors)
         if not all(type(x) is int and x >= 0 for x in (entry, dispatch)) or (capture is not None and type(capture) is not int):
             raise ValueError('invalid target signal timestamps')
         issue = ('unsynchronized_camera_clock' if s['timestamp_source'] != 'elapsed_realtime' else
@@ -109,6 +135,7 @@ def analyze_target_signals(d, errors):
     stale = d.get('application_stale_frames_discarded', 0)
     if type(stale) is not int or stale < 0: errors.append('invalid application stale counter')
     return {'count': len(signals), 'without_exposure_latency': len(signals)-available,
+            'timing_semantics_counts': timing_semantics_counts(signals),
             'detected': sum(s['status'] in ('detected', 'observed') for s in signals),
             'timings_ms': timings, 'capture_timing_availability': availability,
             'application_stale_frames_discarded': stale}
@@ -183,6 +210,7 @@ def analyze_tracking(d, errors):
                     -1 <= quality['correlation'] <= 1 and 0 <= quality['median_fb_error_px'] < math.inf):
                 errors.append('tracking: invalid quality')
         dispatch = row['signal_dispatch_ns']
+        assignment_times(row, dispatch, 'state', errors)
         capture_ms, entry_ms, processing_ms, issue = tracking_times(row['frame'], dispatch)
         for name, value in (('capture_to_signal_ms', capture_ms), ('capture_to_analyzer_ms', entry_ms),
                             ('analyzer_to_signal_ms', processing_ms)):
@@ -233,6 +261,7 @@ def analyze_tracking(d, errors):
     for name, calculated in timings.items():
         check_summary(calculated, t['timing_summary_ms'].get(name), 'tracking: ' + name, errors)
     return {**{k: t[k] for k in names}, 'updates_fps_session': fps, 'stored_updates': len(work),
+            'timing_semantics_counts': timing_semantics_counts(t['samples']),
             'updates_with_capture_timing': len(capture), 'timing_summary_ms': timings}
 
 

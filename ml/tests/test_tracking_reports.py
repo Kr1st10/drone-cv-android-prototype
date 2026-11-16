@@ -40,6 +40,18 @@ def report():
 
 
 class TrackingReportTest(unittest.TestCase):
+    def test_optional_assignment_metadata_keeps_legacy_timestamps(self):
+        d = report()
+        row = d['tracking']['samples'][0]
+        row.update(timing_semantics='stateflow_assignment_v1', result_ready_ns=1_010_000_000,
+                   state_publication_ns=row['signal_dispatch_ns'])
+        errors = []
+        analyzer.analyze_tracking(d, errors)
+        self.assertFalse(errors)
+        row['result_ready_ns'] = row['signal_dispatch_ns'] + 1
+        analyzer.analyze_tracking(d, errors)
+        self.assertTrue(any('processing/publication' in e for e in errors))
+
     def test_counts_distinct_updates_and_ignores_unknown_capture_timing(self):
         errors = []
         t = analyzer.analyze_tracking(report(), errors)
