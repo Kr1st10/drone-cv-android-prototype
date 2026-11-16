@@ -90,6 +90,8 @@ CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monito
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_calibration_jpeg_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_calibration_real_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_store_review_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_repeat_recovery_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_start_cleanup_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_report_review_smoke.mjs /absolute/path/to/repository/lab/monitor_test
 ```
 
@@ -118,6 +120,8 @@ python3 ml/scripts/analyze_android_sessions.py /absolute/path/to/report.ndjson -
 Анализатор проверяет целостность и пересчитывает производительность из `diagnostic_report` новых NDJSON либо прежнего корневого JSON, не выполняя infer. Для исторических и motion-NDJSON без полного отчёта сохраняется анализ интервалов. Пропуски и отсутствующий конец не позволяют считать запись полной; [контракт формата](../reference/data-model.md#поток-диагностической-сессии-dronecv-session-timeline-1). Ненулевой exit требует разбора errors/config_mismatches. Сопоставление потоков требует новых явных metadata, его условия — [ORT_THREAD_BENCHMARK](../ORT_THREAD_BENCHMARK.md).
 
 `motion_calibration_real_smoke.mjs` проверяет настоящий JPEG Xiaomi и отдельно обозначенные синтетические варианты яркости и поворота, передачу найденных точек в гомографию через UI, пропуски, неоднозначность и ручную разметку. Для полного исходного журнала задайте `CORNER_NDJSON`; без него импортируется синтетический журнал с настоящим JPEG. [Происхождение, SHA-256 и ограничения](../../lab/monitor_test/tests/fixtures/xiaomi-corners.md). Node-набор калибровки дополнительно проверяет перспективу, размеры 16/20 px без наклона и 24/32/48/96 px с наклоном, равномерное и неравномерное затемнение, повреждения, обрезку, отдельные и вложенные дубликаты ID, повторные наблюдения, sync и случайные контрастные объекты. Минимум 16×16 не гарантирует устойчивость при повороте или перспективе.
+
+`motion_repeat_recovery_smoke.mjs` использует настоящий Chrome и IndexedDB: завершённый A → начало B → сохранённая порция → принудительный обрыв renderer через CDP → новая вкладка того же профиля → повтор B. Отдельно проверяются обрыв первого запуска, отказ записи снимка в транзакции начала, Stop/Esc во время ожидающего начала и прежний несвязанный снимок. `motion_start_cleanup_smoke.mjs` внедряет отказ загрузки фото либо планирования и последующий отказ `exitFullscreen()`; проверяются обе причины, разблокировка Start/Repeat/sync и следующие запуски без reload. RAF-часы, ошибки и тестовые фотографии обозначены как синтетические; эти тесты не измеряют аппаратное поведение. `motion_report_v4_test.mjs` проверяет поздний захват также через настоящий `timelineImporter()`. [Воспроизведения и результаты](../../lab/monitor_test/tests/simple-motion-verification.md#три-замечания-к-3fef8c0-2026-11-16).
 
 ## Архив журналов
 
