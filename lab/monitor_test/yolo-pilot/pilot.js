@@ -6,6 +6,10 @@
   const intervalMs = 1000;
   const timingFields = ['conversion_ms', 'preprocess_ms', 'ort_ms', 'postprocess_ms', 'pipeline_ms'];
   const conditionFields = ['reference', 'view', 'equivalent_range_m', 'monitor_distance_cm', 'background', 'camera'];
+  const stimulusFields = ['photo_id', 'source_photo_id', 'stimulus_variant', 'asset_id', 'source_sha256', 'asset_sha256',
+    'geometry_revision', 'geometry_status', 'projection_confirmed', 'asset_revision', 'mask_revision', 'source_size_px',
+    'crop_ltrb_px', 'background_hex', 'background_asset', 'segment_a_source_px', 'segment_b_source_px', 'physical_segment_mm',
+    'projected_segment_mm', 'review_segment_display_mm', 'scale_percent', 'css_px_per_asset_px', 'calibration_id', 'mm_per_css_px'];
   const nonnegative = value => Number.isFinite(value) && value >= 0;
   const id = value => Number.isSafeInteger(value) && value >= 0;
   const probability = value => nonnegative(value) && value <= 1;
@@ -109,6 +113,8 @@
       source: { filename, ...source },
       conditions: {
         ...Object.fromEntries(conditionFields.map(field => [field, conditions[field] ?? null])),
+        ...Object.fromEntries(stimulusFields.filter(field => Object.hasOwn(conditions, field))
+          .map(field => [field, Array.isArray(conditions[field]) ? [...conditions[field]] : conditions[field]])),
         confidence_threshold: loggedThreshold ?? enteredThreshold,
         confidence_threshold_source: loggedThreshold !== null ? 'android' : enteredThreshold !== null ? 'operator' : null,
       },

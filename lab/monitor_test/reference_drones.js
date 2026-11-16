@@ -375,6 +375,54 @@
       })
     ]
   });
+  // Archive-grid stimuli have their own IDs. Model and motor labels come from the v2 reference.
+  const grayBackground = 'neutral_gray_808080_v1';
+  const pairedBackgrounds = {
+    neutral: { background_hex: '#FFFFFF' },
+    [grayBackground]: { background_hex: '#808080' },
+    sky: { background_hex: null, background_asset: 'reference_assets/sky.svg' }
+  };
+  const cabinetPairs = [
+    { number: 2751, crop: [250, 915, 1180, 1090], bounds: [270, 933, 1161, 1066],
+      original: ['IMG_2751_v2.png', '45d7ac5ba7c5922361e0d2b879a582845f78ebdbbe9d08f32c8b81887fd47d44'],
+      clean: ['IMG_2751_clean_v4_crop.png', '89b042865c29f67dea726845e6bd95ba89cbd20251d11ce30156558db268e624', 'v4_front_manual'] },
+    { number: 2704, crop: [100, 155, 1440, 1400], bounds: [129, 189, 1412, 1364],
+      original: ['IMG_2704_archive_crop.png', 'ce1a94a8e54b7aff08ce4bae3aa346717513766054f3a9ea257336f596da2350'],
+      clean: ['IMG_2704_clean_v4_crop.png', '3a15824c09621596e407195c9f8f89781c64ab9f6db9774fa8e089093aeae1f2', 'v4_top_local_manual_1'] },
+    { number: 2755, crop: [418, 646, 1278, 896], bounds: [440, 672, 1256, 870],
+      original: ['IMG_2755_v2.png', '442abcd66752da457093003c2a5147e0d8e51dfa644861905a29c4d1c65b4c78'],
+      clean: ['IMG_2755_clean_v4_crop.png', '62c6c851c76be943cc5f811f21eb8e5b8868fb8e177e14ffb95468ebf737394d', 'v4_oblique_15_local_2'] },
+    { number: 2711, crop: [149, 551, 1478, 1478], bounds: [184, 583, 1451, 1444],
+      original: ['IMG_2711_archive_crop.png', '8d5a7a44f2b5632f073258adc0a8a777851771eabe0cb39e24e3350c6e5dece5'],
+      clean: ['IMG_2711_clean_v4_crop.png', '88900142da4cef430194b1182c4ac5ab4b2c909df3b186c8fbe346f1fadd8749', 'v4_oblique_45_local_2'] }
+  ];
+  const cabinetPhotos = profiles[0].photos;
+  for (const { number, crop, bounds, original, clean, pending } of cabinetPairs) {
+    const p = cabinetPhotos.find(photo => photo.id === 'cabinet_img_' + number + '_v2');
+    const [left, top, right, bottom] = crop;
+    const toCrop = ([x, y]) => [x - left, y - top];
+    const sourcePoints = p.review_segment.motor_pair.map(label => p.audit_image.motor_points_px[Number(label[1]) - 1]);
+    const assetRoot = 'reference_assets/cabinet/';
+    const id = 'cabinet_img_' + number + '_archive_v4';
+    const makeAsset = (variant, [name, sha256, maskRevision = null]) => ({
+      id: id + '_' + variant, file: assetRoot + name, sha256, maskRevision,
+    });
+    const variants = { original: makeAsset('original', original) };
+    if (clean) variants.clean = makeAsset('clean', clean);
+    const photo = {
+      ...p, id, label: 'Серия «Фон» · ' + p.label, source_photo_id: 'IMG_' + number,
+      file: variants.original.file,
+      source: p.source_sha256 === p.audit_image.sha256 ? p.source : assetRoot + 'IMG_' + number + '_archive.jpg',
+      source_sha256: p.audit_image.sha256, original_size_px: p.audit_image.size_px,
+      width: right - left, height: bottom - top, crop_px: crop,
+      bounds_px: [...toCrop(bounds.slice(0, 2)), ...toCrop(bounds.slice(2))],
+      source_points_px: sourcePoints,
+      source_motor_points_px: Object.fromEntries(p.audit_image.motor_points_px.map((point, i) => ['M' + (i + 1), point])),
+      review_segment: { ...p.review_segment, from: toCrop(sourcePoints[0]), to: toCrop(sourcePoints[1]) },
+      asset_revision: 'cabinet_archive_crop_v4', variants, pending
+    };
+    cabinetPhotos.push(photo);
+  }
   const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
 
   /**
@@ -455,12 +503,17 @@
     let loaded = false, loadState = 'missing', loadGeneration = 0, targetError = '';
     let trialPhase = 'idle', settleFrame = null, settleStarted = 0, stableSince = 0, lastLayout = '', exitRequested = false;
     let background = saved?.background === 'sky' ? 'sky' : 'neutral';
+    let pairedBackground = Object.hasOwn(pairedBackgrounds, saved?.paired_background) ? saved.paired_background : grayBackground;
     let camera = saved?.camera === '1' ? '1' : '5';
+    let variant = saved?.variant === 'clean' ? 'clean' : 'original';
+    let pilotCaptured = false;
     let mode = saved?.range_mode === 'strict' ? 'strict' : 'approximate';
     element.innerHTML = `
       <h3>Эксперимент с эталонными БПЛА</h3>
       <label>Коптер <select id="referenceDrone"></select></label>
       <label>Фотография <select id="referencePhotoSelect"></select></label>
+      <label id="referenceVariantLabel" class="hidden">Вариант <select id="referenceVariant"><option value="original">Оригинал</option><option value="clean">Чистый фон</option></select></label>
+      <p id="referenceVariantNote" class="hidden"></p>
       <label id="referenceRangeModeLabel">Расчёт <select id="referenceRangeMode"><option value="approximate">Приближённая оценка</option><option value="strict">Строгий: подтверждённая ось</option></select></label>
       <p><span id="referenceDimensions"></span> · <span id="referenceSpecSource"></span></p>
       <p id="referenceView"></p>
@@ -471,8 +524,9 @@
       <p><label>Желаемая эквивалентная дальность, м <input id="referenceTarget" type="text" inputmode="decimal" placeholder="100,00"></label><button id="referenceApplyTarget">Рассчитать масштаб</button><span id="referenceTargetStatus" role="status"></span></p>
       <p><label>Камера Xiaomi 17 Pro <select id="referenceCamera"><option value="5">Физическая телекамера 5× — план опыта</option><option value="1">1× — сравнение</option></select></label></p>
       <p>1×/5× — обозначение условий опыта. Дальность не умножается на 5; камера меняет размер объекта в кадре YOLO. Использование физического телевика проверяется на телефоне.</p>
-      <p><label>Фон <select id="referenceBackground"><option value="neutral">Нейтральный однотонный</option><option value="sky">Фиксированное небо</option></select></label><button id="referenceTrial">Режим испытания</button></p>
+      <p><label>Фон <select id="referenceBackground"><option value="neutral">Белый</option><option value="neutral_gray_808080_v1" hidden>Серый</option><option value="sky">Небо</option></select></label><button id="referenceTrial">Режим испытания</button></p>
       <p id="referenceBackgroundNote"></p>
+      <p id="referencePilotRun" class="hidden"><a id="referencePilotLink" target="_blank" rel="noopener">Открыть пилот с сохранёнными условиями</a> <span id="referencePilotLabel"></span></p>
       <p id="referenceReadout" aria-live="polite"></p>
       <details id="referenceSegmentReview" class="hidden"><summary id="referenceSegmentTitle">Разметка A–B</summary><label><input id="referenceSegmentToggle" type="checkbox"> Показать отрезок A–B</label><p id="referenceSegmentReadout"></p></details><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
       <p class="muted">Лабораторная эквивалентная дальность по угловому размеру. Не измерение дальности обнаружения в полёте.</p>
@@ -489,12 +543,14 @@
     const savedPhotoId = saved?.photo_id ?? (saved?.model_id === 'cabinet_reference' ? 'cabinet_front' : null);
     let photo = selected.photos.find(p => p.id === savedPhotoId) || selected.photos[0];
     for (const p of profiles) select.add(new Option(p.model, p.id));
-    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, camera }); }
+    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, paired_background: pairedBackground, camera, ...(photo.variants ? { variant } : {}) }); }
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
     function choosePhoto() {
       photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
       const p = photo, generation = ++loadGeneration;
-      loaded = false; loadState = p.file ? 'loading' : 'missing'; targetError = '';
+      if (!p.variants?.[variant]) variant = 'original';
+      const file = p.variants?.[variant].file ?? p.file;
+      loaded = false; loadState = file ? 'loading' : 'missing'; targetError = '';
       const propellers = selected.measurements_mm
         ? `радиус пропеллера ${selected.measurements_mm.propeller_radius} мм`
         : `пропеллеры ${selected.propeller_in}″`;
@@ -504,7 +560,7 @@
       link($('referencePhotoSource'), p.source, p.original_size_px ? 'Полный кадр' : 'Страница источника фотографии');
       $('referenceView').textContent = p.label;
       // Decode a separate request-owned image. Old events can never publish into the new selection.
-      const expected = p.file && new URL(p.file, document.baseURI).href;
+      const expected = file && new URL(file, document.baseURI).href;
       const cached = decodedImages.get(expected);
       const next = cached || new Image(); next.id = 'referenceDisplay';
       next.alt = selected.model + ' — ' + p.label;
@@ -517,7 +573,7 @@
       };
       next.onerror = () => { if (generation === loadGeneration) { loaded = false; loadState = 'error'; update(); } };
       if (cached) next.onload();
-      else if (p.file) next.src = p.file;
+      else if (file) next.src = file;
       else {
         const empty = document.createElement('img'); empty.id = 'referenceDisplay'; empty.alt = '';
         image.replaceWith(empty); image = empty;
@@ -527,7 +583,14 @@
     function chooseModel(preferredPhoto = null) {
       selected = profiles.find(p => p.id === select.value) || profiles[0];
       photoSelect.replaceChildren();
-      for (const p of selected.photos) photoSelect.add(new Option(p.label, p.id));
+      const paired = document.createElement('optgroup');
+      paired.label = 'Сравнение фона';
+      for (const p of selected.photos) {
+        const option = new Option(p.label, p.id);
+        if (p.variants) paired.append(option);
+        else photoSelect.add(option);
+      }
+      if (paired.childElementCount) photoSelect.prepend(paired);
       photoSelect.value = selected.photos.some(p => p.id === preferredPhoto) ? preferredPhoto : selected.photos[0].id;
       choosePhoto();
     }
@@ -538,9 +601,23 @@
       $('referenceRangeModeLabel').classList.toggle('hidden', !!selected.measurements_mm);
       $('referenceRangeMode').value = activeMode;
       $('referenceTrial').disabled = trialPhase !== 'idle';
-      $('referenceBackground').value = background; $('referenceCamera').value = camera;
-      viewport.classList.toggle('reference-sky', background === 'sky');
-      $('referenceBackgroundNote').textContent = background === 'sky' && !p.transparent ? 'Локальный рисунок неба. Исходное фото непрозрачное: его собственный фон остаётся прямоугольником; корректное наложение дрона на небо не имитируется.' : background === 'sky' ? 'Локальный рисунок неба; используется прозрачный исходник.' : 'Нейтральный однотонный фон. Собственный фон фотографии сохраняется.';
+      const paired = !!p.variants;
+      const visibleAsset = loaded ? p.variants?.[variant] : null;
+      $('referenceVariantLabel').classList.toggle('hidden', !paired);
+      $('referenceVariant').value = variant;
+      $('referenceVariant').options[1].disabled = !p.variants?.clean;
+      $('referenceVariantNote').classList.toggle('hidden', !p.pending);
+      $('referenceVariantNote').textContent = p.pending ? 'Чистый фон недоступен. ' + p.pending : '';
+      const displayedBackground = paired ? pairedBackground : background;
+      $('referenceBackground').querySelector(`option[value="${grayBackground}"]`).hidden = !paired;
+      $('referenceBackground').value = displayedBackground;
+      $('referenceBackground').disabled = paired && trialPhase !== 'idle';
+      $('referenceCamera').value = camera;
+      viewport.classList.toggle('reference-gray', displayedBackground === grayBackground);
+      viewport.classList.toggle('reference-sky', displayedBackground === 'sky');
+      $('referenceBackgroundNote').textContent = paired ? (variant === 'original'
+        ? 'Оригинал сохраняет фон фотографии. Выбранная подложка видна только за её краями.'
+        : 'Выбранная подложка видна в прозрачных областях и вокруг изображения.') : background === 'sky' && !p.transparent ? 'Локальный рисунок неба. Исходное фото непрозрачное: его собственный фон остаётся прямоугольником; корректное наложение дрона на небо не имитируется.' : background === 'sky' ? 'Локальный рисунок неба; используется прозрачный исходник.' : 'Нейтральный однотонный фон. Собственный фон фотографии сохраняется.';
       $('referenceScale').value = scale;
       if (document.activeElement !== $('referenceScaleNumber')) $('referenceScaleNumber').value = scale;
       image.style.width = p.width * scale / 100 + 'px';
@@ -622,7 +699,14 @@
         image_width_css_px: loaded ? r.width : null, image_height_css_px: loaded ? r.height : null, review_segment_display_mm: segmentMm,
         ...(p.geometry_revision ? { geometry_revision: p.geometry_revision, projection_confirmed: p.projection_confirmed,
           physical_segment_mm: candidate.physical_mm, projected_segment_mm: candidate.projected_mm } : {}),
-        camera_label: camera + '×', background, range_mode: activeMode, geometry_status: m.geometry_status ?? null, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
+        ...(paired ? { source_photo_id: p.source_photo_id, source_sha256: p.source_sha256,
+          asset_revision: p.asset_revision, stimulus_variant: visibleAsset ? variant : null,
+          asset_id: visibleAsset?.id ?? null, asset_sha256: visibleAsset?.sha256 ?? null,
+          mask_revision: visibleAsset?.maskRevision ?? null, source_size_px: p.original_size_px, crop_ltrb_px: p.crop_px,
+          segment_a_source_px: p.source_points_px[0], segment_b_source_px: p.source_points_px[1],
+          css_px_per_asset_px: actualScale, mm_per_css_px: cal?.mm_per_css_px ?? null,
+          ...pairedBackgrounds[displayedBackground] } : {}),
+        camera_label: camera + '×', background: displayedBackground, range_mode: activeMode, geometry_status: m.geometry_status ?? null, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
     }
     function setScale(value) {
@@ -634,6 +718,11 @@
     $('referenceRangeMode').onchange = e => { mode = e.target.value === 'strict' ? 'strict' : 'approximate'; persist(); update(); };
     select.onchange = () => chooseModel();
     photoSelect.onchange = choosePhoto;
+    $('referenceVariant').onchange = e => {
+      if (!photo.variants?.[e.target.value]) { update(); return; }
+      variant = e.target.value;
+      choosePhoto();
+    };
     $('referenceScale').oninput = e => setScale(e.target.value);
     $('referenceScaleNumber').oninput = e => setScale(e.target.value);
     $('referenceHalf').onclick = () => setScale(Math.max(0.01, scale / 2));
@@ -657,6 +746,26 @@
       if (settleFrame != null) cancelAnimationFrame(settleFrame);
       settleFrame = requestAnimationFrame(settleTrial);
     }
+    function capturePilotConditions(state) {
+      if (pilotCaptured || !state.asset_id || !state.fullscreen_fits || !positive(state.equivalent_distance_m)) return;
+      pilotCaptured = true;
+      const { photo_id, source_photo_id, source_sha256, asset_id, asset_sha256, asset_revision, stimulus_variant,
+        mask_revision, geometry_revision, geometry_status, projection_confirmed, source_size_px, crop_ltrb_px,
+        segment_a_source_px, segment_b_source_px, physical_segment_mm, projected_segment_mm,
+        review_segment_display_mm, scale_percent, css_px_per_asset_px, calibration_id, mm_per_css_px,
+        background, background_hex, background_asset } = state;
+      const conditions = { reference: source_photo_id, view: state.view, equivalent_range_m: state.equivalent_distance_m,
+        monitor_distance_cm: state.screen_distance_cm, camera: state.camera_label, photo_id, source_photo_id,
+        source_sha256, asset_id, asset_sha256, asset_revision, stimulus_variant, mask_revision, geometry_revision,
+        geometry_status, projection_confirmed, source_size_px, crop_ltrb_px, segment_a_source_px, segment_b_source_px,
+        physical_segment_mm, projected_segment_mm, review_segment_display_mm, scale_percent, css_px_per_asset_px,
+        calibration_id, mm_per_css_px, background, background_hex, background_asset };
+      const url = new URL('yolo-pilot/index.html', document.baseURI);
+      url.hash = new URLSearchParams({ stimulus: JSON.stringify(conditions) }).toString();
+      $('referencePilotLink').href = url.href;
+      $('referencePilotLabel').textContent = `· ${source_photo_id} · ${stimulus_variant === 'clean' ? 'Чистый фон' : 'Оригинал'}`;
+      $('referencePilotRun').classList.remove('hidden');
+    }
     function settleTrial(now) {
       settleFrame = null;
       if (trialPhase === 'idle') return;
@@ -666,7 +775,9 @@
       // Do not validate the old/zero/transitional viewport on fullscreenchange or the request promise.
       if (now - stableSince >= 200 && now - settleStarted >= (trialPhase === 'exiting' ? 750 : 400)) {
         if (trialPhase === 'entering' && inTrial) {
-          trialPhase = 'active'; exitRequested = false; update(); return;
+          trialPhase = 'active'; exitRequested = false;
+          capturePilotConditions(update());
+          return;
         }
         if (trialPhase === 'exiting' && !inTrial) {
           // Refresh the calibration's environment while the controlled-transition exemption still applies.
@@ -701,7 +812,14 @@
       // During entry/exit the sampler itself detects changes until the layout is stable.
     }
     $('referenceCamera').onchange = e => { camera = e.target.value; persist(); update(); };
-    $('referenceBackground').onchange = e => { background = e.target.value; persist(); update(); };
+    $('referenceBackground').onchange = e => {
+      const value = e.target.value;
+      if (photo.variants) {
+        if (trialPhase === 'idle' && Object.hasOwn(pairedBackgrounds, value)) pairedBackground = value;
+      } else if (value === 'neutral' || value === 'sky') background = value;
+      persist();
+      update();
+    };
     $('referenceApplyTarget').onclick = () => {
       targetError = '';
       const target = Number($('referenceTarget').value.trim().replace(',', '.'));
@@ -738,6 +856,7 @@
       if (!positive(state.equivalent_distance_m)) { targetError = 'Сначала получите корректную геометрию изображения: проверьте калибровку, ракурс, расстояние и исходные данные.'; update(); return; }
       if (!state.fullscreen_fits) { targetError = 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб.'; update(); return; }
       if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим. Измерения сохранены.'; update(); return; }
+      pilotCaptured = false;
       // The exemption starts before requestFullscreen: resize may precede fullscreenchange/promise resolution.
       beginSettling('entering');
       try { await viewport.requestFullscreen(); }

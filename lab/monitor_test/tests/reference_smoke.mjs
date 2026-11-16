@@ -29,7 +29,7 @@ const old = await session(); assert.equal(old.results.length, 1); assert.equal(o
 await nav('reference');
 assert.ok(await page.isVisible('#referenceSection')); assert.ok(await page.isHidden('#advanced'));
 assert.ok(await page.isHidden('#zoom')); assert.equal(await page.locator('#referenceDrone option').count(), 4);
-assert.equal(await page.locator('#referencePhotoSelect option').count(), 7);
+assert.equal(await page.locator('#referencePhotoSelect option').count(), 11);
 assert.equal(await page.inputValue('#referenceDrone'), 'cabinet_reference');
 await page.selectOption('#referenceDrone', 'skydroid_mx330t');
 await page.waitForFunction(() => document.getElementById('referenceDisplay').naturalWidth === 416);

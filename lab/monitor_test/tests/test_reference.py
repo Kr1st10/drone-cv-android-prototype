@@ -165,3 +165,24 @@ def test_cabinet_modelled_asset_integrity():
             assert crop_point == pytest.approx((mapped[0] - left, mapped[1] - top))
             assert x1 < crop_point[0] < x2
             assert y1 < crop_point[1] < y2
+
+
+def test_cabinet_paired_stimulus_files():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node required for cabinet reference metadata')
+    photos = json.loads(subprocess.check_output(
+        [node, str(ROOT / 'tests/reference_test.mjs'), '--paired-photos'], text=True, timeout=30))
+    assert {p['source_photo_id'] for p in photos} == {'IMG_2704', 'IMG_2751', 'IMG_2755', 'IMG_2711'}
+    for p in photos:
+        assert p['original_size_px'] == [1536, 2048]
+        assert hashlib.sha256((ROOT / p['source']).read_bytes()).hexdigest() == p['source_sha256']
+        assert set(p['variants']) == {'original', 'clean'}
+        for variant, asset in p['variants'].items():
+            assert asset['id'] == f"{p['id']}_{variant}"
+            png = (ROOT / asset['file']).read_bytes()
+            assert hashlib.sha256(png).hexdigest() == asset['sha256']
+            assert png[:8] == b'\x89PNG\r\n\x1a\n'
+            assert int.from_bytes(png[16:20], 'big') == p['width']
+            assert int.from_bytes(png[20:24], 'big') == p['height']
+            assert png[25] == (6 if variant == 'clean' else 2)  # PNG IHDR RGB / RGBA
