@@ -14,6 +14,25 @@ assert.equal(j.publications[0].frame_id,20001);assert.equal(j.stop_ns,22000);ass
 const incomplete=timelineImporter();incomplete.push({schema:'dronecv-session-timeline-1',session_id:'s',event_id:'1',event_ns:String(base),type:'header',data:{start_ns:String(base)}});assert.equal(incomplete.finish().complete,false);
 assert.throws(()=>timelineImporter().push({schema:'dronecv-session-timeline-2'}),/Неподдерживаемая/);
 
+// A recording boundary does not retimestamp the observation that it snapshots.
+const assignment={timing_semantics:'stateflow_assignment_v1',reason:'initial_snapshot',box:null,
+  publication_ns:String(base+100n),state_publication_ns:String(base+30n),observation_publication_ns:String(base+30n),
+  result_ready_ns:String(base+10n),signal_publication_ns:String(base+20n)};
+function assignmentFixture(data) {
+  const importer=timelineImporter();let n=0;
+  const add=(type,payload)=>importer.push({schema:'dronecv-session-timeline-1',session_id:'timing',event_id:String(++n),event_ns:String(base+100n),type,data:payload});
+  add('header',{start_ns:String(base+100n)});add('state',data);
+  return importer.finish();
+}
+const snapshot=assignmentFixture(assignment).publications[0];
+assert.equal(snapshot.published_ns,0);
+assert.equal(snapshot.state_publication_ns,String(base+30n));
+assert.equal(snapshot.result_ready_ns,String(base+10n));
+assert.equal(snapshot.signal_publication_ns,String(base+20n));
+for(const field of ['result_ready_ns','signal_publication_ns','state_publication_ns'])
+  assert.throws(()=>assignmentFixture({...assignment,[field]:String(base+300n)}));
+assert.equal(assignmentFixture({reason:'initial_snapshot',publication_ns:String(base+100n),box:null}).publications[0].timing_semantics,null);
+
 if (process.env.TIMELINE_KOTLIN_FIXTURE) {
   const fs=await import('node:fs'), readline=await import('node:readline');
   const actual=timelineImporter();
