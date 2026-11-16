@@ -137,7 +137,7 @@
       geometry:journal.geometry??null,calibration:{screen_points:run.calibration_points,camera_normalized_points:points},
       scenario:run.scenario??null,conditions:run.conditions??null,photo:run.photo??null};
   }
-  function analyze(run, journal, points) {
+  function analyze(run, journal, points, codeIntervals=null) {
     if(run?.schema!=='dronecv-motion-run-1' || journal?.schema!=='dronecv-motion-android-1') throw Error('Неподдерживаемый формат JSON.');
     if(!Array.isArray(run.samples)||!Array.isArray(journal.frames)||!Array.isArray(journal.publications)||!Array.isArray(journal.detections)) throw Error('Отсутствуют записи.');
     if(!['yolo','yolo_lk'].includes(journal.mode)||(run.mode!=null && run.mode!==journal.mode)) throw Error('Режимы эталона и журнала не совпадают.');
@@ -167,18 +167,20 @@
     const pubs=journal.publications.slice().sort((a,b)=>a.published_ns-b.published_ns);
     const frameIds=new Set(allFrames.map(f=>f.frame_id));
     if(pubs.some(p=>!finite(p.published_ns)||p.published_ns>journal.stop_ns||(p.frame_id!==null && !frameIds.has(p.frame_id))||!['clear','yolo','lk'].includes(p.source)||(p.source==='clear' ? p.bbox!==null : !validBox(p.bbox)))) throw Error('Некорректные публикации.');
-    const matched=f=>f?.marker && f.marker.run_id===run.run_id && samples.get(f.marker.step_id) || null;
+    const codes=codeIntervals?new Map(codeIntervals.map(s=>[s.step_id,{...s,elapsed_ms:s.start_ms}])):samples;
+    const matched=f=>f?.marker && f.marker.run_id===run.run_id && codes.get(f.marker.step_id) || null;
     let matchedFrames=0, missing=0, other=0, reversed=false, lastStep=-Infinity;
     for(const f of allFrames) { if(matched(f)) matchedFrames++; else if(f.marker) other++; else missing++; }
     for(const f of frames) { const s=matched(f); if(s) { if(s.step_id<lastStep) reversed=true; lastStep=s.step_id; } }
     const stepWindows=new Map();
     for(const f of frames) { const s=matched(f); if(!s) continue; const w=stepWindows.get(s.step_id); if(w) w.last=f.capture_ns; else stepWindows.set(s.step_id,{first:f.capture_ns,last:f.capture_ns}); }
     const stalled=new Set();
-    for(let i=0;i+1<ordered.length;i++) { const w=stepWindows.get(ordered[i].step_id); if(w && w.last-w.first>(ordered[i+1].elapsed_ms-ordered[i].elapsed_ms)*1e6+0.001) stalled.add(ordered[i].step_id); }
+    const codeOrder=codeIntervals?Array.from(codes.values()):ordered;
+    for(let i=0;i<codeOrder.length;i++) { const s=codeOrder[i],w=stepWindows.get(s.step_id),end=codeIntervals?s.end_ms:codeOrder[i+1]?.elapsed_ms; if(finite(end)&&w && w.last-w.first>(end-s.elapsed_ms)*1e6+0.001) stalled.add(s.step_id); }
     const before=frames.some(f=>matched(f)?.phase==='blank_before');
     const after=frames.some(f=>matched(f)?.phase==='blank_after');
     const sampleIndex=new Map(ordered.map((s,i)=>[s.step_id,i]));
-    const bounds=f=>{ const s=matched(f), i=s && sampleIndex.get(s.step_id); if(i==null) return null; return [i+1<ordered.length ? f.capture_ns-ordered[i+1].elapsed_ms*1e6 : -Infinity,f.capture_ns-s.elapsed_ms*1e6]; };
+    const bounds=f=>{ const s=matched(f);if(!s)return null;const i=sampleIndex.get(s.step_id),end=codeIntervals?s.end_ms:ordered[i+1]?.elapsed_ms;return [finite(end)?f.capture_ns-end*1e6:-Infinity,f.capture_ns-s.elapsed_ms*1e6]; };
     let lo=-Infinity, hi=Infinity;
     for(const f of frames) { const b=bounds(f); if(b) { lo=Math.max(lo,b[0]); hi=Math.min(hi,b[1]); } }
     const alignmentInvalid=lo>=hi;

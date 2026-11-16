@@ -50,7 +50,7 @@ async function harness(stall, fault){
       begin:async r=>{runs.push(r);return r.run_id;},append:async()=>{},end:async()=>{}}};
   sandbox.window=sandbox;
   const context=vm.createContext(sandbox);
-  for(const name of ['motion.js','motion-scenario.js','motion-journal-status.js','sync-check.js','sync-check-ui.js','motion-ui.js'])vm.runInContext(source(name),context,{filename:name});
+  for(const name of ['motion.js','motion-timeline.js','motion-scenario.js','motion-journal-status.js','sync-check.js','sync-check-ui.js','motion-ui.js'])vm.runInContext(source(name),context,{filename:name});
   await settle();
   const bits=sandbox.Motion.markerBits;
   sandbox.Motion.markerBits=(run_id,step_id)=>{clear();visible={run_id,step_id,start:now};calls.push(['draw',now,step_id]);return bits(run_id,step_id);};

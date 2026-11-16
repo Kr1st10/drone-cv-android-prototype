@@ -63,7 +63,7 @@ assert.ok(await page.evaluate(() => { const c = document.getElementById('motionC
 const markerPixels = await page.evaluate(() => { const c = document.getElementById('motionCanvas'), ctx = c.getContext('2d'), m = 6, x = c.width/2-5*m, y = c.height*.05+16+2*m; return Array.from({ length: 80 }, (_, i) => ctx.getImageData(x + (i % 10) * m + Math.floor(m / 2), y + Math.floor(i / 10) * m + Math.floor(m / 2), 1, 1).data[0] < 128 ? 1 : 0); });
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
 await finish(); const first = await exportJson('#motionExportLast');
-assert.equal(first.schema, 'dronecv-motion-run-2'); assert.equal(first.complete, true); assert.equal(first.mode, null); assert.equal(first.order, undefined);
+assert.equal(first.schema, 'dronecv-motion-run-3'); assert.equal(first.complete, true); assert.equal(first.mode, null); assert.equal(first.order, undefined);
 assert.ok(first.samples.some(s => s.visible)); assert.ok(first.samples.some(s => !s.visible));
 assert.deepEqual(markerPixels, await page.evaluate(({ run, step }) => Motion.markerBits(run, step), { run: first.run_id, step: 2 })); assert.equal(first.conditions.distance_cm, null);
 assert.equal(first.marker.module_px > 0, true); assert.equal(first.calibration_points.length, 4);

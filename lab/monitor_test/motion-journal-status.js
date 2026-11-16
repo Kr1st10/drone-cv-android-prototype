@@ -1,7 +1,7 @@
 (function(root,factory){
-  if(typeof module==='object'&&module.exports)module.exports=factory();
-  else root.MotionJournalStatus=factory();
-})(typeof globalThis!=='undefined'?globalThis:this,function(){
+  if(typeof module==='object'&&module.exports)module.exports=factory(require('./motion-timeline.js'));
+  else root.MotionJournalStatus=factory(root.MotionTimeline);
+})(typeof globalThis!=='undefined'?globalThis:this,function(Timeline){
   'use strict';
   const finite=Number.isFinite;
   function framesOf(journal){
@@ -30,13 +30,16 @@
   }
   function timing(run,journal){
     const allFrames=framesOf(journal);
-    if(!['dronecv-motion-run-1','dronecv-motion-run-2'].includes(run?.schema)||!Array.isArray(run.samples))throw Error('Неподдерживаемый эталон движения.');
+    if(!['dronecv-motion-run-1','dronecv-motion-run-2','dronecv-motion-run-3'].includes(run?.schema)||!Array.isArray(run.samples))throw Error('Неподдерживаемый эталон движения: '+run?.schema);
+    const independent=run.schema==='dronecv-motion-run-3';
+    if(independent)Timeline.validate(run);
+    const reference=independent?run.sync_intervals.map(s=>({...s,run_id:run.run_id,elapsed_ms:s.start_ms})):run.samples;
     const samples=new Map();
-    for(const s of run.samples){
+    for(const s of reference){
       if(s.run_id!==run.run_id||!Number.isInteger(s.step_id)||samples.has(s.step_id)||!finite(s.elapsed_ms))throw Error('Некорректный run_id или повтор step_id эталона.');
       samples.set(s.step_id,s);
     }
-    const ordered=run.samples.slice().sort((a,b)=>a.elapsed_ms-b.elapsed_ms);
+    const ordered=reference.slice().sort((a,b)=>a.elapsed_ms-b.elapsed_ms);
     if(ordered.some((s,i)=>i&&(s.elapsed_ms<=ordered[i-1].elapsed_ms||s.step_id<=ordered[i-1].step_id)))throw Error('Некорректный порядок эталона.');
     if(!finite(journal.stop_ns)||journal.stop_ns<0)throw Error('Некорректное время остановки журнала.');
     if(allFrames.some(f=>!Number.isInteger(f.frame_id)||(finite(f.capture_ns)&&f.capture_ns>journal.stop_ns)||(finite(f.analyzer_ns)&&f.analyzer_ns>journal.stop_ns))||new Set(allFrames.map(f=>f.frame_id)).size!==allFrames.length)throw Error('Некорректные времена или номера кадров.');
@@ -63,13 +66,15 @@
       const i=sampleIndex.get(s.step_id);
       // A read code constrains one common camera-minus-browser offset over
       // the actual displayed step. The last step has no finite lower bound.
-      lo=Math.max(lo,i+1<ordered.length?f.capture_ns-ordered[i+1].elapsed_ms*1e6:-Infinity);
+      const end=independent?s.end_ms:ordered[i+1]?.elapsed_ms;
+      lo=Math.max(lo,finite(end)?f.capture_ns-end*1e6:-Infinity);
       hi=Math.min(hi,f.capture_ns-s.elapsed_ms*1e6);
     }
     const stalled_step_ids=[];
-    for(let i=0;i+1<ordered.length;i++){
+    for(let i=0;i<ordered.length;i++){
       const w=windows.get(ordered[i].step_id);
-      if(w&&w.last-w.first>(ordered[i+1].elapsed_ms-ordered[i].elapsed_ms)*1e6+.001)stalled_step_ids.push(ordered[i].step_id);
+      const end=independent?ordered[i].end_ms:ordered[i+1]?.elapsed_ms;
+      if(finite(end)&&w&&w.last-w.first>(end-ordered[i].elapsed_ms)*1e6+.001)stalled_step_ids.push(ordered[i].step_id);
     }
     const timing_status=lo>=hi?'incompatible':finite(lo)&&finite(hi)?'compatible':'insufficient_capture';
     const reason=timing_status==='incompatible'?'Метки несовместимы с единым постоянным смещением часов.':
