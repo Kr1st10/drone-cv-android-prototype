@@ -20,20 +20,70 @@ try {
   await page.fill('#distance', '434');
   const snap = () => page.evaluate(() => referenceTab.snapshot());
   const ready = () => page.waitForFunction(() => referenceTab.snapshot().load_state === 'ready');
-  const background = () => page.locator('#referenceViewport').evaluate(e => getComputedStyle(e).backgroundColor);
+  const gray = 'neutral_gray_808080_v1';
+  const backgrounds = {
+    [gray]: { hex: '#808080', rgb: 'rgb(128, 128, 128)' },
+    neutral: { hex: '#FFFFFF', rgb: 'rgb(255, 255, 255)' },
+    sky: { hex: null, asset: 'reference_assets/sky.svg' }
+  };
+  const viewport = page.locator('#referenceViewport');
+  const selector = page.locator('#referenceBackground');
+  const position = () => viewport.evaluate(v => {
+    const box = v.getBoundingClientRect();
+    const img = v.querySelector('#referenceDisplay').getBoundingClientRect();
+    return [img.left - box.left, img.top - box.top];
+  });
+  const checkBackground = async id => {
+    const { color, image } = await viewport.evaluate(v => ({
+      color: getComputedStyle(v).backgroundColor, image: getComputedStyle(v).backgroundImage
+    }));
+    if (id === 'sky') assert.match(image, /reference_assets\/sky\.svg/);
+    else assert.deepEqual([color, image], [backgrounds[id].rgb, 'none']);
+    const state = await snap();
+    assert.equal(state.background, id);
+    if (state.source_photo_id) {
+      assert.equal(state.background_hex, backgrounds[id].hex);
+      assert.equal(state.background_asset, backgrounds[id].asset);
+    }
+  };
+  const pixels = async () => {
+    // Sample the transparent margin above the front rotor and a point outside the frame.
+    const [x, y] = await position();
+    const shot = await viewport.screenshot({ scale: 'css' });
+    return page.evaluate(async ({ data, x, y }) => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + data;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      return [x + 4, x - 4].map(px => Array.from(ctx.getImageData(px, y + 1, 1, 1).data));
+    }, { data: shot.toString('base64'), x: Math.floor(x), y: Math.floor(y) });
+  };
   const captured = url => JSON.parse(new URLSearchParams(new URL(url).hash.slice(1)).get('stimulus'));
-  const run = async () => {
+  const currentRun = () => page.locator('#referencePilotLink').getAttribute('href');
+  const shows = new Map();
+  const run = async (id, sample, key) => {
     await page.click('#referenceTrial');
     await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'active');
-    assert.equal(await background(), 'rgb(128, 128, 128)');
+    await checkBackground(id);
+    assert.equal(await selector.isDisabled(), true);
     assert.equal((await snap()).preview_visible, true);
-    const href = await page.locator('#referencePilotLink').getAttribute('href');
-    assert.equal(captured(href).asset_sha256, (await snap()).asset_sha256);
+    if (sample) shows.set(key, await pixels());
+    const href = await currentRun();
+    const conditions = captured(href);
+    assert.equal(conditions.asset_sha256, (await snap()).asset_sha256);
+    assert.equal(conditions.background, id);
+    assert.equal(conditions.background_hex, backgrounds[id].hex);
+    assert.equal(conditions.background_asset, backgrounds[id].asset);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'idle');
+    assert.equal(await selector.isEnabled(), true);
     return href;
   };
-  assert.equal(await background(), 'rgb(255, 255, 255)');
+  await checkBackground('neutral');
   let lastRun;
   const runs = new Map();
   await page.evaluate(() => {
@@ -47,52 +97,79 @@ try {
       }
     });
   });
+  const previews = new Map();
   for (const number of [2751, 2704, 2755, 2711]) {
     await page.selectOption('#referencePhotoSelect', 'cabinet_img_' + number + '_archive_v4');
+    if (number === 2751) {
+      assert.equal(await selector.inputValue(), gray);
+      assert.equal(await selector.isEnabled(), true);
+    }
+    await selector.selectOption(gray);
     await page.selectOption('#referenceVariant', 'original');
     await ready();
     await page.fill('#referenceTarget', '100');
     await page.click('#referenceApplyTarget');
-    const original = await snap();
-    assert.equal(await background(), 'rgb(128, 128, 128)');
-    const originalRun = await run();
-    assert.equal(captured(originalRun).stimulus_variant, 'original');
-    runs.set(number + '_original', originalRun);
-    await page.selectOption('#referenceVariant', 'clean');
-    const loading = await snap();
-    assert.equal(loading.load_state, 'loading');
-    assert.equal(loading.asset_id, null);
-    assert.equal(loading.stimulus_variant, null);
-    assert.equal(await page.locator('#referencePilotLink').getAttribute('href'), originalRun);
-    await ready();
-    const clean = await snap();
-    assert.notEqual(clean.asset_sha256, original.asset_sha256);
-    assert.equal(clean.source_sha256, original.source_sha256);
-    assert.equal(clean.stimulus_variant, 'clean');
-    for (const field of ['scale_percent', 'calibration_id', 'image_width_css_px', 'image_height_css_px',
-      'review_segment_display_mm', 'equivalent_distance_m', 'background', 'geometry_revision',
-      'source_size_px', 'crop_ltrb_px', 'segment_a_source_px', 'segment_b_source_px']) {
-      assert.deepEqual(clean[field], original[field], field);
+    const baseline = await snap();
+    const baselinePosition = await position();
+    for (const variant of ['original', 'clean']) {
+      if (variant === 'clean') {
+        await page.selectOption('#referenceVariant', variant);
+        const loading = await snap();
+        assert.equal(loading.load_state, 'loading');
+        assert.equal(loading.asset_id, null);
+        assert.equal(loading.stimulus_variant, null);
+        assert.equal(await currentRun(), lastRun);
+        await ready();
+        assert.notEqual((await snap()).asset_sha256, baseline.asset_sha256);
+      }
+      assert.match(await page.textContent('#referenceBackgroundNote'),
+        variant === 'original' ? /только за её краями/ : /в прозрачных областях/);
+      for (const id of Object.keys(backgrounds)) {
+        const previous = await currentRun();
+        await selector.selectOption(id);
+        await checkBackground(id);
+        assert.equal(await currentRun(), previous);
+        const selected = await snap();
+        for (const field of ['scale_percent', 'calibration_id', 'image_width_css_px', 'image_height_css_px',
+          'review_segment_display_mm', 'equivalent_distance_m', 'geometry_revision', 'source_sha256',
+          'source_size_px', 'crop_ltrb_px', 'segment_a_source_px', 'segment_b_source_px']) {
+          assert.deepEqual(selected[field], baseline[field], field);
+        }
+        assert.deepEqual(await position(), baselinePosition);
+        assert.ok(Math.abs(selected.equivalent_distance_m - 100) < 0.2);
+        const key = number + '_' + variant + '_' + id;
+        if (number === 2751) previews.set(key, await pixels());
+        lastRun = await run(id, number === 2751, key);
+        assert.equal(captured(lastRun).stimulus_variant, variant);
+        runs.set(key, lastRun);
+      }
     }
-    assert.ok(Math.abs(clean.equivalent_distance_m - 100) < 0.2);
+    const clean = await snap();
     await page.click('#referenceDouble');
     const double = await snap();
     assert.ok(Math.abs(double.review_segment_display_mm / clean.review_segment_display_mm - 2) < 0.003);
     assert.ok(Math.abs(clean.equivalent_distance_m / double.equivalent_distance_m - 2) < 0.003);
     await page.click('#referenceHalf');
-    lastRun = await run();
-    assert.equal(captured(lastRun).stimulus_variant, 'clean');
-    runs.set(number + '_clean', lastRun);
   }
-  // Leave the gallery on the historical geometry. Its saved link must still point at the last actual show.
+  for (const samples of [previews, shows]) {
+    const [original] = samples.get('2751_original_' + gray);
+    for (const [id, channel] of [[gray, 128], ['neutral', 255], ['sky', null]]) {
+      const [inside, outside] = samples.get('2751_original_' + id);
+      const [transparent, around] = samples.get('2751_clean_' + id);
+      assert.deepEqual(inside, original);
+      assert.deepEqual(around, outside);
+      if (channel !== null) assert.deepEqual(transparent, [channel, channel, channel, 255]);
+      else assert.ok(transparent[2] > transparent[0], 'visible sky through the clean PNG');
+    }
+  }
   await page.selectOption('#referencePhotoSelect', 'cabinet_top');
-  assert.equal(await background(), 'rgb(255, 255, 255)');
-  assert.equal(await page.locator('#referencePilotLink').getAttribute('href'), lastRun);
+  await checkBackground('neutral');
+  assert.equal(await currentRun(), lastRun);
   const popup = page.waitForEvent('popup');
   await page.click('#referencePilotLink');
   const pilot = await popup;
   assert.match(await pilot.textContent('#capturedStimulus'), /IMG_2711.*Чистый фон/);
-  const frontLink = new URL(runs.get('2751_clean'));
+  const frontLink = new URL(runs.get('2751_clean_' + gray));
   frontLink.searchParams.set('qa', 'hashchange');
   await pilot.goto(frontLink.href);
   await pilot.waitForFunction(() => document.querySelector('[name=reference]').value === 'IMG_2751');
@@ -126,8 +203,8 @@ try {
     }
   };
   await analyze();
-  await checkExport('2751_clean');
-  for (const key of ['2704_clean', '2755_original', '2755_clean', '2711_original', '2711_clean']) {
+  await checkExport('2751_clean_' + gray);
+  for (const key of ['2704_clean_neutral', '2755_original_sky', '2755_clean_neutral', '2711_original_neutral', '2711_clean_sky']) {
     const link = runs.get(key);
     const expected = captured(link);
     await pilot.evaluate(hash => { location.hash = hash; }, new URL(link).hash);
@@ -138,7 +215,7 @@ try {
     await checkExport(key);
   }
   assert.deepEqual(errors, []);
-  console.log('Paired geometry, original/clean decode and fullscreen, hash changes, and captured pilot JSON/CSV: OK');
+  console.log('24 paired shows, rendered backgrounds, frozen conditions and pilot JSON/CSV: OK');
 } finally {
   await browser.close();
 }

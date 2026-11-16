@@ -376,7 +376,12 @@
     ]
   });
   // Archive-grid stimuli have their own IDs. Model and motor labels come from the v2 reference.
-  const pairedBackground = { id: 'neutral_gray_808080_v1', color: '#808080' };
+  const grayBackground = 'neutral_gray_808080_v1';
+  const pairedBackgrounds = {
+    neutral: { background_hex: '#FFFFFF' },
+    [grayBackground]: { background_hex: '#808080' },
+    sky: { background_hex: null, background_asset: 'reference_assets/sky.svg' }
+  };
   const cabinetPairs = [
     { number: 2751, crop: [250, 915, 1180, 1090], bounds: [270, 933, 1161, 1066],
       original: ['IMG_2751_v2.png', '45d7ac5ba7c5922361e0d2b879a582845f78ebdbbe9d08f32c8b81887fd47d44'],
@@ -498,6 +503,7 @@
     let loaded = false, loadState = 'missing', loadGeneration = 0, targetError = '';
     let trialPhase = 'idle', settleFrame = null, settleStarted = 0, stableSince = 0, lastLayout = '', exitRequested = false;
     let background = saved?.background === 'sky' ? 'sky' : 'neutral';
+    let pairedBackground = Object.hasOwn(pairedBackgrounds, saved?.paired_background) ? saved.paired_background : grayBackground;
     let camera = saved?.camera === '1' ? '1' : '5';
     let variant = saved?.variant === 'clean' ? 'clean' : 'original';
     let pilotCaptured = false;
@@ -518,7 +524,7 @@
       <p><label>Желаемая эквивалентная дальность, м <input id="referenceTarget" type="text" inputmode="decimal" placeholder="100,00"></label><button id="referenceApplyTarget">Рассчитать масштаб</button><span id="referenceTargetStatus" role="status"></span></p>
       <p><label>Камера Xiaomi 17 Pro <select id="referenceCamera"><option value="5">Физическая телекамера 5× — план опыта</option><option value="1">1× — сравнение</option></select></label></p>
       <p>1×/5× — обозначение условий опыта. Дальность не умножается на 5; камера меняет размер объекта в кадре YOLO. Использование физического телевика проверяется на телефоне.</p>
-      <p><label>Фон <select id="referenceBackground"><option value="neutral">Нейтральный однотонный</option><option value="sky">Фиксированное небо</option><option value="neutral_gray_808080_v1" hidden>Серый #808080</option></select></label><button id="referenceTrial">Режим испытания</button></p>
+      <p><label>Фон <select id="referenceBackground"><option value="neutral">Белый</option><option value="neutral_gray_808080_v1" hidden>Серый</option><option value="sky">Небо</option></select></label><button id="referenceTrial">Режим испытания</button></p>
       <p id="referenceBackgroundNote"></p>
       <p id="referencePilotRun" class="hidden"><a id="referencePilotLink" target="_blank" rel="noopener">Открыть пилот с сохранёнными условиями</a> <span id="referencePilotLabel"></span></p>
       <p id="referenceReadout" aria-live="polite"></p>
@@ -537,7 +543,7 @@
     const savedPhotoId = saved?.photo_id ?? (saved?.model_id === 'cabinet_reference' ? 'cabinet_front' : null);
     let photo = selected.photos.find(p => p.id === savedPhotoId) || selected.photos[0];
     for (const p of profiles) select.add(new Option(p.model, p.id));
-    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, camera, ...(photo.variants ? { variant } : {}) }); }
+    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, paired_background: pairedBackground, camera, ...(photo.variants ? { variant } : {}) }); }
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
     function choosePhoto() {
       photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
@@ -602,12 +608,16 @@
       $('referenceVariant').options[1].disabled = !p.variants?.clean;
       $('referenceVariantNote').classList.toggle('hidden', !p.pending);
       $('referenceVariantNote').textContent = p.pending ? 'Чистый фон недоступен. ' + p.pending : '';
-      $('referenceBackground').disabled = paired;
-      $('referenceBackground').value = paired ? pairedBackground.id : background;
+      const displayedBackground = paired ? pairedBackground : background;
+      $('referenceBackground').querySelector(`option[value="${grayBackground}"]`).hidden = !paired;
+      $('referenceBackground').value = displayedBackground;
+      $('referenceBackground').disabled = paired && trialPhase !== 'idle';
       $('referenceCamera').value = camera;
-      viewport.classList.toggle('reference-gray', paired);
-      viewport.classList.toggle('reference-sky', !paired && background === 'sky');
-      $('referenceBackgroundNote').textContent = paired ? 'Подложка #808080. В оригинале фон фотографии сохраняется.' : background === 'sky' && !p.transparent ? 'Локальный рисунок неба. Исходное фото непрозрачное: его собственный фон остаётся прямоугольником; корректное наложение дрона на небо не имитируется.' : background === 'sky' ? 'Локальный рисунок неба; используется прозрачный исходник.' : 'Нейтральный однотонный фон. Собственный фон фотографии сохраняется.';
+      viewport.classList.toggle('reference-gray', displayedBackground === grayBackground);
+      viewport.classList.toggle('reference-sky', displayedBackground === 'sky');
+      $('referenceBackgroundNote').textContent = paired ? (variant === 'original'
+        ? 'Оригинал сохраняет фон фотографии. Выбранная подложка видна только за её краями.'
+        : 'Выбранная подложка видна в прозрачных областях и вокруг изображения.') : background === 'sky' && !p.transparent ? 'Локальный рисунок неба. Исходное фото непрозрачное: его собственный фон остаётся прямоугольником; корректное наложение дрона на небо не имитируется.' : background === 'sky' ? 'Локальный рисунок неба; используется прозрачный исходник.' : 'Нейтральный однотонный фон. Собственный фон фотографии сохраняется.';
       $('referenceScale').value = scale;
       if (document.activeElement !== $('referenceScaleNumber')) $('referenceScaleNumber').value = scale;
       image.style.width = p.width * scale / 100 + 'px';
@@ -695,8 +705,8 @@
           mask_revision: visibleAsset?.maskRevision ?? null, source_size_px: p.original_size_px, crop_ltrb_px: p.crop_px,
           segment_a_source_px: p.source_points_px[0], segment_b_source_px: p.source_points_px[1],
           css_px_per_asset_px: actualScale, mm_per_css_px: cal?.mm_per_css_px ?? null,
-          background_hex: pairedBackground.color } : {}),
-        camera_label: camera + '×', background: paired ? pairedBackground.id : background, range_mode: activeMode, geometry_status: m.geometry_status ?? null, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
+          ...pairedBackgrounds[displayedBackground] } : {}),
+        camera_label: camera + '×', background: displayedBackground, range_mode: activeMode, geometry_status: m.geometry_status ?? null, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
     }
     function setScale(value) {
@@ -743,13 +753,13 @@
         mask_revision, geometry_revision, geometry_status, projection_confirmed, source_size_px, crop_ltrb_px,
         segment_a_source_px, segment_b_source_px, physical_segment_mm, projected_segment_mm,
         review_segment_display_mm, scale_percent, css_px_per_asset_px, calibration_id, mm_per_css_px,
-        background, background_hex } = state;
+        background, background_hex, background_asset } = state;
       const conditions = { reference: source_photo_id, view: state.view, equivalent_range_m: state.equivalent_distance_m,
         monitor_distance_cm: state.screen_distance_cm, camera: state.camera_label, photo_id, source_photo_id,
         source_sha256, asset_id, asset_sha256, asset_revision, stimulus_variant, mask_revision, geometry_revision,
         geometry_status, projection_confirmed, source_size_px, crop_ltrb_px, segment_a_source_px, segment_b_source_px,
         physical_segment_mm, projected_segment_mm, review_segment_display_mm, scale_percent, css_px_per_asset_px,
-        calibration_id, mm_per_css_px, background, background_hex };
+        calibration_id, mm_per_css_px, background, background_hex, background_asset };
       const url = new URL('yolo-pilot/index.html', document.baseURI);
       url.hash = new URLSearchParams({ stimulus: JSON.stringify(conditions) }).toString();
       $('referencePilotLink').href = url.href;
@@ -802,7 +812,14 @@
       // During entry/exit the sampler itself detects changes until the layout is stable.
     }
     $('referenceCamera').onchange = e => { camera = e.target.value; persist(); update(); };
-    $('referenceBackground').onchange = e => { background = e.target.value; persist(); update(); };
+    $('referenceBackground').onchange = e => {
+      const value = e.target.value;
+      if (photo.variants) {
+        if (trialPhase === 'idle' && Object.hasOwn(pairedBackgrounds, value)) pairedBackground = value;
+      } else if (value === 'neutral' || value === 'sky') background = value;
+      persist();
+      update();
+    };
     $('referenceApplyTarget').onclick = () => {
       targetError = '';
       const target = Number($('referenceTarget').value.trim().replace(',', '.'));

@@ -29,10 +29,15 @@ function readCapturedStimulus(json) {
   if (!json) return null;
   try {
     const stimulus = JSON.parse(json);
+    const validBackground =
+      (stimulus?.background === 'neutral_gray_808080_v1' && stimulus.background_hex === '#808080') ||
+      (stimulus?.background === 'neutral' && stimulus.background_hex === '#FFFFFF') ||
+      (stimulus?.background === 'sky' && stimulus.background_hex === null &&
+        stimulus.background_asset === 'reference_assets/sky.svg');
     if (!['original', 'clean'].includes(stimulus?.stimulus_variant) ||
         !/^IMG_\d{4}$/.test(stimulus.source_photo_id) ||
         ![stimulus.source_sha256, stimulus.asset_sha256].every(value => /^[a-f0-9]{64}$/.test(value)) ||
-        stimulus.background !== 'neutral_gray_808080_v1' || stimulus.background_hex !== '#808080') throw new TypeError();
+        !validBackground) throw new TypeError();
     for (const field of ['reference', 'view', 'equivalent_range_m', 'monitor_distance_cm', 'background', 'camera']) {
       if (typeof stimulus[field] !== (field.endsWith('_m') || field.endsWith('_cm') ? 'number' : 'string')) throw new TypeError();
     }
