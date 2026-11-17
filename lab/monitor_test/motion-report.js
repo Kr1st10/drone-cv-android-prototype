@@ -113,7 +113,7 @@
   function reportMetadata(run, journal, points) {
     const records=journal.metadata_records || [{type:'legacy_journal',data:Object.fromEntries(
       Object.entries(journal).filter(([key])=>!['frames','publications','detections','calibration_image'].includes(key)))}];
-    const fields=['git_sha','git_dirty','app_version','model_asset','model_sha256','model_name','mode','confidence','nms_iou','nms_max_detections','model_input_size',
+    const fields=['git_sha','git_dirty','app_version','version_code','build_type','model_asset','model_sha256','model_name','mode','confidence','nms_iou','nms_max_detections','model_input_size',
       'backend','intra_op_threads','inter_op_threads','execution_mode','execution_provider','lk','yolo_period_ns','confirmation_ttl_ns','retry_ns','coordinate_timeout_ns',
       'device','android_release','android_sdk','camera_context'];
     const values=Object.fromEntries(fields.map(key=>[key,[]]));
@@ -123,7 +123,7 @@
       const d=record.data;
       for(const key of fields) for(const source of [d,d?.metadata,d?.camera_context,d?.metadata?.camera_context,
         d?.model && {model_asset:d.model.asset,model_sha256:d.model.sha256,model_name:d.model.name,confidence:d.model.confidence,
-          nms_iou:d.model.nms_iou,backend:d.model.backend,intra_op_threads:d.model.intra_op_threads,
+          nms_iou:d.model.nms_iou,nms_max_detections:d.model.nms_max_detections,backend:d.model.backend,intra_op_threads:d.model.intra_op_threads,
           inter_op_threads:d.model.inter_op_threads,execution_mode:d.model.execution_mode,execution_provider:d.model.execution_provider}]) {
         if(source?.[key]!=null && !values[key].some(v=>canonical(v.value)===canonical(source[key])))
           values[key].push({value:source[key],source_type:record.type,event_id:record.event_id??null});
@@ -140,7 +140,7 @@
   function analyze(run, journal, points) {
     if(run?.schema!=='dronecv-motion-run-1' || journal?.schema!=='dronecv-motion-android-1') throw Error('Неподдерживаемый формат JSON.');
     if(!Array.isArray(run.samples)||!Array.isArray(journal.frames)||!Array.isArray(journal.publications)||!Array.isArray(journal.detections)) throw Error('Отсутствуют записи.');
-    if(!['yolo','yolo_lk'].includes(run.mode)||run.mode!==journal.mode) throw Error('Режимы эталона и журнала не совпадают.');
+    if(!['yolo','yolo_lk'].includes(journal.mode)||(run.mode!=null && run.mode!==journal.mode)) throw Error('Режимы эталона и журнала не совпадают.');
     if(!finite(journal.stop_ns) || journal.stop_ns<0) throw Error('Некорректное время остановки.');
     if(!journal.geometry || !journal.calibration_image || journal.geometry.width!==journal.calibration_image.width || journal.geometry.height!==journal.calibration_image.height) throw Error('Нет совместимого калибровочного кадра.');
     if(!points.every(p=>p.every(v=>finite(v)&&v>=0&&v<=1))) throw Error('Точки должны находиться внутри кадра.');
@@ -271,7 +271,7 @@
     else if(uncertainLoss) decision_reason='Неизвестный участок может скрывать длинный провал.';
     const center_error=centerError(ordered,spans,transform,journal,lo,hi,timingStatus,expected);
     const provenance=reportMetadata(run,journal,points);
-    return {center_error,provenance,run_id:run.run_id,mode:run.mode,criterion_version:'motion-retention-v3',decision_reason,clock,timing_status:timingStatus,offset_lower_ms:finite(lo)?lo/1e6:null,offset_upper_ms:finite(hi)?hi/1e6:null,total_frames:allFrames.length,matched_frames:matchedFrames,missing_markers:missing,unmatched_markers:other,marker_order_invalid:reversed,alignment_invalid:alignmentInvalid,unknown_may_hide_long_failure:uncertainLoss,coverage,expected_ms:expected/1e6,evaluated_ms:evaluated/1e6,good_ms:good/1e6,bad_ms:bad/1e6,unknown_ms:unknown/1e6,good_fraction:ratio,good_fraction_lower:lower,good_fraction_upper:upper,longest_failure_ms:longest/1e6,longest_possible_failure_ms:longestPossible/1e6,blank_evaluated_ms:blank/1e6,false_box_blank_ms:falseBlank/1e6,false_box_blank_intervals:falseBlankIntervals,capture_latency_ms:capture?(capture.published_ns-first.capture_ns)/1e6:null,capture_frame_id:capture?(frameById.get(capture.frame_id)?.original_frame_id??capture.frame_id):null,recording_complete:journal.recording_complete??null,experiment_status:journal.experiment_status??null,sufficient,pass};
+    return {center_error,provenance,run_id:run.run_id,mode:journal.mode,criterion_version:'motion-retention-v3',decision_reason,clock,timing_status:timingStatus,offset_lower_ms:finite(lo)?lo/1e6:null,offset_upper_ms:finite(hi)?hi/1e6:null,total_frames:allFrames.length,matched_frames:matchedFrames,missing_markers:missing,unmatched_markers:other,marker_order_invalid:reversed,alignment_invalid:alignmentInvalid,unknown_may_hide_long_failure:uncertainLoss,coverage,expected_ms:expected/1e6,evaluated_ms:evaluated/1e6,good_ms:good/1e6,bad_ms:bad/1e6,unknown_ms:unknown/1e6,good_fraction:ratio,good_fraction_lower:lower,good_fraction_upper:upper,longest_failure_ms:longest/1e6,longest_possible_failure_ms:longestPossible/1e6,blank_evaluated_ms:blank/1e6,false_box_blank_ms:falseBlank/1e6,false_box_blank_intervals:falseBlankIntervals,capture_latency_ms:capture?(capture.published_ns-first.capture_ns)/1e6:null,capture_frame_id:capture?(frameById.get(capture.frame_id)?.original_frame_id??capture.frame_id):null,recording_complete:journal.recording_complete??null,experiment_status:journal.experiment_status??null,sufficient,pass};
   }
 
   // Long timestamps are subtracted as BigInt before converting to Number. Frame
@@ -372,6 +372,7 @@
       }
       if(incomplete) j.detections=j.detections.filter(d=>d.frame_id!==null);
       if(!footer) j.stop_ns=latest;
+      j.event_integrity={missing_events:String(missing),dropped_count:footer?.dropped_count??null,footer_present:!!footer,sequence_broken:broken};
       j.complete=!incomplete && footer.interrupted===false;j.truncated=incomplete;
       j.recording_complete=!incomplete;j.experiment_status=footer?.experiment_status??'unknown';j.session_id=session;
       return j;
@@ -386,7 +387,7 @@
     const groups=new Map(), appearances=new Map();
     for(const {run,result} of items) {
       const s=run.scenario;
-      const config=canonical({mode:run.mode,size_px:s.target_width_px,max_speed_px_s:s.max_speed_px_s,
+      const config=canonical({mode:run.mode ?? result.mode,size_px:s.target_width_px,max_speed_px_s:s.max_speed_px_s,
         photo:run.photo,conditions:run.conditions,viewport:{width:s.width,height:s.height},laps:s.laps});
       const key=JSON.stringify(config), a=s.acceleration_px_s2;
       const g=groups.get(key)||{...config,levels:new Map()};

@@ -48,6 +48,26 @@
   #settings fieldset { min-width: 0; }
   #boundImage { display: block; width: min(700px, 100%); max-width: 100%; box-sizing: border-box; }
   #hud { position: fixed; z-index: 5; left: 8px; bottom: 6px; font-size: 13px; color: #888; pointer-events: none; }
+  body.motion-mode #stage, body.motion-mode #hud, body.motion-mode #geometry, body.motion-mode #stageControls, body.motion-mode #answer, body.motion-mode #record { display: none !important; }
+  #motionPhoto { display: block; max-width: 100%; }
+  #motionSection input[type=file] { max-width: 100%; }
+  #syncCheckStatus { white-space: pre-line; }
+  #motionStage { position: fixed; inset: 0; z-index: 100; background: #fff; }
+  #motionPhotoPreview { display:block; width:240px; height:140px; max-width:100%; object-fit:contain; background:white; }
+  #motionPhotoPreview[hidden] { visibility:hidden; }
+  #motionSection input[type=number] { max-width:7em; }
+  #motionSection select { max-width:100%; }
+  #motionSection p { overflow-wrap:anywhere; }
+  body.motion-mode #settings { box-sizing:border-box; width:min(1142px,94vw); }
+  body.motion-mode nav button[aria-selected=true], #motionSection button.primary { background:#176b37; border-color:#32824e; color:#fff; }
+  #motionSection button, #motionStop { cursor:pointer; }
+  #motionSection button:disabled { cursor:default; opacity:.65; }
+  #motionSection button:not(:disabled):hover { filter:brightness(.92); }
+  #motionSection button:not(:disabled):active { transform:translateY(1px); }
+  #motionAreaPreview { display:block; max-width:100%; background:white; border:1px solid #888; }
+  #motionSection button:focus-visible, #motionSection input:focus-visible { outline:3px solid #38a; outline-offset:3px; }
+  #motionCanvas { display: block; width: 100vw; height: 100vh; }
+  #motionStop { position: absolute; right: 16px; top: 16px; }
   .hidden { display: none !important; }
   body.quick .adv { display: none !important; }
   fieldset { border: 1px solid #444; border-radius: 6px; margin: 0 0 12px; padding: 8px 12px; }
@@ -66,7 +86,7 @@
 </style>
 </head>
 <body class="quick">
-<canvas id="motionCanvas" class="hidden" style="position:fixed;inset:0;width:100vw;height:100vh;z-index:100;background:#000"></canvas>
+<div id="motionStage" class="hidden"><canvas id="motionCanvas"></canvas><button id="motionStop">Стоп</button></div>
 <div id="stage"><img id="img" alt=""></div>
 <div id="hud"></div>
 <div id="answer" class="panel hidden"></div>
@@ -116,35 +136,58 @@
   </section>
   <section id="motionSection" class="hidden">
     <h3>Движущаяся цель</h3>
-    <p>Фото целиком движется по прямоугольному маршруту. Ширина, скорость и ускорение заданы в пикселях экрана, не камеры. Перед каждым запуском подготовьте на телефоне указанную конфигурацию.</p>
+    <p>Фото целиком движется по прямоугольному маршруту. Ширина, скорость и ускорение заданы в пикселях экрана, не камеры. Выберите фото, настройте движение и нажмите «Старт».</p>
     <label>Снимок <select id="motionPhoto"></select></label>
-    <label>Добавить свой снимок <input type="file" id="motionUpload" accept="image/png,image/jpeg,image/webp"></label>
+    <img id="motionPhotoPreview" width="240" height="140" alt="Выбранная фотография дрона">
+    <label>Заменить фотографию <input type="file" id="motionUpload" accept="image/png,image/jpeg,image/webp"></label>
     <button id="motionBounds">Проверить / выделить границы</button><p id="motionPhotoStatus" class="muted"></p>
-    <label>Ширина рамки, px экрана <input id="motionWidth" type="number" min="1" value="100"></label>
+    <label>Ширина дрона по разметке, px экрана <input id="motionWidth" type="number" min="1" value="40"></label>
     <label>Максимальная скорость, px/с <input id="motionSpeed" type="number" min="1" value="300"></label>
     <label>Ускорение, px/с² <input id="motionAcceleration" type="number" min="1" value="500"></label>
     <label>Круги <input id="motionLaps" type="number" min="1" max="20" value="1"></label>
-    <fieldset><legend>Условия съёмки</legend>
+    <p class="muted">Размеры заданы в пикселях canvas, не камеры. Сначала впишите рабочую область целиком в кадр телефона.</p>
+    <p id="motionCameraStatus" class="muted">Камерой не проверено.</p>
+    <details><summary>Рабочая область и метки для 5×</summary>
+      <label>Слева, % экрана <input id="motionAreaX" type="number" min="0" max="100" value="5"></label>
+      <label>Сверху, % экрана <input id="motionAreaY" type="number" min="0" max="100" value="5"></label>
+      <label>Ширина области, % <input id="motionAreaWidth" type="number" min="1" max="100" value="90"></label>
+      <label>Высота области, % <input id="motionAreaHeight" type="number" min="1" max="100" value="90"></label>
+      <label>Сторона угловой метки, px <input id="motionTagSize" type="number" min="24" value="48"></label>
+      <label>Ячейка sync-кода, px <input id="motionSyncSize" type="number" min="2" step="1" value="18"></label>
+      <canvas id="motionAreaPreview" width="640" height="360" aria-label="Расположение рабочей области"></canvas>
+      <p>Четыре метки и маршрут перемещаются вместе с областью. Положение кода фиксируется между верхними метками. Читаемость проверяется только по данным телефона.</p>
+    </details>
+    <details><summary>Дополнительно: условия съёмки (необязательно)</summary>
       <label>Идентификатор установки / телефона <input id="motionSetup" type="text"></label>
       <label>Зум <input id="motionZoom" type="text" placeholder="например, 1x"></label>
       <label>Ориентация <input id="motionOrientation" type="text"></label>
       <label>Расстояние до экрана, см (необязательно) <input id="motionDistance" type="number" min="0" step="any" placeholder="не измерено"></label>
       <label>Камера и настройки приложения <input id="motionCamera" type="text" placeholder="физическая камера, конфигурация"></label>
-      <p><label><input id="motionConfirm" type="checkbox"> Подтверждаю ту же установку, экран и настройки камеры для обоих запусков пары</label></p>
-    </fieldset>
+      <p class="muted">Эти сведения вводит оператор; они не измеряются автоматически.</p>
+    </details>
     <p id="motionStatus" class="warn"></p>
-    <button id="motionStart" class="primary">Начать запуск</button><button id="motionNextPair">Следующая пара</button><button id="motionNewSeries">Новая серия</button>
+    <p>Ячейка sync: <button type="button" data-sync-size="12">12</button> <button type="button" data-sync-size="18">18</button> <button type="button" data-sync-size="24">24</button> <button type="button" data-sync-size="32">32</button> px canvas; ручной ввод выше.</p>
+    <p id="syncSizeStatus" class="muted"></p>
+    <button id="syncCheckStart">Проверить чтение кода</button>
+    <p class="muted">Без фотографии: 10 секунд неизменного кода, затем пять шагов по секунде. Сначала включите запись стенда на телефоне.</p>
+    <label>Проверка чтения <select id="syncCheckSelect"></select></label><button id="syncCheckExport" disabled>Экспорт проверки</button>
+    <p id="syncCheckStatus" role="status">Камерой не проверено. Импортируйте журнал телефона ниже.</p>
+    <button id="motionStart" class="primary">Старт</button><button id="motionRepeat">Повторить</button><button id="motionNewSeries">Новая серия</button>
     <button id="motionExportLast">Экспорт последнего запуска JSON</button><button id="motionExport">Экспорт серии JSON</button>
+    <p id="motionHistoryStatus" class="muted"></p>
     <h4>Отчёт по журналам Android</h4>
     <label>Эталон прогона или серии <input id="reportReference" type="file" accept="application/json,.json"></label>
     <label>Журналы Android <input id="reportJournals" type="file" accept="application/json,.json,.ndjson,.jsonl,application/x-ndjson" multiple></label>
     <label>Журнал для калибровки <select id="reportSelect"></select></label>
-    <p>На первом сохранённом повёрнутом кадре нажмите центры меток по порядку: TL, TR, BR, BL. Для каждого журнала отметьте точки заново.</p>
+    <p>Эталон подбирается по ID из журнала, четыре метки распознаются на сохранённом JPEG. Если эталона нет в браузере, загрузите его файл. Для старых эталонов или неудачного распознавания включите ручные точки на настоящем кадре.</p>
     <canvas id="reportCanvas" style="display:block;max-width:100%;height:auto;cursor:crosshair"></canvas>
-    <p id="reportStatus" class="warn"></p>
-    <button id="reportReset">Сбросить точки</button><button id="reportCalculate">Рассчитать отчёт</button><button id="reportExport" disabled>Экспорт отчёта JSON</button>
+    <p id="reportSyncStatus" class="muted" aria-live="polite">Читаемость sync-кода: журнал не загружен.</p>
+    <p id="reportTimingStatus" class="muted" aria-live="polite">Временное сопоставление: журнал не загружен.</p>
+    <p id="reportCalibrationStatus" class="muted" aria-live="polite">Камерой не проверено.</p>
+    <p id="reportStatus" class="warn" aria-live="polite"></p>
+    <button id="reportReset">Ручная калибровка заново</button><button id="reportCalculate">Пересчитать отчёт</button><button id="reportExport" disabled>Экспорт отчёта JSON</button>
     <pre id="reportOutput" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
-    <p class="muted">Данные запусков находятся только в памяти страницы: экспортируйте их до закрытия или обновления. Серия ограничена 20 запусками, каждый запуск — 40 000, серия — 120 000 отрисованных кадров. Прерванные запуски также доступны для экспорта. Esc или выход из полного экрана прерывает запуск.</p>
+    <p class="muted">Эталоны сохраняются в IndexedDB этого браузера. Экспортируйте резервную копию для переноса. Прерванные запуски помечены неполными. Esc, скрытие страницы и смена геометрии прерывают движение.</p>
   </section>
   <section id="resultsSection" class="hidden">
     <h3>Сохранённые исследования</h3>
@@ -325,8 +368,15 @@
 <script src="reference_drones.js"></script>
 
 <script src="motion.js"></script>
+<script src="motion-scenario.js"></script>
+<script src="motion-store.js"></script>
+<script src="motion-calibration.js"></script>
+<script src="sync-check.js"></script>
+<script src="sync-check-ui.js" defer></script>
 <script src="motion-ui.js" defer></script>
 <script src="motion-report.js"></script>
+<script src="motion-report-v4.js"></script>
+<script src="motion-journal-status.js"></script>
 <script src="motion-report-ui.js" defer></script>
 <script>
 "use strict";
@@ -430,6 +480,7 @@ function section(name) {
     save('sample', SAMPLE); save('settings', S); writeSettings(); sampleInfo(); ui.galleryRestorePending = false;
   }
   ui.section = name;
+  document.body.classList.toggle('motion-mode', name === 'motion');
   document.querySelectorAll('nav [data-section]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.section === name)));
   ['gallery', 'research', 'reference', 'motion', 'results'].forEach(n => $(n + 'Section').classList.toggle('hidden', n !== name));
   $('advanced').classList.toggle('hidden', name === 'results' || name === 'reference' || name === 'motion');
@@ -1161,7 +1212,7 @@ document.addEventListener('keydown', e => {
   }
   if (inInput) { if (k === 'escape') e.target.blur(); return; }
   if (!$('calib').classList.contains('hidden')) { if (k === 'c' || k === 'с' || k === 'escape') { closeOverlays(); openSettings(); } return; }
-  if (!$('settings').classList.contains('hidden')) { if (k === 'escape' && T) show(); else if (k === 'c' || k === 'с') calib(); else if (k === 'f' || k === 'а') fs(); return; }
+  if (!$('settings').classList.contains('hidden')) { if (k === 'escape' && T && ui.section !== 'motion') show(); else if (k === 'c' || k === 'с') calib(); else if (k === 'f' || k === 'а') fs(); return; }
   if (k === 'arrowright' || k === ' ' || k === 'pagedown') { e.preventDefault(); go(1); }
   else if (k === 'arrowleft' || k === 'pageup') go(-1);
   else if (k === 'r' || k === 'к') { e.preventDefault(); openRecord(); }
@@ -1179,7 +1230,7 @@ function fs() { if (!document.fullscreenElement) document.documentElement.reques
 function environmentChanged() {
   referenceTab?.environmentChanged();
   screenStatus();
-  if (T && $('settings').classList.contains('hidden') && $('calib').classList.contains('hidden') && $('boundsEditor').classList.contains('hidden')) show();
+  if (ui.section !== 'motion' && T && $('settings').classList.contains('hidden') && $('calib').classList.contains('hidden') && $('boundsEditor').classList.contains('hidden')) show();
 }
 addEventListener('resize', environmentChanged);
 window.visualViewport?.addEventListener('resize', environmentChanged);
@@ -1336,7 +1387,8 @@ window.MotionGallery = {
   images: () => M, bounds: m => confirmedBounds(m, null),
   upload: file => addReferencePhoto(file, true),
   edit: id => { ui.editingCurrent = false; $('boundImage').value = id; editBounds(); },
-  imageLoaded, download
+  imageLoaded, download, load, save,
+  settings: () => { section('motion'); closeOverlays(); $('settings').classList.remove('hidden'); }
 };
 
 // ---------- init ----------

@@ -16,6 +16,54 @@ import ru.university.dronecv.motion.MotionJournal
 import ru.university.dronecv.tracking.TrackingSession
 
 class LiveControllerTest {
+    @Test fun inventoryGeometryIsMeasuredAndClearedOnInvalidation() {
+        val worker = Worker()
+        val backend = object : LiveBackend<CameraFrameSnapshot> {
+            override fun infer(frame: CameraFrameSnapshot, confidence: Float) = LiveInference(emptyList(), 3, 4, 0.0)
+            override fun close() = Unit
+        }
+        val controller = LiveController(backend, worker, eventTime = { 10L }, nanoTime = { 10L })
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        assertTrue(controller.exportMetadata().contains("\"frame_geometry\":null"))
+        val pool = CameraFramePool()
+        val lease = pool.acquire(4, 3)!!
+        val frame = CameraFrameSnapshot(ru.university.dronecv.detection.yolo.ArgbImage(4, 3, lease.pixels),
+            90, 0.0, lease, 8, 6, 2, 1, 6, 4)
+        val stamp = FrameStamp(null, CaptureTimebase.UNKNOWN, 10L)
+        controller.offerFrame(frame, controller.beginFrame(source, stamp)!!, stamp, 0.0)
+        val measured = controller.exportMetadata()
+        assertTrue(measured.contains("\"source_width\":8,\"source_height\":6"))
+        assertTrue(measured.contains("\"crop\":[2,1,6,4],\"rotation_degrees\":90"))
+        controller.configure(false, .5f)
+        assertTrue(controller.exportMetadata().contains("\"frame_geometry\":null"))
+        controller.close(); worker.drain()
+    }
+
+    @Test fun configurationSnapshotKeepsFullPackagedIdentityAndItsOwnControls() {
+        val worker = Worker()
+        val frames = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        val identity = ru.university.dronecv.BuildIdentity("a".repeat(40), true, "test", 7, "debug")
+        val controller = LiveController(Backend(), worker, frames, eventTime = { 10L },
+            packagedMetadataFields = identity.jsonFields())
+        controller.configure(true, .5f)
+        var first = 0L
+        controller.startDiagnostics("{\"requested_zoom\":5,\"confirmed_zoom\":null}") { first = frames.start(1) }
+        val old = frames.stop(first, 2, false, null)!!
+        controller.configure(true, .8f)
+        var second = 0L
+        controller.startDiagnostics("null") { second = frames.start(3) }
+        val current = frames.stop(second, 4, false, null)!!
+        assertTrue(old.sessionMetadata!!.contains("\"git_sha\":\"${"a".repeat(40)}\""))
+        assertTrue(old.sessionMetadata.contains("\"git_dirty\":true"))
+        assertTrue(old.sessionMetadata.contains("\"confidence\":0.5"))
+        assertTrue(old.sessionMetadata.contains("\"confirmed_zoom\":null"))
+        assertTrue(current.sessionMetadata!!.contains("\"confidence\":0.8"))
+        assertTrue(current.sessionMetadata.contains("\"camera_context\":null"))
+        assertFalse(current.sessionMetadata.contains("requested_zoom"))
+        controller.close(); worker.drain()
+    }
+
     private class Frame : AutoCloseable {
         val closes = AtomicInteger()
         override fun close() { closes.incrementAndGet() }
