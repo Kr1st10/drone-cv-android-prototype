@@ -4,6 +4,8 @@
 
 ## Локальная Android-сборка и JVM
 
+Парный браузерный стенд: `node lab/monitor_test/tests/motion_ab_test.mjs` проверяет арифметику, сопоставимость, дедупликацию, профили и JSON/CSV. `motion_ab_smoke.mjs` использует Chrome/Playwright и настоящий IndexedDB для порядка AB/BA, отмены/повтора, новых RAF, импорта/калибровки, перезагрузки, квоты, устаревшей калибровки и воспроизведения анализа из исходников экспорта. Оба входят в `pytest lab/monitor_test/tests`. Запуск browser script требует `CHROMIUM` и рабочего каталога с `node_modules/playwright`, как у остальных smoke-тестов. [Контракт и границы A/B](../../lab/monitor_test/AB_COMPARISON.md). Синтетическое A/A не подтверждает аппаратную повторяемость.
+
 ```bash
 ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug
 python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
