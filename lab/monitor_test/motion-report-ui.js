@@ -83,8 +83,9 @@
     for(const j of journals){try{
       const run=match(j);if(!j.processed)throw Error('Калибровка ещё обрабатывается.');if(j.image_error)throw Error(j.image_error);pointsFor(j,run);
       const result=['dronecv-motion-run-2','dronecv-motion-run-3'].includes(run.schema)?MotionReportV4.analyze(run,j.data,j.points):MotionReport.analyze(run,j.data,j.points);
+      if(window.MotionABUI&&j.raw){const token=version;MotionABUI.capture(j,run,result,()=>token===version).catch(e=>MotionABUI.notice(e.message));}
       items.push({run,result:{journal:j.name,calibration_points:j.points,calibration_method:j.manual?'manual':'automatic',calibration:j.calibration,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result}});
-    }catch(e){pending.push(`${j.name}: ${e.message}`);}}
+    }catch(e){pending.push(`${j.name}: ${e.message}`);window.MotionABUI?.analysisError(j,e.message);}}
     const results=items.map(i=>i.result);$('reportOutput').textContent=resultText(results)+(pending.length?'\nМетрики недоступны для:\n'+pending.join('\n'):'');
     if(!pending.length){const legacyOnly=items.every(i=>i.run.schema==='dronecv-motion-run-1');output={schema:legacyOnly?'dronecv-motion-report-4':items.some(i=>i.run.schema==='dronecv-motion-run-3')?'dronecv-motion-scenario-report-2':'dronecv-motion-scenario-report-1',runs:results};if(legacyOnly){output.maxima=MotionReport.maxima(items);$('reportOutput').textContent+='\n'+output.maxima.map(m=>`ограничение скорости ${m.max_speed_px_s} px/с: ${m.max_acceleration_px_s2??'не определено'} px/с²`).join('\n');}$('reportExport').disabled=false;}
     renderSelected();return !!output;
@@ -114,15 +115,16 @@
   $('reportReference').onchange=async e=>{
     const own=++referenceVersion,context=version;referenceNotice='Чтение эталона…';invalidate();renderSelected();
     try{const data=await parse(e.target.files[0]),items=data.schema==='dronecv-motion-series-1'?data.runs:[data];if(!Array.isArray(items)||items.some(r=>!['dronecv-motion-run-1','dronecv-motion-run-2','dronecv-motion-run-3'].includes(r?.schema)))throw Error('Неподдерживаемая версия эталона: '+data.schema);items.filter(r=>r.schema==='dronecv-motion-run-3').forEach(MotionTimeline.validate);if(own!==referenceVersion)return;
-      for(const r of items){await MotionStore.save(r);if(own!==referenceVersion)return;}const token=version,stored=await MotionStore.list();if(own!==referenceVersion||token!==version)return;runs=stored;referenceNotice=`Загружено эталонов: ${items.length}.`;
+      for(const r of items){await MotionStore.save(r);if(own!==referenceVersion)return;}const token=version,stored=await MotionStore.list();if(own!==referenceVersion||token!==version)return;runs=stored;window.MotionABUI?.references(stored);referenceNotice=`Загружено эталонов: ${items.length}.`;
       if(journals.length){calculate();await show(token);}else status(referenceNotice+' Загрузите журнал телефона.');
     }catch(e){if(own===referenceVersion&&context===version){referenceNotice='Ошибка импорта эталона: '+e.message;if(journals.length){calculate();renderSelected();}else status(referenceNotice);}}
   };
   $('reportJournals').onchange=async e=>{
     const token=++version;++viewVersion;invalidate();journals=[];runs=[];selected=0;pending=[];referenceNotice='';processing=true;image=null;canvas.width=canvas.height=0;$('reportSelect').disabled=true;$('reportSelect').replaceChildren();renderSelected();status('Чтение журналов…');
-    try{const loaded=await Promise.all([...e.target.files].map(async f=>{const data=await parseJournal(f);try{MotionJournalStatus.framesOf(data);}catch(e){throw Error(`${f.name}: ${e.message}`);}return {name:f.name,data,points:[],manual:false,processed:false,calibration:null,image_error:null};}));if(token!==version)return;
+    try{const ab=window.MotionABUI?.enabled(),files=[...e.target.files];if(ab&&files.reduce((n,f)=>n+f.size,0)>64*1024*1024)throw Error('A/B: пакет журналов больше 64 МиБ. Импортируйте меньше файлов.');const loaded=await Promise.all(files.map(async f=>{const data=await parseJournal(f);try{MotionJournalStatus.framesOf(data);}catch(e){throw Error(`${f.name}: ${e.message}`);}return {name:f.name,raw:ab?new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(await f.arrayBuffer()):null,data,points:[],manual:false,processed:false,calibration:null,image_error:null};}));if(token!==version)return;
       journals=loaded;const select=$('reportSelect');journals.forEach((j,i)=>{const o=document.createElement('option');o.value=i;o.textContent=j.name;select.append(o);});renderSelected();
-      try{const stored=await MotionStore.list();if(token!==version)return;runs=stored;}catch(e){if(token!==version)return;referenceNotice='Хранилище эталонов недоступно: '+e.message;}
+      try{const stored=await MotionStore.list();if(token!==version)return;runs=stored;window.MotionABUI?.references(stored);}catch(e){if(token!==version)return;referenceNotice='Хранилище эталонов недоступно: '+e.message;}
+      if(ab)await MotionABUI.ingest(journals,()=>token===version);if(token!==version)return;
       await processAll(token);}
     catch(e){if(token===version){processing=false;status(e.message);}}
     finally{if(token===version)$('reportSelect').disabled=false;}

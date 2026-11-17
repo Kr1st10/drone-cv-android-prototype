@@ -32,13 +32,13 @@
         chronology_unknown:records.some(r=>!Number.isSafeInteger(r.local_sequence)&&r.source!=='import')});
     });rows.onsuccess=parts.onsuccess=last.onsuccess=scenario.onsuccess=scenarioKey.onsuccess=ready;
   });}
-  async function begin(run,scenario=null){const key=run.run_id+':'+crypto.randomUUID();return transaction(['runs','settings'],'readwrite',(t,done,guard)=>{
+  async function begin(run,scenario=null,ab=null){const key=run.run_id+':'+crypto.randomUUID();return transaction(['runs','settings'],'readwrite',(t,done,guard)=>{
     const store=t.objectStore('settings'),request=store.get('localSequence');request.onsuccess=guard(()=>{
       const previous=request.result??0;if(!Number.isSafeInteger(previous)||previous<0||previous===Number.MAX_SAFE_INTEGER)throw Error('Невозможно продолжить порядок локальных запусков.');
       const sequence=previous+1;
       t.objectStore('runs').put({key,source:'local',local_sequence:sequence,run:{...run,complete:false,abort_reason:run.abort_reason||'не завершён',samples:[]}});
       store.put(sequence,'localSequence');store.put(key,'lastLocalKey');
-      store.put(scenario,'last');store.put(key,'lastScenarioKey');done(key);
+      store.put(scenario,'last');store.put(key,'lastScenarioKey');if(ab)store.put(ab,'abSeries');done(key);
     });
   });}
   async function append(key,index,samples,metadata=null){if(!samples.length)return;await transaction(metadata?['runs','chunks']:['chunks'],'readwrite',(t,done,guard)=>{
@@ -48,10 +48,11 @@
       store.put({...request.result,run:{...metadata,samples:[]}});
     });}
   });}
-  async function end(key,run){await transaction(['runs'],'readwrite',(t,done,guard)=>{
+  async function end(key,run,ab=null){await transaction(ab?['runs','settings']:['runs'],'readwrite',(t,done,guard)=>{
     const store=t.objectStore('runs'),request=store.get(key);request.onsuccess=guard(()=>{
       if(!request.result)throw Error('Начало запуска отсутствует в хранилище.');
       store.put({...request.result,run:{...run,samples:[]}});
+      if(ab)t.objectStore('settings').put(ab,'abSeries');
     });
   });}
   async function list(){return (await history()).runs;}
@@ -73,5 +74,10 @@
   async function settings(value){if(arguments.length)return transaction(['settings'],'readwrite',t=>{const store=t.objectStore('settings');store.put(value,'last');store.delete('lastScenarioKey');});
     return transaction(['settings'],'readonly',(t,done)=>{const r=t.objectStore('settings').get('last');r.onsuccess=()=>done(r.result);});
   }
-  root.MotionStore={begin,append,end,list,history,save,settings};
+  /** Read or replace the A/B workspace; writes resolve only on transaction commit. */
+  async function ab(value){return transaction(['settings'],arguments.length?'readwrite':'readonly',(t,done)=>{
+    const s=t.objectStore('settings');if(arguments.length){s.put(value,'abSeries');return;}
+    const r=s.get('abSeries');r.onsuccess=()=>done(r.result??null);
+  });}
+  root.MotionStore={begin,append,end,list,history,save,settings,ab};
 })(globalThis);

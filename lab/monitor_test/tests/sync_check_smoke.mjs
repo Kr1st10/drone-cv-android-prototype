@@ -146,7 +146,7 @@ try{
   await clean();const motion=(await page.evaluate(()=>MotionStore.list())).at(-1);
   assert.equal(motion.complete,true);assert.equal(motion.marker.module_px,18);assert.equal(motion.scenario.target_width_px,40);assert.ok(motion.samples.some(s=>s.visible));
   // Repeat uses the saved experiment, even after fields are edited.
-  await page.locator('#motionSection details').first().locator('summary').click();
+  await page.locator('#motionWorkspace summary').click();
   await page.fill('#motionWidth','20');await page.fill('#motionSyncSize','6');
   await page.click('#motionRepeat');await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});
   await tick(0);await page.click('#motionStop');await clean();
@@ -165,7 +165,9 @@ try{
   assert.equal(await page.inputValue('#motionWidth'),'40');assert.equal(await page.inputValue('#motionSyncSize'),'18');assert.equal(await page.inputValue('#motionAreaHeight'),'50');
   await page.fill('#motionAreaHeight','90');await page.click('#motionStart');
   await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});await tick(0);await page.click('#motionStop');await clean();
-  await page.fill('#motionSyncSize','6');await page.reload();await page.click('[data-section=motion]');assert.equal(await page.inputValue('#motionSyncSize'),'6');
+  await page.fill('#motionSyncSize','6');await page.reload();
+  await page.waitForFunction(()=>!document.getElementById('motionStart').disabled,null,{polling:50});
+  await page.locator('[data-section=motion]').focus();await page.keyboard.press('Enter');assert.equal(await page.inputValue('#motionSyncSize'),'6');
   assert.deepEqual(errors,[]);
   console.log('sync browser: imports/recovery, save/render faults, 40/18 on four resolutions, repeat, old 6px profile, presets, timeline/JPEG/tags and impossible geometry passed');
 }finally{await browser.close();}
