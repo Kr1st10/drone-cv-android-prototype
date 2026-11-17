@@ -75,6 +75,7 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
     private var lossEvents = 0L
     private var unstoredSamples = 0L
     private var lastTrackingSignal: TrackingSignal? = null
+    private var sessionMetadata: String? = null
 
     fun start(nowNanos: Long): Long = synchronized(lock) {
         check(!recording)
@@ -93,10 +94,16 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
         lossEvents = 0
         unstoredSamples = 0
         lastTrackingSignal = null
+        sessionMetadata = null
         recording = true
         generation
     }
-    fun event(token: Long?, type: String, payloadJson: String, time: Long) = event(token, type, { payloadJson }, time)
+    fun event(token: Long?, type: String, payloadJson: String, time: Long) = synchronized(lock) {
+        if (recording && token != null && token == generation) {
+            if (type == "metadata") sessionMetadata = payloadJson
+            timeline?.invoke(type, { payloadJson }, time)
+        }
+    }
     fun hasTimeline(token: Long?): Boolean = synchronized(lock) {
         recording && token != null && token == generation && timeline != null
     }
@@ -152,7 +159,7 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
             input.copy(fps = if (nowNanos > startNanos) input.received * 1_000_000_000.0 / (nowNanos - startNanos) else null),
             if (observedFrames + corrections > 0)
                 TrackingSnapshot(observedFrames, trackUpdates, corrections, lossEvents, unstoredSamples, trackingSamples.toList())
-            else null)
+            else null, sessionMetadata)
     }
 }
 
@@ -167,6 +174,7 @@ data class DiagnosticFrameSnapshot(
     val staleFramesDiscarded: Long = 0,
     val cameraInput: CameraInputStats = CameraInputStats(),
     val tracking: TrackingSnapshot? = null,
+    val sessionMetadata: String? = null,
 ) {
     /** Session-wall-time throughput; pauses/stalls are included. Not camera FPS. */
     val processedFps: Double? get() = if (durationNanos > 0) completedFrames * 1_000_000_000.0 / durationNanos else null

@@ -12,14 +12,28 @@ await page.click('[data-section=reference]');
 assert.equal(await page.inputValue('#referenceDrone'),'cabinet_reference');
 assert.equal(await page.locator('#referenceDrone option').count(),4);
 await page.click('#screenCalibBtn'); await page.fill('#screenLineCm','10'); await page.click('#applyScreenCalib'); await page.keyboard.press('Escape');
-await page.fill('#distance','500');
+await page.fill('#distance','434');
 const snap=()=>page.evaluate(()=>referenceTab.snapshot());
-for(const id of ['cabinet_front','cabinet_oblique_candidate','cabinet_top']){
+const newPhotos = {
+ cabinet_img_2751_v2: [930, 175, 14.105],
+ cabinet_img_2704_v2: [3739, 3473, 18.5752],
+ cabinet_img_2711_v2: [3708, 2587, 18.5431461366],
+ cabinet_img_2755_v2: [860, 250, 18.5153418386]
+};
+assert.equal(await page.inputValue('#referencePhotoSelect'),'cabinet_img_2751_v2');
+for(const id of ['cabinet_front','cabinet_oblique_candidate','cabinet_top',...Object.keys(newPhotos)]){
  await page.selectOption('#referencePhotoSelect',id);
- await page.waitForFunction(()=>document.getElementById('referenceDisplay').complete&&!document.getElementById('referenceDisplay').classList.contains('hidden'));
+ await page.waitForFunction(()=>referenceTab.snapshot().load_state==='ready');
  await page.fill('#referenceScaleNumber','20'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
  const a=await snap(); assert.ok(a.equivalent_distance_m>0,JSON.stringify(a));
  assert.ok(await page.isHidden('#referenceRangeMode'));
+ if (newPhotos[id]) {
+  const dimensions=await page.locator('#referenceDisplay').evaluate(img=>[img.naturalWidth,img.naturalHeight]);
+  assert.deepEqual(dimensions,newPhotos[id].slice(0,2));
+  assert.equal(a.geometry_revision,'cabinet_motor_geometry_v2');
+  assert.equal(a.geometry_status,'modelled_approximate');
+  assert.equal(a.projection_confirmed,false);
+ }
  assert.match(await page.getAttribute('#referencePhotoSource a','href'),/cabinet\/IMG_27\d{2}\.jpg$/);
  await page.locator('#referenceSegmentReview').evaluate(e=>e.open=true);
  await page.check('#referenceSegmentToggle');
@@ -33,12 +47,21 @@ for(const id of ['cabinet_front','cabinet_oblique_candidate','cabinet_top']){
  await page.uncheck('#referenceSegmentToggle');
  await page.locator('#referenceSegmentReview').evaluate(e=>e.open=false);
  await page.click('#referenceHalf'); await page.locator('#referenceViewport').scrollIntoViewIfNeeded();
- assert.equal((await snap()).equivalent_distance_m,a.equivalent_distance_m*2);
- assert.match(await page.textContent('#referenceAssumption'),id==='cabinet_oblique_candidate'?/Предварительная оценка/:/Измеренный отрезок/);
+ assert.ok(Math.abs((await snap()).equivalent_distance_m/a.equivalent_distance_m-2)<0.001);
+ assert.match(await page.textContent('#referenceAssumption'),newPhotos[id]?/Модельная оценка.*Физическая длина.*расчётная проекция/:
+  id==='cabinet_oblique_candidate'?/Предварительная оценка/:/Измеренный отрезок/);
  assert.match(await page.textContent('#referenceReadout'),/≈ [\d\s]+,\d{2} м/);
  await page.fill('#referenceTarget','100,00'); await page.click('#referenceApplyTarget');
- assert.ok(Math.abs((await snap()).equivalent_distance_m-100)<0.2);
+ const target=await snap();
+ assert.ok(Math.abs(target.equivalent_distance_m-100)<0.2);
+ if (newPhotos[id]) {
+  assert.ok(Math.abs(target.review_segment_display_mm-newPhotos[id][2])<0.01);
+  assert.ok(target.fullscreen_fits);
+ }
+
 }
+await page.selectOption('#referencePhotoSelect','cabinet_img_2704_v2');
+await page.waitForFunction(()=>referenceTab.snapshot().load_state==='ready');
 // Top-view diagonal: 428 mm at 50 cm gives 100 m at 2.14 mm on screen.
 await page.fill('#distance','50');
 await page.fill('#referenceTarget','100,00'); await page.click('#referenceApplyTarget');
@@ -74,4 +97,4 @@ assert.match(await page.textContent('#referenceTargetStatus'),/Испытани�
 await page.setViewportSize({width:1100,height:900});assert.equal((await snap()).equivalent_distance_m,null);
 await page.fill('#referenceTarget','100');await page.click('#referenceApplyTarget');assert.match(await page.textContent('#referenceTargetStatus'),/калибровка/);
 assert.deepEqual(errors,[]);assert.deepEqual(remote,[]);
-await browser.close();console.log('Cabinet views, inverse 100m, 500cm, 1×/5×, fullscreen CSS/calibration, unreachable targets: OK');
+await browser.close();console.log('Cabinet views, inverse 100m, 434cm, 1×/5×, fullscreen CSS/calibration, unreachable targets: OK');

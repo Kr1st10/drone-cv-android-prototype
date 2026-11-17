@@ -117,3 +117,51 @@ def test_unconfirmed_motor_segment_screen_length():
         assert value == pytest.approx(float(pixels * Decimal(str(scale)) / 4), rel=1e-13)
     assert measured[1] * 2 == measured[0]
     # A numerical check of lengths is not evidence that this picture represents a physical 430mm diagonal.
+
+
+def test_cabinet_modelled_asset_integrity():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node required for cabinet reference metadata')
+    photos = json.loads(subprocess.check_output(
+        [node, str(ROOT / 'tests/reference_test.mjs'), '--cabinet-photos'], text=True, timeout=30))
+
+    # Fixed asset fingerprints, original dimensions and A–B points from the audit.
+    expected = {
+        '2704': ('017dc2c8a616851d99d21ce1a4742616e209c8f51386e1b910e4bb8d706f024f',
+                 (4284, 5712), ('M4', 'M2'), ((350, 475), (1115, 1110))),
+        '2751': ('45d7ac5ba7c5922361e0d2b879a582845f78ebdbbe9d08f32c8b81887fd47d44',
+                 (1536, 2048), ('M1', 'M2'), ((470, 994), (957, 997))),
+        '2755': ('442abcd66752da457093003c2a5147e0d8e51dfa644861905a29c4d1c65b4c78',
+                 (1536, 2048), ('M1', 'M3'), ((538, 747), (1096, 757))),
+        '2711': ('fbd81b5ee53d04bb6559dbc296ae1f789c8a77959fa4e1c6491b4eab1a8e95be',
+                 (4284, 5712), ('M1', 'M3'), ((400, 826), (1189, 942))),
+    }
+    assert len(photos) == len(expected)
+    assert {p['id'] for p in photos} == {f'cabinet_img_{n}_v2' for n in expected}
+    for p in photos:
+        number = p['id'].split('_')[2]
+        digest, (width, height), pair, points = expected[number]
+        source = ROOT / p['source']
+        assert source.name == f'IMG_{number}.jpg'
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == p['source_sha256']
+        assert p['original_size_px'] == [width, height]
+        crop = (ROOT / p['file']).read_bytes()
+        assert hashlib.sha256(crop).hexdigest() == digest
+        left, top, right, bottom = p['crop_px']
+        assert 0 <= left < right <= width
+        assert 0 <= top < bottom <= height
+        assert (p['width'], p['height']) == (right - left, bottom - top)
+        assert (int.from_bytes(crop[16:20], 'big'), int.from_bytes(crop[20:24], 'big')) == (p['width'], p['height'])
+        x1, y1, x2, y2 = p['bounds_px']
+        assert 0 < x1 < x2 < p['width']
+        assert 0 < y1 < y2 < p['height']
+        segment = p['review_segment']
+        assert tuple(segment['motor_pair']) == pair
+        for (x, y), source_point, crop_point in zip(
+                points, p['source_points_px'], (segment['from'], segment['to']), strict=True):
+            mapped = x * width / 1536, y * height / 2048
+            assert source_point == pytest.approx(mapped)
+            assert crop_point == pytest.approx((mapped[0] - left, mapped[1] - top))
+            assert x1 < crop_point[0] < x2
+            assert y1 < crop_point[1] < y2

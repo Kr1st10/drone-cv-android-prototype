@@ -12,6 +12,10 @@ for (const name of ['positive', 'equivalentDistance', 'validBounds', 'physicalWi
   vm.runInContext(script.slice(start, end), ctx);
 }
 const geometry = { physicalWidth: ctx.physicalWidth, equivalentDistance: ctx.equivalentDistance };
+if (process.argv.includes('--cabinet-photos')) {
+  console.log(JSON.stringify(profiles[0].photos.filter(p => p.geometry_revision)));
+  process.exit(0);
+}
 if (process.argv.includes('--segment-oracle')) {
   const cases = JSON.parse(fs.readFileSync(0, 'utf8'));
   console.log(JSON.stringify(cases.map(c => reviewSegmentLength(profiles.find(p => p.id === 'skydroid_mx330t').photos[0], c.render, c.mm_per_css_px))));
@@ -31,14 +35,15 @@ assert.deepEqual(Array.from(profiles.slice(1), p => Array.from(p.dimensions_mm))
 assert.equal(new Set(profiles.map(p => p.id)).size, 4);
 for (const p of profiles) {
   if (p.id !== 'cabinet_reference') assert.match(p.source, /^https:\/\//);
-  assert.equal(p.photos.length, 3);
+  assert.equal(p.photos.length, p.id === 'cabinet_reference' ? 7 : 3);
+  assert.equal(new Set(p.photos.map(photo => photo.id)).size, p.photos.length);
   for (const photo of p.photos) {
     assert.equal(photo.axis, null); // no verified physical segment was supplied for these real pictures
     assert.equal(measure(p, { photo_id: photo.id, width: photo.width, height: photo.height, scale: 1, visible: true }, 150, 0.25, geometry).equivalent_distance_m, null);
     if (photo.file) assert.ok(fs.existsSync(new URL('../' + photo.file, import.meta.url)));
   }
 }
-assert.equal(profiles.flatMap(p => p.photos).filter(p => p.file).length, 9);
+assert.equal(profiles.flatMap(p => p.photos).filter(p => p.file).length, 13);
 const profile = { photos: [{ id: 'fixture', file: 'TEST ONLY', width: 1000, height: 500, bounds_px: [100, 50, 400, 200],
   model_confirmed: true, projection_confirmed: true,
   axis: { from: [100, 100], to: [400, 100], real_cm: 57.85, source: 'SYNTHETIC axis — not a real photograph' } }] };
@@ -121,7 +126,7 @@ const expected = {
   top: { extent: 428, status: 'measured', sourceLength: Math.hypot(2131, 1771) },
   oblique_candidate: { extent: 676.2640687119285, status: 'preliminary', sourceLength: 3506 }
 };
-for (const p of cabinet.photos) {
+for (const p of cabinet.photos.filter(photo => !photo.geometry_revision)) {
   assert.ok(fs.existsSync(new URL('../' + p.source, import.meta.url)));
   const { extent, status, sourceLength } = expected[p.view];
   const r = { photo_id: p.id, width: p.width, height: p.height, scale: 0.2, visible: true };
@@ -133,4 +138,31 @@ for (const p of cabinet.photos) {
   assert.ok(Math.abs(result.display_axis_cm - displayMm / 10) < 1e-9);
   assert.ok(Math.abs(result.equivalent_distance_m - 5 * extent / displayMm) < 1e-9);
   assert.notEqual(result.display_axis_cm, result.display_width_cm);
+}
+
+
+// Fixed answers from the audit. Screen lengths assume 4.34 m to the monitor and 100 m equivalent.
+for (const [number, physical, projection, screenMm, yaw, elevation] of [
+  [2704, 428, 428, 18.5752, null, 90],
+  [2751, 325, 325, 14.105, 0, 0],
+  [2755, 428, 426.62077969, 18.51534183855918, 45, 15],
+  [2711, 428, 427.26143172, 18.543146136600182, 45, 45]
+]) {
+  const p = cabinet.photos.find(photo => photo.id === 'cabinet_img_' + number + '_v2');
+  const segment = p.review_segment;
+  assert.equal(p.geometry_revision, 'cabinet_motor_geometry_v2');
+  assert.equal(p.projection_confirmed, false);
+  assert.equal(p.operator_angles_deg.yaw, yaw);
+  assert.equal(p.operator_angles_deg.elevation, elevation);
+  assert.equal(segment.physical_mm, physical);
+  assert.ok(Math.abs(segment.projected_mm - projection) < 2e-9);
+  const assetLength = Math.hypot(segment.to[0] - segment.from[0], segment.to[1] - segment.from[1]);
+  const render = { photo_id: p.id, width: p.width, height: p.height, scale: screenMm / (assetLength * 0.25), visible: true };
+  const result = estimate(cabinet, render, 434, 0.25, geometry);
+  assert.equal(result.geometry_status, 'modelled_approximate');
+  assert.equal(result.assumed_extent_mm, segment.projected_mm);
+  assert.ok(Math.abs(result.display_axis_cm - screenMm / 10) < 1e-12);
+  assert.ok(Math.abs(result.equivalent_distance_m - 100) < 1e-9);
+  assert.ok(Math.abs(estimate(cabinet, { ...render, scale: render.scale * 2 }, 434, 0.25, geometry).equivalent_distance_m - 50) < 1e-9);
+  assert.equal(measure(cabinet, render, 434, 0.25, geometry).equivalent_distance_m, null);
 }

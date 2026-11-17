@@ -5,6 +5,55 @@ import json
 SCHEMA = 'dronecv-session-timeline-1'
 
 
+def metadata_provenance(records):
+    """Keep session evidence and expose only values agreed by all supplied sources.
+
+    Missing historical fields stay null. Camera context describes one snapshot,
+    never the capture settings of every frame in the recording.
+    """
+    fields = ('git_sha', 'git_dirty', 'app_version', 'version_code', 'build_type',
+              'model_asset', 'model_sha256', 'model_name', 'model_input_size',
+              'mode', 'confidence', 'nms_iou', 'nms_max_detections', 'backend',
+              'intra_op_threads', 'inter_op_threads', 'execution_mode', 'execution_provider',
+              'lk', 'yolo_period_ns', 'confirmation_ttl_ns', 'retry_ns', 'coordinate_timeout_ns',
+              'device', 'android_release', 'android_sdk', 'camera_context')
+    values = {key: [] for key in fields}
+    for record in records:
+        data = record['data']
+        nested = data.get('metadata')
+        nested = nested if isinstance(nested, dict) else {}
+        model = data.get('model')
+        model = model if isinstance(model, dict) else {}
+        model_fields = {key: model.get(alias) for key, alias in
+                        (('model_asset', 'asset'), ('model_sha256', 'sha256'), ('model_name', 'name'),
+                         ('confidence', 'confidence'), ('nms_iou', 'nms_iou'),
+                         ('nms_max_detections', 'nms_max_detections'), ('backend', 'backend'),
+                         ('intra_op_threads', 'intra_op_threads'), ('inter_op_threads', 'inter_op_threads'),
+                         ('execution_mode', 'execution_mode'), ('execution_provider', 'execution_provider'))}
+        for source in (data, nested, data.get('camera_context'), nested.get('camera_context'), model_fields):
+            if not isinstance(source, dict):
+                continue
+            for key in fields:
+                value = source.get(key)
+                if value is None:
+                    continue
+                canonical = json.dumps(value, sort_keys=True, allow_nan=False)
+                if not any(json.dumps(v['value'], sort_keys=True, allow_nan=False) == canonical for v in values[key]):
+                    values[key].append(dict(value=value, source_type=record['type'], event_id=record.get('event_id')))
+    return dict(fields={key: variants[0]['value'] if len(variants) == 1 else None for key, variants in values.items()},
+                conflicts={key: variants for key, variants in values.items() if len(variants) > 1},
+                records=records, camera_context_scope='latest_context_not_frame_bound')
+
+
+def metadata_record(kind, data, **envelope):
+    """Exclude per-frame series and image bytes from retained session metadata."""
+    saved = {key: value for key, value in data.items()
+             if key not in ('frames', 'resources', 'tracking', 'calibration_image')}
+    if isinstance(data.get('calibration_image'), dict):
+        saved['calibration_image'] = {key: data['calibration_image'].get(key) for key in ('width', 'height')}
+    return dict(type=kind, data=saved, **envelope)
+
+
 def integer(value, name):
     if not isinstance(value, str) or not value.isascii() or not value.isdecimal():
         raise ValueError(f'{name}: expected a decimal string')
@@ -51,6 +100,7 @@ def read_timeline(path):
     session_id = None
     gaps = []
     records_before_end = 0
+    metadata_records = []
     with path.open('rb') as stream:
         for line_no, raw in enumerate(stream, 1):
             digest.update(raw)
@@ -90,6 +140,8 @@ def read_timeline(path):
             previous_id = eid
             last_time = t if last_time is None else max(last_time, t)
             kind, data = row.get('type'), row['data']
+            if kind in ('header', 'metadata', 'diagnostic_report', 'frame_geometry'):
+                metadata_records.append(metadata_record(kind, data, event_id=row['event_id'], event_ns=row['event_ns']))
             counts[kind] = counts.get(kind, 0) + 1
             if kind not in ('session_end', 'recording_failure'): records_before_end += 1
             if end is not None and kind != 'recording_failure': errors.append('record after session_end')
@@ -167,6 +219,7 @@ def read_timeline(path):
             interval[key] = str(interval[key])
     return {'schema': SCHEMA, 'file': path.as_posix(), 'sha256': digest.hexdigest(), 'session_id': session_id,
             'header': header, 'end': end, 'recording_complete': complete,
+            'provenance': metadata_provenance(metadata_records),
             'experiment_status': end.get('experiment_status') if end else 'unknown',
             'duration_ns': str(stop-integer(header['start_ns'], 'start_ns')) if stop is not None else None,
             'intervals': intervals, 'counts': counts, 'errors': errors,
@@ -307,7 +360,7 @@ def analyze_timeline(path, *, max_coordinate_age_ns):
                and not any(x in error for error in timeline['errors']
                            for x in ('mixed session', 'header', 'duplicate session_end', 'record after session_end', 'time reversal')))
     report = dict(schema=REPORT_SCHEMA, session_id=timeline['session_id'], sha256=timeline['sha256'],
-                  header=timeline['header'], session_end=timeline['end'],
+                  header=timeline['header'], session_end=timeline['end'], provenance=timeline['provenance'],
                   recording_complete=timeline['recording_complete'], experiment_status=timeline['experiment_status'],
                   integrity_errors=timeline['errors'], missing_extent=timeline['missing_extent'],
                   parameters={'max_coordinate_age': {'value': max_coordinate_age_ns, 'unit': 'ns'},

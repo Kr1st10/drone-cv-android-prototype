@@ -1,6 +1,27 @@
 # Проверка простого стенда
 
-Локальные проверки 2026-11-15 и 2026-11-16. Синтетические журналы и JPEG проверяют сайт и вычисления; испытаний Xiaomi здесь нет.
+Локальные проверки 2026-11-15–2026-11-17. Синтетические журналы и JPEG проверяют сайт и вычисления; испытаний Xiaomi здесь нет.
+
+## Слияние PR №43 с main, 2026-11-17
+
+Проверены открытый PR №43 @ `b417ea6` и актуальная `main @ 6b86065`. Работа выполнена в `/private/tmp/drone-pr43-merge-20261117`; незакоммиченные изменения пользовательской папки сохранены. Конфликты затронули корневой PROJECT_STATE и `motion-report-ui.js`. Журнал сохраняет обе стороны, интерфейс совмещает сценарный отчёт PR и показ сборки/конфигурации Android из main. Android-исходники, Gradle и Python-анализаторы совпадают с main.
+
+Выбор только версии интерфейса из PR воспроизвёл регрессию: `motion_smoke.mjs` падал на отсутствии строки сборки Android из main. После совмещения проверены:
+
+- Старый JSON без метаданных показывает неизвестные значения; импорт NDJSON сохраняет и показывает поля сборки и настроек.
+- Новый `dronecv-motion-scenario-report-1` также сохраняет поля в `provenance.android` и показывает их в интерфейсе. Два противоречащих источника дают null в согласованном поле, сохраняют оба варианта в JSON и обозначают противоречие в интерфейсе.
+- Последние функциональные коммиты `1a4ab1c`, `c597769`, `3fea8b1` проверены независимым рецензентом: охват начала для capture, cleanup/reacquisition, атомарный снимок повторения, отмена/ошибка старта и распознавание углов. Подтверждённых замечаний не найдено. Четыре профильных Node-набора отдельно прошли у рецензента.
+
+Локально выполнены команды из корня worktree:
+
+```bash
+CHROMIUM='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' PLAYWRIGHT_NODE_DIR=/private/tmp/dronecv-auto-browser /private/tmp/dronecv-auto-pytest/bin/python -m pytest lab/monitor_test/tests -q
+/private/tmp/dronecv-auto-pytest/bin/python -m pytest ml/tests/test_build_metadata.py ml/tests/test_timeline_analysis.py ml/tests/test_timeline_continuity.py ml/tests/test_analyze_android_sessions.py ml/tests/test_target_signals.py ml/tests/test_tracking_reports.py -q
+JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home' ANDROID_HOME=/Users/macbookair/Library/Android/sdk ./gradlew --no-daemon assembleDebug testDebugUnitTest assembleDebugAndroidTest lintDebug --offline
+python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
+```
+
+Результаты: стенд 46 passed, 0 skipped; Python 73 passed и 18 subtests passed; Gradle BUILD SUCCESSFUL, 254 JVM passed / 2 skipped из-за отсутствующих Python parity fixtures. Lint: 0 errors, 23 warnings, 1 information. APK model OK, SHA-256 `b4867481a3b3277f7b17e69b7b45077567d6929157e72dd5d48542dd34f19eb7`. Логи: `/private/tmp/drone-pr43-{before,browser,python,gradle}.log`. Браузерные журналы синтетические; аппаратных испытаний и Safari не было. AndroidTest только скомпилированы. GitHub Actions учитываются отдельно по новому SHA после push; PR автоматически не объединяется.
 
 ## Три замечания к 3fef8c0, 2026-11-16
 

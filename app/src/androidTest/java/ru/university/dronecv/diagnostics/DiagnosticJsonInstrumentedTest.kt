@@ -10,11 +10,16 @@ import org.junit.runner.RunWith
 class DiagnosticJsonInstrumentedTest {
     @Test fun reportIsValidJsonAndHasRealSampleValues() {
         val store = DiagnosticFrames(); val id = store.start(0)
+        val identity = ru.university.dronecv.BuildIdentity("b".repeat(40), true, "0.4.0", 4, "debug")
+        store.event(id, "metadata", "{${identity.jsonFields()},\"camera_context\":null}", 0)
         store.received(id); store.completed(id, 100, 1.0, 2.0, 3.0, 4.0, 11.0)
         val snapshot = store.stop(id, 1_000_000_000, true, "pause \"background\"")!!
         val report = DiagnosticReport(10, "device", "15", 35, "0.4.0", "model.onnx", "abc", .5f, snapshot,
             listOf(ResourceSample(0, 100, 1, 80, 2, 29.5), ResourceSample(10, 105, 2, 79, 2, 30.0)), 4, "debug", 30)
         val json = JSONObject(report.toJson())
+        assertEquals("b".repeat(40), json.getJSONObject("metadata").getString("git_sha"))
+        assertTrue(json.getJSONObject("metadata").getBoolean("git_dirty"))
+        assertTrue(json.getJSONObject("metadata").isNull("camera_context"))
         assertEquals(4, json.getJSONObject("model").getInt("intra_op_threads"))
         assertEquals(1, json.getJSONObject("model").getInt("inter_op_threads"))
         assertEquals("SEQUENTIAL", json.getJSONObject("model").getString("execution_mode"))

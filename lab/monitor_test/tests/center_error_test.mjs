@@ -87,6 +87,8 @@ const shifted=(dx,dy)=>[.2+dx/200,.2+dy/100,.4+dx/200,.4+dy/100];
   const t=fixture();t.journal.truncated=true;assert.equal(metric(t).evaluated_ms,0);
   const old=result(fixture()).provenance;
   assert.equal(old.android.fields.git_sha,null);assert.equal(old.source.series_id,null);
+  assert.equal(old.android.fields.git_dirty,null);assert.equal(old.android.fields.version_code,null);
+  assert.equal(old.android.fields.build_type,null);
 }
 {
   const f=fixture();f.run.samples[10].phase='turn';f.run.samples[11].phase='blank_after';f.run.samples[11].visible=false;
@@ -100,9 +102,10 @@ const shifted=(dx,dy)=>[.2+dx/200,.2+dy/100,.4+dx/200,.4+dy/100];
   const f=fixture(), parser=timelineImporter(), base=900719925474099300n;let id=0;
   const push=(type,data,t=0)=>parser.push({schema:'dronecv-session-timeline-1',session_id:'session',event_id:String(++id),event_ns:String(base+BigInt(t)),type,data});
   push('header',{start_ns:String(base),mode:'yolo'});
-  const metadata={mode:'yolo',confidence:.5,nms_iou:.7,backend:'onnxruntime_cpu_sequential',intra_op_threads:2,
+  const metadata={git_sha:'f'.repeat(40),git_dirty:true,app_version:'0.5.2',version_code:7,build_type:'debug',
+    mode:'yolo',confidence:.5,nms_iou:.7,nms_max_detections:300,model_input_size:640,backend:'onnxruntime_cpu_sequential',intra_op_threads:2,
     yolo_period_ns:'300000000',confirmation_ttl_ns:'900000000',lk:{max_points:60},
-    camera_context:{git_sha:'abc',git_dirty:false,app_version:'0.5.2',model_asset:'model.onnx',model_sha256:'sha',
+    camera_context:{git_sha:'f'.repeat(40),git_dirty:true,app_version:'0.5.2',model_asset:'model.onnx',model_sha256:'sha',
       device:'synthetic',android_release:'16',requested_zoom:5,latest_capture_zoom:4.9,requested_af:1,actual_af:0,
       scope:'latest_context_not_frame_bound'}};
   push('metadata',metadata);push('metadata',{geometry:f.journal.geometry,calibration_image:f.journal.calibration_image});
@@ -113,13 +116,18 @@ const shifted=(dx,dy)=>[.2+dx/200,.2+dy/100,.4+dx/200,.4+dy/100];
   f.journal=parser.finish();Object.assign(f.run,{series_id:'series',pair_index:2,slot:1,order:'BA'});
   const r=result(f), exported=JSON.parse(JSON.stringify({schema:'dronecv-motion-report-4',runs:[r]})).runs[0];
   assert.deepEqual(exported.center_error,r.center_error);near(r.center_error.mean_px,0);
-  assert.equal(exported.provenance.android.fields.git_sha,'abc');assert.equal(exported.provenance.android.fields.git_dirty,false);
+  assert.equal(exported.provenance.android.fields.git_sha,'f'.repeat(40));assert.equal(exported.provenance.android.fields.git_dirty,true);
+  assert.equal(exported.provenance.android.fields.version_code,7);assert.equal(exported.provenance.android.fields.build_type,'debug');
+  assert.equal(exported.provenance.android.fields.nms_max_detections,300);assert.equal(exported.provenance.android.fields.model_input_size,640);
   assert.deepEqual(exported.provenance.android.fields.camera_context,metadata.camera_context);
   assert.equal(exported.provenance.source.session_id,'session');assert.equal(exported.provenance.source.order,'BA');
   assert.equal(exported.provenance.android.records[1].event_ns,String(base));
-  f.journal.metadata_records.push({type:'metadata',data:{confidence:.7}});
+  f.journal.metadata_records.push({type:'metadata',data:{confidence:.7,git_sha:'a'.repeat(40),git_dirty:false,version_code:8,build_type:'release'}});
   const conflict=result(f).provenance.android;
   assert.equal(conflict.fields.confidence,null);assert.equal(conflict.conflicts.confidence.length,2);
+  for(const key of ['git_sha','git_dirty','version_code','build_type']) {
+    assert.equal(conflict.fields[key],null);assert.equal(conflict.conflicts[key].length,2);
+  }
   f.journal.metadata_records.push({type:'diagnostic_report',data:{model:{name:'YOLO11s',asset:'other.onnx',sha256:'other-sha',backend:'CPU',intra_op_threads:4}}});
   const model=result(f).provenance.android;
   assert.equal(model.fields.model_name,'YOLO11s');assert.equal(model.fields.model_sha256,null);

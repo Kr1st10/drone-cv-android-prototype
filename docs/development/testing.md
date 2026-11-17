@@ -28,6 +28,10 @@ python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
 
 ## Выполнение device tests
 
+`BuildIdentityTest` проверяет адаптер существующих BuildConfig-полей, полный commit/dirty/null и изоляцию metadata между записями. `LiveControllerTest` проверяет конфигурацию разных сессий и измеренную геометрию, очищаемую при invalidation. `CameraInventoryInstrumentedTest` различает запросы и неизвестные результаты, `DiagnosticJsonInstrumentedTest` читает сохранённую metadata из JSON. `LiveCameraInstrumentedTest.cameraRunsRealModelAndStopClearsLateResults` проверяет видимость идентификатора и неизменность границ превью после результата и прокрутки. Компиляция этих тестов не означает их выполнение.
+
+Проверки импортов и конфликтов метаданных: `python -m pytest ml/tests/test_build_metadata.py ml/tests/test_timeline_analysis.py ml/tests/test_timeline_continuity.py ml/tests/test_analyze_android_sessions.py` и `pytest lab/monitor_test/tests/test_motion.py` (Node/Chrome/Playwright). Они используют тестовые данные и не измеряют качество CV.
+
 Используйте своё тестовое устройство/эмулятор с задней камерой и подходящей ABI. Тесты меняют UI, ориентацию/foreground и работают с камерой; запускайте их, когда устройство доступно для испытаний. При нескольких подключениях проверьте целевое устройство в выводе Gradle; для однозначного запуска оставьте одну цель.
 
 ```bash
