@@ -14,8 +14,12 @@ import ru.university.dronecv.motion.MotionJournal
 class LiveTrackingIntegrationTest {
     private class Queue : Executor {
         private val tasks = ArrayDeque<Runnable>()
+        var rejectNext = false
         val size get() = tasks.size
-        override fun execute(command: Runnable) { tasks.addLast(command) }
+        override fun execute(command: Runnable) {
+            if (rejectNext) { rejectNext = false; throw java.util.concurrent.RejectedExecutionException("injected") }
+            tasks.addLast(command)
+        }
         fun step() { tasks.removeFirst().run() }
         fun drain() { while (tasks.isNotEmpty()) step() }
     }
@@ -31,8 +35,14 @@ class LiveTrackingIntegrationTest {
         var lose = false
         var onUpdate: () -> Unit = {}
         var closeFails = false
-        override fun initialize(frame: GrayFrame, box: TrackBox): TrackEstimate =
-            TrackEstimate(box, TrackQuality(8, 8, 0.1, 0.9)).also { estimate = it }
+        var initializeFailure: TrackingFailure? = null
+        var initializeThrows = false
+        override val failureReason get() = initializeFailure ?: if (lose) TrackingFailure.UPDATE_QUALITY else TrackingFailure.UNKNOWN
+        override fun initialize(frame: GrayFrame, box: TrackBox): TrackEstimate? {
+            if (initializeThrows) error("test initialize exception")
+            if (initializeFailure != null) return null
+            return TrackEstimate(box, TrackQuality(8, 8, 0.1, 0.9)).also { estimate = it }
+        }
         override fun update(frame: GrayFrame): TrackEstimate? {
             onUpdate()
             if (lose) return null
@@ -58,6 +68,10 @@ class LiveTrackingIntegrationTest {
         var calls = 0
         var backendCloses = 0
         var inferenceError = false
+        var initializeFailure: TrackingFailure? = null
+        var initializeThrows = false
+        var replayLoses = false
+        var onFailure: () -> Unit = {}
         val detector = object : LiveBackend<Snapshot> {
             override fun infer(frame: Snapshot, confidence: Float): LiveInference {
                 check(frame.closes == 0)
@@ -69,9 +83,11 @@ class LiveTrackingIntegrationTest {
             override fun close() { backendCloses++ }
         }
         val controller = LiveController(detector, ml, diagnostic, eventTime = { now },
-            tracking = LiveTracking(vision, TrackingSession({ Flow().also { flows += it } })) { _, key, stamp ->
+            tracking = LiveTracking(vision, TrackingSession({ Flow().also {
+                it.initializeFailure = initializeFailure; it.initializeThrows = initializeThrows; it.lose = replayLoses; flows += it
+            } })) { _, key, stamp ->
                 GrayFrame.copyOf(key, stamp, 100, 100, ByteArray(10000))
-            }, motion = journal, nanoTime = { now })
+            }, motion = journal, onFailure = { onFailure() }, nanoTime = { now })
 
         fun start() {
             sources = controller.newSource()
@@ -109,6 +125,192 @@ class LiveTrackingIntegrationTest {
             assertEquals(71.0, signal.confirmationAgeMs!!, 0.0001)
             assertEquals(5.0, signal.captureToSignalMs!!, 0.0001)
         }
+    }
+
+    @Test fun `initialization refusal releases tracker and next request succeeds without a restart`() {
+        for (why in listOf(TrackingFailure.INSUFFICIENT_POINTS, TrackingFailure.UNKNOWN)) {
+            val f = Fixture(trackingCapacity = 1)
+            val id = f.diagnostic.start(f.now)
+            f.start()
+            f.initializeFailure = why
+            f.frame(0); f.ml.step(); f.vision.step(); f.ml.step(); f.vision.step()
+            assertEquals(1, f.flows.single().closes)
+            f.frame(50)
+            f.initializeFailure = null
+            f.frame(100); f.ml.step(); f.vision.step(); f.ml.step(); f.vision.step()
+            assertNotNull(f.controller.state.value.tracking!!.box)
+            val snapshot = f.diagnostic.stop(id, f.now, false, null)!!
+            val operations = snapshot.tracking!!.operations!!
+            assertEquals(2L, operations.counts[TrackingEventKind.INITIALIZATION_ATTEMPT])
+            assertEquals(1L, operations.counts[TrackingEventKind.INITIALIZATION_FAILED])
+            assertEquals(1L, operations.counts[TrackingEventKind.REPLAY_FAILED])
+            assertEquals(mapOf(why to 1L), operations.failures[TrackingEventKind.REQUEST_REJECTED])
+            assertEquals(1L, operations.counts[TrackingEventKind.CORRECTION_ACCEPTED])
+            assertEquals(0L, operations.unfinishedRequests)
+            val json = DiagnosticReport(0, "device", "15", 35, "test", "model", "sha", .5f, snapshot, emptyList()).toJson()
+            assertTrue(json.contains("\"${why.name.lowercase()}\":1"))
+            System.getenv("DRONE_TRACKING_OPERATIONS_FIXTURE")?.let { java.io.File(it).writeText(json) }
+            f.controller.close(); f.ml.drain(); f.vision.drain()
+            assertTrue(f.snapshots.all { it.closes == 1 })
+            assertTrue(f.flows.all { it.closes == 1 })
+        }
+    }
+
+    @Test fun `failure callback sees exception reason before recording finalization and next start recovers`() {
+        for (initialize in listOf(false, true)) {
+            val f = Fixture()
+            val id = f.diagnostic.start(f.now)
+            var result: ru.university.dronecv.diagnostics.DiagnosticFrameSnapshot? = null
+            f.onFailure = { result = f.diagnostic.stop(id, f.now, true, "failure") }
+            f.start()
+            f.inferenceError = !initialize
+            f.initializeThrows = initialize
+            f.frame(0); f.ml.drain(); f.vision.drain()
+            if (initialize) { f.ml.drain(); f.vision.drain() }
+            val operations = result!!.tracking!!.operations!!
+            assertEquals(mapOf(TrackingFailure.PROCESSING_EXCEPTION to 1L),
+                operations.failures[TrackingEventKind.REQUEST_REJECTED])
+            assertEquals(0L, operations.unfinishedRequests)
+            assertTrue(f.snapshots.all { it.closes == 1 })
+            assertTrue(f.flows.all { it.closes == 1 })
+            f.inferenceError = false; f.initializeThrows = false
+            f.start(); f.frame(100); f.ml.drain(); f.vision.drain(); f.ml.drain(); f.vision.drain()
+            assertNotNull(f.controller.state.value.tracking!!.box)
+            f.controller.close(); f.ml.drain(); f.vision.drain()
+        }
+    }
+
+    @Test fun `dispatch rejection is terminal before failure snapshot and next start recovers`() {
+        for (replay in listOf(false, true)) {
+            val f = Fixture()
+            val id = f.diagnostic.start(f.now)
+            var result: ru.university.dronecv.diagnostics.DiagnosticFrameSnapshot? = null
+            var next = 0L
+            var failures = 0
+            f.onFailure = {
+                failures++
+                result = f.diagnostic.stop(id, f.now, true, "injected executor rejection")
+                next = f.diagnostic.start(f.now)
+            }
+            f.start()
+            if (!replay) f.ml.rejectNext = true
+            f.frame(0)
+            if (replay) {
+                f.ml.step()
+                f.ml.rejectNext = true
+                f.vision.step()
+            }
+            val snapshot = checkNotNull(result)
+            val operations = snapshot.tracking!!.operations!!
+            assertEquals(1L, operations.counts[TrackingEventKind.REQUEST_STARTED])
+            assertEquals(if (replay) 1L else 0L, operations.counts[TrackingEventKind.REPLAY_PLANNED] ?: 0L)
+            assertEquals(1L, operations.counts[TrackingEventKind.REQUEST_REJECTED] ?: 0L)
+            assertEquals(mapOf((if (replay) TrackingFailure.PROCESSING_EXCEPTION else TrackingFailure.CANCELLED) to 1L),
+                operations.failures[TrackingEventKind.REQUEST_REJECTED])
+            assertEquals(0L, operations.unfinishedRequests)
+            assertEquals(if (replay) 1L else 0L, operations.unknownReplayDetails)
+            for (kind in listOf(TrackingEventKind.CORRECTION_ACCEPTED, TrackingEventKind.INITIALIZATION_ATTEMPT,
+                TrackingEventKind.INITIALIZATION_SUCCEEDED, TrackingEventKind.INITIALIZATION_FAILED,
+                TrackingEventKind.REPLAY_SUCCEEDED, TrackingEventKind.REPLAY_FAILED)) {
+                assertEquals(kind.name, 0L, operations.counts[kind] ?: 0L)
+            }
+            assertEquals(LivePhase.ERROR, f.controller.state.value.phase)
+            f.ml.drain(); f.vision.drain()
+            assertEquals(1, failures)
+            assertTrue(f.snapshots.all { it.closes == 1 })
+            assertTrue(f.flows.isEmpty())
+            assertNull(f.diagnostic.stop(next, f.now, false, null)!!.tracking)
+            println("REJECTION_REPORT_FIXTURE=" +
+                DiagnosticReport(0, "test", "test", 35, "test", "model", "sha", .5f, snapshot, emptyList()).toJson())
+            val recovered = f.diagnostic.start(f.now)
+            f.start(); f.frame(100); f.ml.drain(); f.vision.drain(); f.ml.drain(); f.vision.drain()
+            assertNotNull(f.controller.state.value.tracking!!.box)
+            val recovery = f.diagnostic.stop(recovered, f.now, false, null)!!.tracking!!.operations!!
+            assertEquals(1L, recovery.counts[TrackingEventKind.CORRECTION_ACCEPTED])
+            assertNull(recovery.counts[TrackingEventKind.REQUEST_REJECTED])
+            assertEquals(0L, recovery.unfinishedRequests)
+            f.controller.close(); f.ml.drain(); f.vision.drain()
+            assertTrue(f.snapshots.all { it.closes == 1 })
+            assertTrue(f.flows.all { it.closes == 1 })
+            assertEquals(2, f.backendCloses)
+        }
+    }
+
+    @Test fun `late recording and old callbacks cannot invent operations in the new recording`() {
+        val f = Fixture()
+        f.start(); f.frame(0); f.ml.step(); f.vision.step(); f.ml.step()
+        val id = f.diagnostic.start(f.now)
+        f.vision.step(); f.frame(33)
+        val first = f.diagnostic.stop(id, f.now, false, null)!!.tracking!!
+        assertTrue(first.operations!!.counts.isEmpty())
+        assertEquals(0L, first.lossEvents)
+        val previous = f.diagnostic.start(f.now)
+        f.frame(533); f.ml.step(); f.vision.step(); f.ml.step()
+        f.diagnostic.stop(previous, f.now, false, null)
+        val next = f.diagnostic.start(f.now)
+        f.controller.configure(false, .5f); f.start()
+        f.frame(566)
+        f.ml.drain(); f.vision.drain(); f.ml.drain(); f.vision.drain()
+        val operations = f.diagnostic.stop(next, f.now, false, null)!!.tracking!!.operations!!
+        assertEquals(1L, operations.counts[TrackingEventKind.REQUEST_STARTED])
+        assertEquals(1L, operations.counts[TrackingEventKind.CORRECTION_ACCEPTED])
+        assertNull(operations.counts[TrackingEventKind.REQUEST_REJECTED])
+        f.controller.close(); f.ml.drain(); f.vision.drain()
+    }
+
+    @Test fun `frame gap has one loss and reacquisition continues after history reset`() {
+        val f = Fixture(trackingCapacity = 1)
+        val id = f.diagnostic.start(f.now)
+        f.start(); f.acquire()
+        f.frame(300); f.ml.step(); f.vision.step(); f.ml.step(); f.vision.step()
+        f.frame(333); f.frame(366)
+        val operations = f.diagnostic.stop(id, f.now, false, null)!!.tracking!!.operations!!
+        assertEquals(mapOf(TrackingFailure.FRAME_GAP to 1L), operations.failures[TrackingEventKind.TRACK_LOST])
+        assertEquals(2L, operations.counts[TrackingEventKind.CORRECTION_ACCEPTED])
+        assertEquals(1, f.flows.first().closes)
+        assertNotNull(f.controller.state.value.tracking!!.box)
+        f.controller.close(); f.ml.drain(); f.vision.drain()
+    }
+
+    @Test fun `unfinished replay details stay unknown and old completions cannot enter new recording`() {
+        for (exception in listOf(false, true)) {
+            val f = Fixture()
+            val first = f.diagnostic.start(f.now)
+            f.start(); f.frame(0); f.ml.step(); f.vision.step()
+            val stopped = f.diagnostic.stop(first, f.now, false, null)!!.tracking!!.operations!!
+            assertEquals(1L, stopped.unfinishedRequests)
+            assertEquals(1L, stopped.unknownReplayDetails)
+            assertNull(stopped.counts[TrackingEventKind.INITIALIZATION_ATTEMPT])
+            f.initializeThrows = exception
+            val second = f.diagnostic.start(f.now)
+            f.ml.drain(); f.vision.drain()
+            val next = f.diagnostic.stop(second, f.now, exception, null)!!
+            assertNull(next.tracking)
+            f.controller.close(); f.ml.drain(); f.vision.drain()
+            assertTrue(f.flows.all { it.closes == 1 })
+            assertTrue(f.snapshots.all { it.closes == 1 })
+        }
+    }
+
+    @Test fun `replay quality refusal releases resources and next request succeeds`() {
+        val f = Fixture(trackingCapacity = 1)
+        val id = f.diagnostic.start(f.now)
+        f.start(); f.frame(0); f.ml.step()
+        f.frame(33); f.vision.step()
+        f.replayLoses = true
+        f.ml.step(); f.vision.step()
+        assertEquals(1, f.flows.single().closes)
+        f.replayLoses = false
+        f.frame(100); f.ml.step(); f.vision.step(); f.ml.step(); f.vision.step()
+        assertNotNull(f.controller.state.value.tracking!!.box)
+        val operations = f.diagnostic.stop(id, f.now, false, null)!!.tracking!!.operations!!
+        assertEquals(mapOf(TrackingFailure.REPLAY_QUALITY to 1L), operations.failures[TrackingEventKind.REQUEST_REJECTED])
+        assertNull(operations.counts[TrackingEventKind.TRACK_LOST])
+        assertEquals(2L, operations.counts[TrackingEventKind.INITIALIZATION_ATTEMPT])
+        assertEquals(1L, operations.counts[TrackingEventKind.CORRECTION_ACCEPTED])
+        f.controller.close(); f.ml.drain(); f.vision.drain()
+        assertTrue(f.flows.all { it.closes == 1 })
+        assertTrue(f.snapshots.all { it.closes == 1 })
     }
 
     @Test fun `LK and correction include preparation in state publication timing`() {
@@ -206,6 +408,9 @@ class LiveTrackingIntegrationTest {
         assertEquals(1L, snapshot.corrections)
         assertEquals(1, snapshot.samples.size)
         assertEquals(4L, snapshot.unstoredSamples)
+        assertEquals(1L, snapshot.operations!!.counts[TrackingEventKind.INITIALIZATION_ATTEMPT])
+        assertEquals(1L, snapshot.operations!!.counts[TrackingEventKind.REPLAY_SUCCEEDED])
+        assertEquals(1L, snapshot.operations!!.counts[TrackingEventKind.CORRECTION_ACCEPTED])
         f.controller.close(); f.ml.drain(); f.vision.drain()
     }
 

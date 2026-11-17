@@ -78,6 +78,8 @@ fun inspectUniformInput(modelFile: File): Int =
 
 ## Камера: управление и backend
 
+`VisualTracker.failureReason: TrackingFailure` сообщает известную причину последнего отказа initialize/update; backend без подробностей возвращает `UNKNOWN`. Не следует выводить конкретную причину из `null`. `TrackingSession.events` принимает события операций на vision-владельце; request захватывает получателя при допуске, а подробности replay передаются после завершения ML-worker. Обработчик предназначен для короткого обновления счётчиков без сериализации и native-работы. [Причины и восстановление](../guides/visual-tracking-core.md#причины-отказов-и-восстановление), [контракт счётчиков](data-model.md#операции-yolo--lk).
+
 Источник: [LiveController.kt](../../app/src/main/java/ru/university/dronecv/camera/LiveController.kt). Constructor получает `LiveBackend<Frame>`, `Executor`, optional `DiagnosticFrames?=null`, `initialThreads=2`, `eventTime: (() -> Long)?=null`, `maxAnalyzerAgeMs=250.0`, `tracking: LiveTracking<Frame>?=null`, `nanoTime=System::nanoTime`; `Frame : AutoCloseable`. Android использует CameraFrameSnapshot. LiveFrameCapture вызывается на VisionWorker, копирует и закрывает ImageProxy до offerFrame. Все backend-операции сериализованы DetectorWorker. CameraScreen передаёт LiveTracking и elapsedRealtimeNanos; для этой ветви eventTime обязателен. [Владение и очередь](../guides/camera-frame-ingress.md).
 
 | Операция | Вход → результат | Условия, ошибки, эффекты |

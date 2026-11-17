@@ -1,6 +1,9 @@
 package ru.university.dronecv.diagnostics
 
 import kotlin.math.ceil
+import ru.university.dronecv.tracking.TrackingEvent
+import ru.university.dronecv.tracking.TrackingEventKind
+import ru.university.dronecv.tracking.TrackingFailure
 import ru.university.dronecv.camera.CameraInputEvent
 import ru.university.dronecv.camera.CameraInputStats
 import ru.university.dronecv.camera.TargetSignal
@@ -48,7 +51,19 @@ data class TrackingSnapshot(
     val lossEvents: Long,
     val unstoredSamples: Long,
     val samples: List<TrackingMeasurement>,
+    val operations: TrackingOperations? = null,
 )
+
+/** Counts events, never repeated observations. Enum keys bound memory independently of sample retention. */
+data class TrackingOperations(
+    val counts: Map<TrackingEventKind, Long>,
+    val failures: Map<TrackingEventKind, Map<TrackingFailure, Long>>,
+) {
+    val unknownReplayDetails: Long get() = (counts[TrackingEventKind.REPLAY_PLANNED] ?: 0) -
+        (counts[TrackingEventKind.REPLAY_SUCCEEDED] ?: 0) - (counts[TrackingEventKind.REPLAY_FAILED] ?: 0)
+    val unfinishedRequests: Long get() = (counts[TrackingEventKind.REQUEST_STARTED] ?: 0) -
+        (counts[TrackingEventKind.CORRECTION_ACCEPTED] ?: 0) - (counts[TrackingEventKind.REQUEST_REJECTED] ?: 0)
+}
 
 /** Bounded, synchronized storage. Old session tokens can never publish into a new session. */
 class DiagnosticFrames(private val capacity: Int = 100_000, private val trackingCapacity: Int = 10_000) {
@@ -75,6 +90,19 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
     private var lossEvents = 0L
     private var unstoredSamples = 0L
     private var lastTrackingSignal: TrackingSignal? = null
+    private val operationCounts = java.util.EnumMap<TrackingEventKind, Long>(TrackingEventKind::class.java)
+    private val failureCounts = java.util.EnumMap<TrackingEventKind, java.util.EnumMap<TrackingFailure, Long>>(TrackingEventKind::class.java)
+
+    fun trackingEvent(token: Long, event: TrackingEvent) = synchronized(lock) {
+        if (!recording || token != generation) return@synchronized
+        operationCounts[event.kind] = (operationCounts[event.kind] ?: 0) + 1
+        if (event.kind == TrackingEventKind.INITIALIZATION_FAILED || event.kind == TrackingEventKind.REPLAY_FAILED ||
+            event.kind == TrackingEventKind.REQUEST_REJECTED || event.kind == TrackingEventKind.TRACK_LOST) {
+            val why = event.reason ?: TrackingFailure.UNKNOWN
+            val reasons = failureCounts.getOrPut(event.kind) { java.util.EnumMap(TrackingFailure::class.java) }
+            reasons[why] = (reasons[why] ?: 0) + 1
+        }
+    }
     private var sessionMetadata: String? = null
 
     fun start(nowNanos: Long): Long = synchronized(lock) {
@@ -94,6 +122,8 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
         lossEvents = 0
         unstoredSamples = 0
         lastTrackingSignal = null
+        operationCounts.clear()
+        failureCounts.clear()
         sessionMetadata = null
         recording = true
         generation
@@ -157,8 +187,9 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
         recording = false
         DiagnosticFrameSnapshot(nowNanos - startNanos, received, completed, truncated, interrupted, reason, frames.toList(), staleDiscarded,
             input.copy(fps = if (nowNanos > startNanos) input.received * 1_000_000_000.0 / (nowNanos - startNanos) else null),
-            if (observedFrames + corrections > 0)
-                TrackingSnapshot(observedFrames, trackUpdates, corrections, lossEvents, unstoredSamples, trackingSamples.toList())
+            if (observedFrames + corrections > 0 || operationCounts.isNotEmpty())
+                TrackingSnapshot(observedFrames, trackUpdates, corrections, lossEvents, unstoredSamples, trackingSamples.toList(),
+                    TrackingOperations(operationCounts.toMap(), failureCounts.mapValues { it.value.toMap() }))
             else null, sessionMetadata)
     }
 }
