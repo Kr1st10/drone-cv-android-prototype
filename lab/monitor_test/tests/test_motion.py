@@ -14,7 +14,7 @@ def test_motion_browser(script, tmp_path):
     run_gallery_smoke(script, tmp_path)
 
 
-@pytest.mark.parametrize('script', ['motion_timeline_test.mjs', 'sync_check_end_test.mjs', 'sync_check_test.mjs', 'motion_report_test.mjs', 'center_error_test.mjs', 'timeline_import_test.mjs', 'motion_scenario_test.mjs', 'motion_calibration_test.mjs', 'motion_report_v4_test.mjs', 'motion_journal_status_test.mjs'])
+@pytest.mark.parametrize('script', ['capture_exposure_test.mjs', 'motion_timeline_test.mjs', 'sync_check_end_test.mjs', 'sync_check_test.mjs', 'motion_report_test.mjs', 'center_error_test.mjs', 'timeline_import_test.mjs', 'motion_scenario_test.mjs', 'motion_calibration_test.mjs', 'motion_report_v4_test.mjs', 'motion_journal_status_test.mjs'])
 def test_motion_report(script):
     node = shutil.which('node')
     if not node:

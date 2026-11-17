@@ -66,7 +66,10 @@
       const f = frameById.get(p.frame_id), s = matched(f);
       if(independent){
         const e=exposure(p);
-        if(!e?.covered||p.published_ns<f.capture_ns||p.state_known===false||p.initial_snapshot||!p.bbox)return false;
+        if(!e||p.published_ns<f.capture_ns||p.state_known===false||p.initial_snapshot||!p.bbox)return false;
+        // Missing trajectory coverage permits, but never proves, a fresh box.
+        // The exposure interval [a,b) must still reach into this episode.
+        if(!e.covered)return !definite&&e.b>start;
         const good=s=>s.visible&&s.elapsed_ms>=start&&legacy.iou(polygon(s.bbox_screen_px),p.bbox)>=.5;
         return definite?e.a>=start&&e.possible.every(good):e.b>=start&&e.possible.some(good);
       }

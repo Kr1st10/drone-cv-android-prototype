@@ -74,6 +74,7 @@ node lab/monitor_test/tests/sync_check_test.mjs
 node lab/monitor_test/tests/sync_check_end_test.mjs
 node lab/monitor_test/tests/motion_calibration_test.mjs
 node lab/monitor_test/tests/motion_report_v4_test.mjs
+node lab/monitor_test/tests/capture_exposure_test.mjs
 node lab/monitor_test/tests/motion_journal_status_test.mjs
 node lab/monitor_test/tests/motion_report_test.mjs
 node lab/monitor_test/tests/center_error_test.mjs
@@ -83,6 +84,8 @@ node lab/monitor_test/tests/timeline_import_test.mjs
 Первый набор проверяет фазы, единое время, геометрию области и скрытое продолжение маршрута. Второй использует синтетические изображения с перспективой, разными размерами, пропуском и повтором ID. Третий проверяет новый `motion-scenario-v4`, включая временные доли, очистку, сохранённую рамку, повторный захват, цензурирование и неопределённость часов. В него входят пустое состояние, начавшееся до скрытия, избыточный `clear`, поздняя очистка и отсутствие фактически показанного возвращения. `motion_journal_status_test.mjs` проверяет читаемость без JPEG/эталона, временное сопоставление без пространственных точек и совпадение границ часов с прежним анализатором. Старые IoU, ошибка центра и импорт timeline проверяются отдельно, без изменения критерия `motion-retention-v3`.
 
 Для браузерных сценариев нужны локальные изображения, Chrome/Chromium и Playwright. Укажите каталог с `node_modules/playwright` в `PLAYWRIGHT_NODE_DIR`; запускайте Node из этого каталога, поскольку сценарии используют его для поиска пакета.
+
+`capture_exposure_test.mjs` проверяет консервативные границы capture/reacquisition при разрыве траектории, разделение возможного и доказанного события, свежесть и подтверждённое отсутствие координат. [Воспроизведение и ограничения](../../lab/monitor_test/tests/independent-sync-verification.md#исправление-границ-захвата-pr-51-2026-11-17).
 
 `motion_timeline_test.mjs` проверяет независимость траектории от периода, удержание 100 мс, задержки без вымышленных показов, несколько экспозиций одного кода, текущую и устаревшую рамки, неизвестность времени и границы Stop. `motion_timeline_smoke.mjs` проверяет canvas, fullscreen, IndexedDB, отмену, завершение, обрыв/reload и отказ будущей версии. Отдельная часть использует обычный RAF Chrome без подмены часов. Эти времена относятся к браузерной модели, не физическому дисплею или телефону.
 
