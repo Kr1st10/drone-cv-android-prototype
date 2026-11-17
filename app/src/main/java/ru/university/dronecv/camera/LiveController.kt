@@ -6,6 +6,7 @@ import ru.university.dronecv.tracking.FrameKey
 import ru.university.dronecv.tracking.GrayFrame
 import ru.university.dronecv.tracking.TrackingObservation
 import ru.university.dronecv.tracking.YoloRequest
+import ru.university.dronecv.tracking.TrackingFailure
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import ru.university.dronecv.detection.Detection
@@ -337,6 +338,9 @@ class LiveController<Frame : AutoCloseable>(
             }
             if (!accepted) return
             live.reset(token.generation, token.source)
+            live.session.events = token.diagnosticToken?.let { diagnosticToken ->
+                { event -> diagnostics?.trackingEvent(diagnosticToken, event); Unit }
+            }
             val start = nanoTime()
             val gray = live.grayscale(frame, FrameKey(token.generation, token.source, ++live.sequence), stamp)
             val observation = live.session.observe(gray) ?: return
@@ -370,8 +374,10 @@ class LiveController<Frame : AutoCloseable>(
     private fun runTrackingYolo(live: LiveTracking<Frame>, frame: Frame, token: LiveFrameToken, stamp: FrameStamp,
                                 preparationMs: Double, queued: Long, request: YoloRequest) {
         try {
-            val result = analyze(frame, token.source, stamp, token, preparationMs, queued, forTracking = true)
-            onVision(live, token) { handleYolo(live, token, request, result) }
+            var failure = TrackingFailure.UNKNOWN
+            val result = analyze(frame, token.source, stamp, token, preparationMs, queued, forTracking = true,
+                onDiscard = { failure = it })
+            onVision(live, token) { handleYolo(live, token, request, result, failure) }
         } catch (e: Exception) {
             trackingFailed(live, token, request, e)
         } catch (e: OutOfMemoryError) {
@@ -382,10 +388,14 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     private fun handleYolo(live: LiveTracking<Frame>, token: LiveFrameToken, request: YoloRequest,
-                           result: LiveInference?) {
+                           result: LiveInference?, failure: TrackingFailure) {
         var replayScheduled = false
         try {
-            if (!publicationTransaction { valid(token) } || result == null) return
+            if (!publicationTransaction { valid(token) }) return
+            if (result == null) {
+                live.session.reject(request, failure)
+                return
+            }
             check(result.width == request.anchor.cropWidth && result.height == request.anchor.cropHeight) {
                 "Размер кадра YOLO не совпадает с кадром трекера."
             }
@@ -424,7 +434,11 @@ class LiveController<Frame : AutoCloseable>(
             }
             replayScheduled = true
         } catch (_: RejectedExecutionException) {
+            live.session.reject(request, TrackingFailure.PROCESSING_EXCEPTION)
             fail(token.generation, "Worker обработки кадров недоступен.", release = false)
+        } catch (e: Throwable) {
+            live.session.reject(request, TrackingFailure.PROCESSING_EXCEPTION)
+            throw e
         } finally { if (!replayScheduled) finishTracking(live, request) }
     }
 
@@ -447,6 +461,7 @@ class LiveController<Frame : AutoCloseable>(
 
     private fun trackingFailed(live: LiveTracking<Frame>, token: LiveFrameToken, request: YoloRequest, error: Throwable) {
         onVision(live, token) {
+            live.session.reject(request, TrackingFailure.PROCESSING_EXCEPTION)
             finishTracking(live, request)
             fail(token.generation, error.message ?: error.javaClass.simpleName)
         }
@@ -656,7 +671,8 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     private fun analyze(frame: Frame, sourceId: Long?, stamp: FrameStamp?, ticket: LiveFrameToken?,
-                        preparationMs: Double, queuedNs: Long?, forTracking: Boolean = false): LiveInference? {
+                        preparationMs: Double, queuedNs: Long?, forTracking: Boolean = false,
+                        onDiscard: ((TrackingFailure) -> Unit)? = null): LiveInference? {
         try {
             val request = publicationTransaction {
                 if (closed || !active || busy || (ticket != null && !valid(ticket)) || (sourceId != null && sourceId != source) ||
@@ -668,6 +684,7 @@ class LiveController<Frame : AutoCloseable>(
                 if (stamp?.ageAt(stamp.analyzerEntryNs)?.let { it > maxAnalyzerAgeMs } == true) {
                     if (token != null) diagnostics?.discardStale(token)
                     publicationTransaction { eventTime?.invoke()?.let { discarded(it, ticket, stamp, "stale_capture") } }
+                    onDiscard?.invoke(TrackingFailure.STALE_CAPTURE)
                     return null
                 }
                 val start = nanoTime()
@@ -676,6 +693,7 @@ class LiveController<Frame : AutoCloseable>(
                     publicationTransaction { if (ticket != null) inputEvent(ticket, CameraInputEvent.STALE) }
                     if (token != null) diagnostics?.discardStale(token)
                     publicationTransaction { eventTime?.invoke()?.let { discarded(it, ticket, stamp, "stale_queue") } }
+                    onDiscard?.invoke(TrackingFailure.STALE_QUEUE)
                     return null
                 }
                 if (token != null) diagnostics?.received(token)
@@ -736,9 +754,11 @@ class LiveController<Frame : AutoCloseable>(
                     } else null
                 }
             } catch (e: Exception) {
+                if (forTracking && ticket != null) throw e
                 fail(request.first, e.message ?: e.javaClass.simpleName)
                 return null
-            } catch (_: OutOfMemoryError) {
+            } catch (e: OutOfMemoryError) {
+                if (forTracking && ticket != null) throw e
                 fail(request.first, "Недостаточно памяти. Остановите детекцию и повторите запуск.")
                 return null
             } finally {

@@ -29,7 +29,10 @@ class YoloRequest internal constructor(
     val anchor: GrayFrame,
     internal val epoch: Long,
     internal val expected: TrackBox?,
-)
+    internal val events: ((TrackingEvent) -> Unit)?,
+) {
+    internal var plan: CorrectionPlan? = null
+}
 
 /** Immutable replay input; create on the vision owner, run [replay] after ORT on the ML worker. */
 class CorrectionPlan internal constructor(
@@ -39,27 +42,50 @@ class CorrectionPlan internal constructor(
     private val factory: () -> VisualTracker,
 ) {
     private val replayStarted = AtomicBoolean(false)
-    /** Null means loss, a missing/old frame or budget exhaustion. This does not publish a result. */
+    internal val events = ArrayList<TrackingEvent>(4)
+    @Volatile internal var completed = false
+    internal var reported = false
+    private fun rejected(why: TrackingFailure): ReplayedCorrection? {
+        events.add(TrackingEvent(TrackingEventKind.REPLAY_FAILED, why))
+        return null
+    }
+    /** Null has a structured outcome in [events]; the vision owner consumes it after [completed]. */
     fun replay(nanoTime: () -> Long = System::nanoTime,
                budgetNs: Long = 100_000_000L): ReplayedCorrection? {
         require(budgetNs > 0)
         if (!replayStarted.compareAndSet(false, true)) return null
         val start = nanoTime()
-        val tracker = factory()
+        var tracker: VisualTracker? = null
         var transferred = false
         try {
+            tracker = factory()
             val anchor = request.anchor
-            val box = TrackBox.from(detection.box, anchor.width, anchor.height) ?: return null
-            var estimate = tracker.initialize(anchor, box) ?: return null
+            val box = TrackBox.from(detection.box, anchor.width, anchor.height) ?: return rejected(TrackingFailure.INVALID_BOX)
+            events.add(TrackingEvent(TrackingEventKind.INITIALIZATION_ATTEMPT))
+            var estimate = tracker.initialize(anchor, box) ?: run {
+                events.add(TrackingEvent(TrackingEventKind.INITIALIZATION_FAILED, tracker.failureReason))
+                return rejected(tracker.failureReason)
+            }
+            events.add(TrackingEvent(TrackingEventKind.INITIALIZATION_SUCCEEDED))
             var last = anchor
             for (frame in frames.drop(1)) {
-                if (nanoTime() - start >= budgetNs || invalidGap(last, frame)) return null
-                estimate = tracker.update(frame) ?: return null
+                if (nanoTime() - start >= budgetNs) return rejected(TrackingFailure.REPLAY_BUDGET)
+                if (!last.sameGeometry(frame)) return rejected(TrackingFailure.GEOMETRY_CHANGED)
+                if (invalidGap(last, frame)) return rejected(TrackingFailure.FRAME_GAP)
+                estimate = tracker.update(frame) ?: return rejected(replayFailure(tracker))
                 last = frame
             }
-            if (nanoTime() - start >= budgetNs) return null
-            return ReplayedCorrection(this, tracker, last, estimate).also { transferred = true }
-        } finally { if (!transferred) tracker.close() }
+            if (nanoTime() - start >= budgetNs) return rejected(TrackingFailure.REPLAY_BUDGET)
+            val correction = ReplayedCorrection(this, tracker, last, estimate)
+            events.add(TrackingEvent(TrackingEventKind.REPLAY_SUCCEEDED))
+            transferred = true
+            return correction
+        } catch (e: Throwable) {
+            if (events.lastOrNull()?.kind == TrackingEventKind.INITIALIZATION_ATTEMPT)
+                events.add(TrackingEvent(TrackingEventKind.INITIALIZATION_FAILED, TrackingFailure.PROCESSING_EXCEPTION))
+            events.add(TrackingEvent(TrackingEventKind.REPLAY_FAILED, TrackingFailure.PROCESSING_EXCEPTION))
+            throw e
+        } finally { try { if (!transferred) tracker?.close() } finally { completed = true } }
     }
 }
 
@@ -90,6 +116,8 @@ class TrackingSession(
     val retryNs: Long = 100_000_000L,
 ) : AutoCloseable {
     init { require(yoloPeriodNs > 0 && confirmationTtlNs > yoloPeriodNs && retryNs > 0) }
+    /** Set by the owner for the current input token; a request captures this sink at admission. */
+    var events: ((TrackingEvent) -> Unit)? = null
     private val history = GrayHistory()
     private var lastSeenSequence = 0L
     private var lastSeenEntryNs = -1L
@@ -114,7 +142,7 @@ class TrackingSession(
 
     fun reset(generation: Long, source: Long) {
         check(!closed)
-        clearTrack()
+        clearTrack(if (source != this.source) TrackingFailure.STALE_SESSION else TrackingFailure.CANCELLED)
         this.generation = generation
         this.source = source
         history.clear()
@@ -138,25 +166,25 @@ class TrackingSession(
         lastSeenEntryNs = frame.stamp.analyzerEntryNs
         val previous = history.latest
         if (frame.stamp.ageAt(frame.stamp.analyzerEntryNs)?.let { it > MAX_FRAME_AGE_MS } == true) {
-            lose("stale_capture")
+            lose("stale_capture", TrackingFailure.STALE_CAPTURE)
             history.clear()
             return observation(frame)
         }
         if (previous != null && (!previous.sameGeometry(frame) || invalidGap(previous, frame))) {
-            lose("frame_gap_or_geometry")
+            lose("frame_gap_or_geometry", if (!previous.sameGeometry(frame)) TrackingFailure.GEOMETRY_CHANGED else TrackingFailure.FRAME_GAP)
             history.clear()
         }
         val confirmed = lastYolo
         if (tracker != null && confirmed != null &&
             confirmationExpired(confirmed, frame.stamp.analyzerEntryNs, confirmationTtlNs)) {
-            lose("classification_expired")
+            lose("classification_expired", TrackingFailure.CONFIRMATION_EXPIRED)
             confirmation = ClassConfirmation.EXPIRED
         }
         if (tracker != null) {
             try {
                 estimate = tracker?.update(frame)
-                if (estimate == null) lose("visual_quality")
-            } catch (e: Throwable) { lose("tracker_error"); throw e }
+                if (estimate == null) lose("visual_quality", tracker?.failureReason ?: TrackingFailure.UNKNOWN)
+            } catch (e: Throwable) { lose("tracker_error", TrackingFailure.PROCESSING_EXCEPTION); throw e }
         }
         history.add(frame)
         return observation(frame)
@@ -173,14 +201,17 @@ class TrackingSession(
         val period = if (tracker == null || weak || confirmation == ClassConfirmation.MISSED) retryNs else yoloPeriodNs
         if (lastRequestNs?.let { frame.stamp.analyzerEntryNs - it < period } == true) return null
         lastRequestNs = frame.stamp.analyzerEntryNs
-        return YoloRequest(frame, epoch, estimate?.box).also { inFlight = it; planned = false }
+        return YoloRequest(frame, epoch, estimate?.box, events).also {
+            inFlight = it; planned = false
+            it.events?.invoke(TrackingEvent(TrackingEventKind.REQUEST_STARTED))
+        }
     }
 
     /** Select at the detector frame's timestamp, not against a more recent position. */
     fun prepareCorrection(request: YoloRequest, detections: List<Detection>): CorrectionPlan? {
         if (!accepts(request) || planned) return null
         val frames = history.from(request.anchor.key)
-        if (frames == null) { finish(request); reason = "history_evicted"; return null }
+        if (frames == null) { reject(request, TrackingFailure.HISTORY_MISSING); reason = "history_evicted"; return null }
         val candidates = detections.filter { it.classId == 0 && it.label == "drone" &&
             TrackBox.from(it.box, request.anchor.width, request.anchor.height) != null }
         val chosen = if (request.expected == null) candidates.maxByOrNull { it.confidence }
@@ -188,11 +219,14 @@ class TrackingSession(
         if (chosen == null) {
             if (request.expected != null) confirmation = ClassConfirmation.MISSED
             reason = if (candidates.isEmpty()) "yolo_no_match" else "yolo_ambiguous_or_other_target"
-            finish(request)
+            reject(request, if (candidates.isEmpty()) TrackingFailure.NO_CANDIDATE else TrackingFailure.ASSOCIATION_REJECTED)
             return null
         }
         planned = true
-        return CorrectionPlan(request, chosen, frames, factory)
+        return CorrectionPlan(request, chosen, frames, factory).also {
+            request.plan = it
+            request.events?.invoke(TrackingEvent(TrackingEventKind.REPLAY_PLANNED))
+        }
     }
 
     /** Replays at most two tail frames here; larger lag requires a fresh request instead of a position jump. */
@@ -200,23 +234,25 @@ class TrackingSession(
         val request = correction.plan.request
         try {
             if (!accepts(request)) return null
-            val latest = history.latest ?: return null
+            reportReplay(request)
+            val latest = history.latest ?: run { reject(request, TrackingFailure.HISTORY_MISSING); return null }
             val tail = history.from(correction.frame.key)?.drop(1)
             if (tail == null || tail.size > 2 || nowElapsedNs < latest.stamp.analyzerEntryNs ||
                 nowElapsedNs - latest.stamp.analyzerEntryNs > 250_000_000L ||
                 latest.stamp.ageAt(nowElapsedNs)?.let { it > MAX_FRAME_AGE_MS } == true ||
                 confirmationExpired(request.anchor.stamp, nowElapsedNs, confirmationTtlNs)) {
                 reason = "correction_too_old"
-                finish(request)
+                reject(request, if (tail == null) TrackingFailure.HISTORY_MISSING else TrackingFailure.STALE_CORRECTION)
                 return null
             }
             var previous = correction.frame
             for (frame in tail) {
-                if (invalidGap(previous, frame)) {
-                    finish(request); return null
+                if (!previous.sameGeometry(frame) || invalidGap(previous, frame)) {
+                    reject(request, if (!previous.sameGeometry(frame)) TrackingFailure.GEOMETRY_CHANGED else TrackingFailure.FRAME_GAP)
+                    return null
                 }
                 correction.estimate = correction.tracker().update(frame) ?: run {
-                    finish(request); return null
+                    reject(request, replayFailure(correction.tracker())); return null
                 }
                 previous = frame
             }
@@ -234,23 +270,47 @@ class TrackingSession(
             confidence = correction.plan.detection.confidence
             confirmation = ClassConfirmation.CONFIRMED
             reason = null
-            finish(request)
+            request.events?.invoke(TrackingEvent(TrackingEventKind.CORRECTION_ACCEPTED))
+            complete(request)
             return observation(latest)
         } catch (e: Throwable) {
-            lose("correction_error")
+            reject(request, TrackingFailure.PROCESSING_EXCEPTION)
+            lose("correction_error", TrackingFailure.PROCESSING_EXCEPTION)
             throw e
         } finally { correction.close() }
     }
 
     internal fun rejectCorrection(request: YoloRequest) {
-        if (accepts(request)) reason = "replay_rejected"
+        if (!accepts(request)) return
+        reportReplay(request)
+        reason = "replay_rejected"
+        reject(request, request.plan?.events?.lastOrNull { it.kind == TrackingEventKind.REPLAY_FAILED }?.reason
+            ?: TrackingFailure.UNKNOWN)
+    }
+
+    private fun reportReplay(request: YoloRequest) {
+        request.plan?.let { plan ->
+            if (plan.completed && !plan.reported) {
+                plan.reported = true
+                plan.events.forEach { request.events?.invoke(it) }
+            }
+        }
+    }
+
+    internal fun reject(request: YoloRequest, why: TrackingFailure) {
+        if (inFlight !== request) return
+        reportReplay(request)
+        request.events?.invoke(TrackingEvent(TrackingEventKind.REQUEST_REJECTED, why))
+        complete(request)
     }
 
     internal fun confirmationDeadlineNs(observation: TrackingObservation): Long? =
         observation.lastYoloStamp?.let { confirmationDeadlineNs(it, confirmationTtlNs) }
 
     /** Also call after ORT/replay failure, executor rejection or cancellation. */
-    fun finish(request: YoloRequest) {
+    fun finish(request: YoloRequest) { reject(request, TrackingFailure.CANCELLED) }
+
+    private fun complete(request: YoloRequest) {
         if (inFlight === request) { inFlight = null; planned = false }
     }
 
@@ -260,13 +320,16 @@ class TrackingSession(
     private fun observation(frame: GrayFrame) = TrackingObservation(frame.key, frame.stamp, phase, trackId, estimate,
         confirmation, confidence, lastYolo, reason, lastYoloKey, lastYoloAcceptedNs)
 
-    private fun lose(why: String) {
+    private fun lose(why: String, failure: TrackingFailure) {
+        if (trackId != null) events?.invoke(TrackingEvent(TrackingEventKind.TRACK_LOST, failure))
+        inFlight?.let { reject(it, failure) }
         phase = VisualPhase.LOST
         reason = why
         clearTrack()
     }
 
-    private fun clearTrack() {
+    private fun clearTrack(cancellation: TrackingFailure = TrackingFailure.CANCELLED) {
+        inFlight?.let { reject(it, cancellation) }
         epoch++
         val previousTracker = tracker
         tracker = null
