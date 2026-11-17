@@ -9,7 +9,7 @@ const root=path.resolve(process.argv[2]),browser=await chromium.launch({executab
 const context=await browser.newContext({viewport:{width:1280,height:800},deviceScaleFactor:1,acceptDownloads:true});
 const page=await context.newPage(),errors=[],requests=[];
 page.on('pageerror',e=>errors.push(String(e)));page.on('request',r=>{if(/^https?:/.test(r.url()))requests.push(r.url());});page.on('dialog',d=>d.accept());
-await page.addInitScript(()=>{let now=0,next=1;const callbacks=new Map();window.requestAnimationFrame=fn=>{const key=next++;callbacks.set(key,fn);return key;};window.cancelAnimationFrame=id=>callbacks.delete(id);window.advanceMotion=ms=>{now+=ms;const work=[...callbacks.values()];callbacks.clear();work.forEach(fn=>fn(now));};});
+await page.addInitScript(()=>{let now=0,next=1;const callbacks=new Map();Object.defineProperty(performance,'now',{value:()=>now});window.requestAnimationFrame=fn=>{const key=next++;callbacks.set(key,fn);return key;};window.cancelAnimationFrame=id=>callbacks.delete(id);window.advanceMotion=ms=>{now+=ms;const work=[...callbacks.values()];callbacks.clear();work.forEach(fn=>fn(now));};});
 const tick=ms=>page.evaluate(ms=>advanceMotion(ms),ms);
 async function waitSettings(){await page.waitForFunction(()=>!document.fullscreenElement&&!document.getElementById('motionStart').disabled&&document.getElementById('motionStage').classList.contains('hidden'),null,{polling:50});assert.equal(await page.evaluate(()=>document.getElementById('motionCanvas').width),0);}
 async function start(button='#motionStart'){await page.click(button);await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});}
@@ -33,8 +33,8 @@ try{
   const pixels=await page.evaluate(()=>{const c=document.getElementById('motionCanvas'),x=c.getContext('2d');return {width:c.width,height:c.height,data:null};});
   await complete();const first=await exportRun();
   fs.writeFileSync('/private/tmp/dronecv-motion-render.json',JSON.stringify({run_id:first.run_id,step_id:0,width:pixels.width,height:pixels.height}));
-  assert.equal(first.schema,'dronecv-motion-run-2');assert.equal(first.complete,true);assert.equal(first.mode,null);
-  assert.ok(first.samples.filter(s=>s.phase==='calibration').length>10);assert.deepEqual(first.samples.slice(0,3).map(s=>s.step_id),[0,1,2]);assert.ok(first.samples[1].elapsed_ms>0);
+  assert.equal(first.schema,'dronecv-motion-run-3');assert.equal(first.complete,true);assert.equal(first.mode,null);
+  assert.ok(first.samples.filter(s=>s.phase==='calibration').length>10);assert.deepEqual(first.samples.slice(0,3).map(s=>s.sample_id),[0,1,2]);assert.ok(first.samples[1].elapsed_ms>0);
   assert.ok(first.samples.some(s=>s.phase==='stationary'&&s.visible));assert.ok(first.samples.some(s=>s.phase==='disappearance'&&!s.visible));assert.ok(first.samples.at(-1).phase==='blank_after');
   assert.match(await page.textContent('#motionStatus'),/сохранён в браузере/);
   const saved=await page.evaluate(()=>MotionStore.list());assert.equal(saved.length,1);assert.equal(saved[0].run_id,first.run_id);assert.equal(saved[0].samples.length,first.samples.length);
@@ -43,7 +43,7 @@ try{
   await page.reload();await page.click('[data-section=motion]');await page.waitForFunction(()=>!document.getElementById('motionRepeat').disabled,null,{polling:50});
   assert.equal(await page.inputValue('#motionPhoto'),photo);assert.match(await page.textContent('#motionPhotoStatus'),/Границы подтверждены/);
   await start('#motionRepeat');await tick(0);await complete();const second=await exportRun();assert.notEqual(second.run_id,first.run_id);assert.deepEqual(second.scenario,first.scenario);assert.deepEqual(second.calibration_markers,first.calibration_markers);assert.deepEqual(second.photo,first.photo);
-  const journal={schema:'dronecv-motion-android-1',mode:'yolo_lk',complete:true,truncated:false,stop_ns:(first.samples.at(-1).elapsed_ms+100)*1e6,geometry:{width:pixels.width,height:pixels.height},calibration_image:{width:pixels.width,height:pixels.height,data_url:jpeg},frames:first.samples.map((s,i)=>({frame_id:i,capture_ns:(s.elapsed_ms+40)*1e6,analyzer_ns:(s.elapsed_ms+45)*1e6,marker:{run_id:first.run_id,step_id:s.step_id}})),detections:[],publications:first.samples.map((s,i)=>({frame_id:i,published_ns:(s.elapsed_ms+50)*1e6,bbox:s.bbox_screen_px?.map((v,k)=>v/(k%2?pixels.height:pixels.width))??null,source:s.visible?'yolo':'clear'}))};
+  const journal={schema:'dronecv-motion-android-1',mode:'yolo_lk',complete:true,truncated:false,stop_ns:(first.samples.at(-1).elapsed_ms+100)*1e6,geometry:{width:pixels.width,height:pixels.height},calibration_image:{width:pixels.width,height:pixels.height,data_url:jpeg},frames:first.samples.map((s,i)=>({frame_id:i,capture_ns:(s.elapsed_ms+40)*1e6,analyzer_ns:(s.elapsed_ms+45)*1e6,marker:{run_id:first.run_id,step_id:first.sync_intervals.find(c=>s.elapsed_ms>=c.start_ms&&s.elapsed_ms<c.end_ms).step_id}})),detections:[],publications:first.samples.map((s,i)=>({frame_id:i,published_ns:(s.elapsed_ms+50)*1e6,bbox:s.bbox_screen_px?.map((v,k)=>v/(k%2?pixels.height:pixels.width))??null,source:s.visible?'yolo':'clear'}))};
   journal.detections=journal.publications.filter(p=>p.bbox).map(p=>({...p,confidence:.99}));
   const buildMetadata={git_sha:'a'.repeat(40),git_dirty:true,app_version:'0.5.2',version_code:7,build_type:'debug',
     mode:'yolo_lk',confidence:.5,nms_iou:.7,nms_max_detections:300,intra_op_threads:2,model_input_size:640,

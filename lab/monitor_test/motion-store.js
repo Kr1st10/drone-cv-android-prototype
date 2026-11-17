@@ -41,7 +41,13 @@
       store.put(scenario,'last');store.put(key,'lastScenarioKey');done(key);
     });
   });}
-  async function append(key,index,samples){if(!samples.length)return;await transaction(['chunks'],'readwrite',t=>t.objectStore('chunks').put({key:key+':'+index,owner:key,index,samples}));}
+  async function append(key,index,samples,metadata=null){if(!samples.length)return;await transaction(metadata?['runs','chunks']:['chunks'],'readwrite',(t,done,guard)=>{
+    t.objectStore('chunks').put({key:key+':'+index,owner:key,index,samples});
+    if(metadata){const store=t.objectStore('runs'),request=store.get(key);request.onsuccess=guard(()=>{
+      if(!request.result)throw Error('Начало запуска отсутствует в хранилище.');
+      store.put({...request.result,run:{...metadata,samples:[]}});
+    });}
+  });}
   async function end(key,run){await transaction(['runs'],'readwrite',(t,done,guard)=>{
     const store=t.objectStore('runs'),request=store.get(key);request.onsuccess=guard(()=>{
       if(!request.result)throw Error('Начало запуска отсутствует в хранилище.');

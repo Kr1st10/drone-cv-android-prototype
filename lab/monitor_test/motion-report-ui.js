@@ -31,7 +31,7 @@
     return [...unique.values()][0];
   }
   function pointsFor(j,run){
-    if(!j.manual&&run.schema==='dronecv-motion-run-2'&&j.calibration?.points&&!j.calibration.ambiguous)j.points=j.calibration.points;
+    if(!j.manual&&['dronecv-motion-run-2','dronecv-motion-run-3'].includes(run.schema)&&j.calibration?.points&&!j.calibration.ambiguous)j.points=j.calibration.points;
     if(j.points.length!==4)throw Error('Калибровка не выполнена. Найдите четыре метки или укажите точки на сохранённом кадре.');
     const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]);
     if(j.points.some((p,i)=>p.some(v=>!Number.isFinite(v)||v<0||v>1)||cross(p,j.points[(i+1)%4],j.points[(i+2)%4])<=1e-7))throw Error('Калибровка не выполнена: точки должны образовывать невырожденный контур TL, TR, BR, BL.');
@@ -91,11 +91,11 @@
     if(!journals.length){status('Загрузите журнал телефона.');return false;}
     for(const j of journals){try{
       const run=match(j);if(!j.processed)throw Error('Калибровка ещё обрабатывается.');if(j.image_error)throw Error(j.image_error);pointsFor(j,run);
-      const result=run.schema==='dronecv-motion-run-2'?MotionReportV4.analyze(run,j.data,j.points):MotionReport.analyze(run,j.data,j.points);
+      const result=['dronecv-motion-run-2','dronecv-motion-run-3'].includes(run.schema)?MotionReportV4.analyze(run,j.data,j.points):MotionReport.analyze(run,j.data,j.points);
       items.push({run,result:{journal:j.name,calibration_points:j.points,calibration_method:j.manual?'manual':'automatic',calibration:j.calibration,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result}});
     }catch(e){pending.push(`${j.name}: ${e.message}`);}}
     const results=items.map(i=>i.result);$('reportOutput').textContent=resultText(results)+(pending.length?'\nМетрики недоступны для:\n'+pending.join('\n'):'');
-    if(!pending.length){const legacyOnly=items.every(i=>i.run.schema==='dronecv-motion-run-1');output={schema:legacyOnly?'dronecv-motion-report-4':'dronecv-motion-scenario-report-1',runs:results};if(legacyOnly){output.maxima=MotionReport.maxima(items);$('reportOutput').textContent+='\n'+output.maxima.map(m=>`ограничение скорости ${m.max_speed_px_s} px/с: ${m.max_acceleration_px_s2??'не определено'} px/с²`).join('\n');}$('reportExport').disabled=false;}
+    if(!pending.length){const legacyOnly=items.every(i=>i.run.schema==='dronecv-motion-run-1');output={schema:legacyOnly?'dronecv-motion-report-4':items.some(i=>i.run.schema==='dronecv-motion-run-3')?'dronecv-motion-scenario-report-2':'dronecv-motion-scenario-report-1',runs:results};if(legacyOnly){output.maxima=MotionReport.maxima(items);$('reportOutput').textContent+='\n'+output.maxima.map(m=>`ограничение скорости ${m.max_speed_px_s} px/с: ${m.max_acceleration_px_s2??'не определено'} px/с²`).join('\n');}$('reportExport').disabled=false;}
     renderSelected();return !!output;
   }
   async function loadImage(j){
@@ -122,7 +122,7 @@
   }
   $('reportReference').onchange=async e=>{
     const own=++referenceVersion,context=version;referenceNotice='Чтение эталона…';invalidate();renderSelected();
-    try{const data=await parse(e.target.files[0]),items=data.schema==='dronecv-motion-series-1'?data.runs:[data];if(!Array.isArray(items)||items.some(r=>!['dronecv-motion-run-1','dronecv-motion-run-2'].includes(r.schema)))throw Error('Неверный эталон.');if(own!==referenceVersion)return;
+    try{const data=await parse(e.target.files[0]),items=data.schema==='dronecv-motion-series-1'?data.runs:[data];if(!Array.isArray(items)||items.some(r=>!['dronecv-motion-run-1','dronecv-motion-run-2','dronecv-motion-run-3'].includes(r?.schema)))throw Error('Неподдерживаемая версия эталона: '+data.schema);items.filter(r=>r.schema==='dronecv-motion-run-3').forEach(MotionTimeline.validate);if(own!==referenceVersion)return;
       for(const r of items){await MotionStore.save(r);if(own!==referenceVersion)return;}const token=version,stored=await MotionStore.list();if(own!==referenceVersion||token!==version)return;runs=stored;referenceNotice=`Загружено эталонов: ${items.length}.`;
       if(journals.length){calculate();await show(token);}else status(referenceNotice+' Загрузите журнал телефона.');
     }catch(e){if(own===referenceVersion&&context===version){referenceNotice='Ошибка импорта эталона: '+e.message;if(journals.length){calculate();renderSelected();}else status(referenceNotice);}}

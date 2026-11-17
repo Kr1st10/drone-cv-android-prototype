@@ -100,6 +100,8 @@
         const result=SyncCheckUI.save(current.run);if(!result.saved)saveFailure=Error('Не удалось сохранить проверку чтения');
         status((reason?'Проверка прервана: '+reason:'Проверка завершена')+'. '+(result.saved?'Запись проверки сохранена отдельно от движения.':'Не удалось сохранить в браузере. Экспортируйте проверку до закрытия страницы.')+(cleanupError?' Ошибка очистки: '+cleanupError:'')+(result.displayError?' Ошибка отображения: '+result.displayError:''));return;
       }
+      canvas.width=0;
+      MotionTimeline.close(current.run,current.start===null?null:Math.max(current.run.samples.at(-1)?.elapsed_ms??0,performance.now()-current.start));
       rememberLocalRun(current.run);
       flush(current);
       current.writes=current.writes.then(()=>MotionStore.end(current.key,current.run));
@@ -117,7 +119,7 @@
       status(message);
     } finally { finishing=false;update(); }
   }
-  function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
+  function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;const metadata=structuredClone({...current.run,samples:[]});current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples,metadata));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
   async function startCheck(){
     if(attempt||active||finishing)return;
     const pending={cancelled:false};attempt=pending;update();
@@ -181,7 +183,7 @@
       const plan = repeat ? structuredClone(lastScenario.plan) : MotionScenario.plan({ width: vp.width, height: vp.height, control_width_px:button.width*vp.dpr,control_height_px:button.height*vp.dpr,workspace:{x:ax*vp.width/100,y:ay*vp.height/100,width:aw*vp.width/100,height:ah*vp.height/100},calibration_size_px:v.calibration_size_px,sync_module_px:v.sync_module_px, image_width: v.m.width, image_height: v.m.height, bbox: v.bbox, target_width_px: v.target_width_px, max_speed_px_s: v.max_speed_px_s, acceleration_px_s2: v.acceleration_px_s2, laps: v.laps });
       $('motionStop').style.left=plan.control_rect[0]/vp.dpr+'px';$('motionStop').style.top=plan.control_rect[1]/vp.dpr+'px';$('motionStop').style.right='auto';
       const runId = freshRunId();
-      const run = { schema: 'dronecv-motion-run-2', run_id: runId, mode: null, series_id: seriesId, photo: { id: v.m.id, sha256: v.m.sha256 || null, width: v.m.width, height: v.m.height, bbox: v.bbox }, conditions: { ...v.conditions, viewport: vp }, scenario: plan.config, calibration_points: plan.calibration_points, calibration_markers:plan.calibration_markers,sync_backing:plan.sync_backing, marker: plan.marker, duration_ms: plan.duration_ms, complete: false, abort_reason: 'не завершён', samples: [] };
+      const run = { schema: 'dronecv-motion-run-3', run_id: runId, mode: null, series_id: seriesId, photo: { id: v.m.id, sha256: v.m.sha256 || null, width: v.m.width, height: v.m.height, bbox: v.bbox }, conditions: { ...v.conditions, viewport: vp }, scenario: plan.config, calibration_points: plan.calibration_points, calibration_markers:plan.calibration_markers,sync_backing:plan.sync_backing, marker: plan.marker, duration_ms: plan.duration_ms, complete: false, abort_reason: 'не завершён', sync_period_ms: MotionTimeline.DEFAULT_PERIOD_MS, sync_intervals: [], end_ms: null, samples: [] };
       saveFailure=null;
       operation='storage';
       const scenario={values:structuredClone(v),viewport:structuredClone(vp),plan:structuredClone(plan)};
@@ -202,7 +204,14 @@
         if (run.samples.length >= maxSamples || sampleCount() + run.samples.length >= maxSeriesSamples) { finish('достигнут предел кадров'); return; }
         if (active.start === null) active.start = now;
         let sample;
-        try{sample = MotionScenario.sample(plan, Math.max(0, now - active.start), run.samples.length, runId);draw(sample, plan, image);}catch(e){finish('ошибка отрисовки: '+e.message);return;} run.samples.push(sample);
+        try{
+          const elapsed=Math.max(0,now-active.start),step=MotionTimeline.nextCode(run.sync_intervals,elapsed,run.sync_period_ms);
+          sample=MotionScenario.sample(plan,elapsed,step,runId);
+          draw(sample,plan,image);
+          MotionTimeline.commit(run.sync_intervals,step,elapsed);
+          delete sample.step_id;sample.sample_id=run.samples.length;
+          run.samples.push(sample);
+        }catch(e){finish('ошибка отрисовки: '+e.message);return;}
         if(run.samples.length-active.saved>=120)flush(active);
         if (sample.elapsed_ms >= plan.duration_ms) active.raf = requestAnimationFrame(() => { if (active?.run === run) finish(null); });
         else active.raf = requestAnimationFrame(frame);

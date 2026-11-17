@@ -11,6 +11,7 @@ r=analyze(run,{frames:[frame(0,99)]});assert.equal(r.unknown,1);assert.deepEqual
 r=analyze(run,{frames:j.frames.map(f=>({...f,capture_ns:null}))});assert.equal(r.static,null);assert.equal(r.switching,null);assert.equal(r.matched,9);
 r=analyze(run,{frames:[frame(1000,1),frame(2000,0)]});assert.equal(r.timing,'incompatible');assert.equal(r.static,null);
 assert.equal(analyze(null,j).matched,0);assert.equal(analyze(run,{frames:[]}).fraction,null);
+assert.throws(()=>analyze({...run,schema:'dronecv-sync-check-99'},j),/Неподдерживаемая версия/);
 const base={width:1280,height:1000,workspace:{x:64,y:40,width:1152,height:920},calibration_size_px:48,image_width:400,image_height:300,bbox:[0,0,400,300],target_width_px:40,max_speed_px_s:300,acceleration_px_s2:500,laps:1};
 const rect=([x,y,w,h])=>[x,y,x+w,y+h],overlap=(a,b)=>a[0]<b[2]&&a[2]>b[0]&&a[1]<b[3]&&a[3]>b[1];
 for(const m of [12,18,24,32]){

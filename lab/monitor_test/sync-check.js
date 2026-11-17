@@ -5,6 +5,7 @@
    * Frames crossing a phase boundary for any allowed offset remain unknown.
    */
   function analyze(run,journal){
+    if(run?.schema!=null&&run.schema!=='dronecv-sync-check-1')throw Error('Неподдерживаемая версия проверки чтения: '+run.schema);
     const frames=journal.frames,steps=run?.steps||[],expected=new Set(steps.map(s=>s.step_id));
     const read=frames.filter(f=>f.marker!=null),matched=read.filter(f=>f.marker.run_id===run?.run_id&&expected.has(f.marker.step_id));
     const foreign=read.filter(f=>f.marker.run_id!==run?.run_id),unknown=read.filter(f=>f.marker.run_id===run?.run_id&&!expected.has(f.marker.step_id));
