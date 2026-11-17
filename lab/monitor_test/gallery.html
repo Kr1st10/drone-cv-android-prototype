@@ -5,6 +5,11 @@
 <title>Drone CV — лабораторная галерея (этап 6.6)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+  #abPanel label { display:block; margin:8px 0; }
+  #abPanel input, #abPanel select { max-width:100%; box-sizing:border-box; }
+  #abResults table { border-collapse:collapse; }
+  #abResults th, #abResults td { padding:6px; text-align:left; vertical-align:top; border-bottom:1px solid #555; }
+  #abResults pre { overflow-wrap:anywhere; }
   html, body { margin: 0; height: 100%; background: #000; color: #ddd; font: 16px/1.4 system-ui, sans-serif; overflow: hidden; }
   #stage { position: fixed; inset: 0; overflow: hidden; background: var(--bg, #000); }
   #stage img { position: absolute; left: 0; top: 0; max-width: none; image-rendering: auto; user-select: none; -webkit-user-drag: none; }
@@ -136,6 +141,35 @@
   </section>
   <section id="motionSection" class="hidden">
     <h3>Движущаяся цель</h3>
+    <label>Режим стенда <select id="motionTestMode"><option value="single">Одиночный прогон</option><option value="ab">A/B-сравнение</option></select></label>
+    <div id="abPanel" hidden>
+      <h4>Парная серия</h4>
+      <label>Сохранённая серия <select id="abSeriesSelect"></select></label>
+      <label>Сравниваемый фактор <select id="abFactor"><option value="mode">Режим приложения</option><option value="build">Сборка / профиль настроек</option><option value="speed">Скорость, px/с</option><option value="acceleration">Ускорение, px/с²</option></select></label>
+      <label>Значение A <input id="abValueA" value="yolo" placeholder="yolo / yolo_lk, сборка или число"></label>
+      <label>Описание A (ввод оператора) <input id="abDescriptionA" value="YOLO"></label>
+      <label>Значение B <input id="abValueB" value="yolo_lk"></label>
+      <label>Описание B (ввод оператора) <input id="abDescriptionB" value="YOLO + LK"></label>
+      <p class="muted">Для режима: yolo или yolo_lk. Для сборки: точный git SHA из журнала. Для профиля: JSON с одинаковыми ключами, например {"confidence":0.25} и {"confidence":0.40}; подтверждаются только доступные поля журнала.</p>
+      <label>Число пар <input id="abPairs" type="number" min="1" max="8" value="3"></label>
+      <p>Три пары предложены для удобства, достаточность эксперимента этим не подтверждается. Условия ниже фиксируются при создании серии; планы сохраняются при первом запуске. A/B в браузере не подтверждает режим телефона.</p>
+      <button id="abCreate">Создать серию из текущих настроек</button>
+      <p id="abInstruction" role="status"></p>
+      <button id="abNext" class="primary" disabled>Запустить следующий вариант</button>
+      <label>Пара для повторной попытки <input id="abRetryPair" type="number" min="1" value="1"></label>
+      <label>Вариант повтора <select id="abRetrySlot"><option>A</option><option>B</option></select></label>
+      <p id="abRetryInstruction" role="status"></p>
+      <button id="abRetry" disabled>Повторить выбранный вариант</button>
+      <p id="abStatus" role="status"></p>
+      <div id="abResults" style="overflow-x:auto"></div>
+      <button id="abExport" disabled>Экспорт A/B JSON с исходниками</button><button id="abCSV" disabled>Экспорт A/B CSV</button>
+      <label>Восстановить экспорт A/B <input id="abImport" type="file" accept=".json,application/json"></label>
+      <details><summary>Ретроспективная пара из прежних прогонов</summary>
+        <label>run_id A <input id="abRetroA"></label><label>run_id B <input id="abRetroB"></label>
+        <button id="abRetro">Объединить явно выбранные прогоны</button>
+        <p>Используются фактор и описания выше. Порядок заранее не планировался. Для расчёта импортируйте исходные журналы обычным импортом ниже.</p>
+      </details>
+    </div>
     <p>Фото целиком движется по прямоугольному маршруту. Ширина, скорость и ускорение заданы в пикселях экрана, не камеры. Выберите фото, настройте движение и нажмите «Старт».</p>
     <label>Снимок <select id="motionPhoto"></select></label>
     <img id="motionPhotoPreview" width="240" height="140" alt="Выбранная фотография дрона">
@@ -147,7 +181,7 @@
     <label>Круги <input id="motionLaps" type="number" min="1" max="20" value="1"></label>
     <p class="muted">Размеры заданы в пикселях canvas, не камеры. Сначала впишите рабочую область целиком в кадр телефона. Цель движется плавно; sync-код меняется отдельно, не чаще раза в 100 мс (около 10 Гц).</p>
     <p id="motionCameraStatus" class="muted">Камерой не проверено.</p>
-    <details><summary>Рабочая область и метки для 5×</summary>
+    <details id="motionWorkspace"><summary>Рабочая область и метки для 5×</summary>
       <label>Слева, % экрана <input id="motionAreaX" type="number" min="0" max="100" value="5"></label>
       <label>Сверху, % экрана <input id="motionAreaY" type="number" min="0" max="100" value="5"></label>
       <label>Ширина области, % <input id="motionAreaWidth" type="number" min="1" max="100" value="90"></label>
@@ -371,6 +405,8 @@
 <script src="motion-timeline.js"></script>
 <script src="motion-scenario.js"></script>
 <script src="motion-store.js"></script>
+<script src="motion-ab.js"></script>
+<script src="motion-ab-ui.js" defer></script>
 <script src="motion-calibration.js"></script>
 <script src="sync-check.js"></script>
 <script src="sync-check-ui.js" defer></script>

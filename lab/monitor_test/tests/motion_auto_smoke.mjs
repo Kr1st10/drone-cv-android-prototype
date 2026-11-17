@@ -51,7 +51,7 @@ try{
   journal.metadata_records=[{type:'metadata',data:buildMetadata}];
   await uploadJournal(journal);await page.waitForFunction(()=>!document.getElementById('reportExport').disabled,null,{polling:50});assert.match(await page.textContent('#reportStatus'),/4 из 4 найдены/);assert.match(await page.textContent('#reportOutput'),/режим телефона: yolo_lk/);assert.equal(await page.evaluate(()=>document.getElementById('reportCanvas').width),pixels.width);
   const [reportDownload]=await Promise.all([page.waitForEvent('download'),page.click('#reportExport')]);const report=JSON.parse(fs.readFileSync(await reportDownload.path(),'utf8'));assert.equal(report.runs[0].run_id,first.run_id);assert.equal(report.runs[0].calibration.markers.length,4);
-  assert.equal(report.schema,'dronecv-motion-scenario-report-1');
+  assert.equal(report.schema,'dronecv-motion-scenario-report-2');assert.equal(report.runs[0].criterion_version,'motion-scenario-v5');
   for(const [key,value] of Object.entries(buildMetadata))assert.deepEqual(report.runs[0].provenance.android.fields[key],value);
   assert.match(await page.textContent('#reportOutput'),/Сборка Android: 0\.5\.2 \(7\); тип debug; commit a{40}; локальные изменения: да/);
   assert.match(await page.textContent('#reportOutput'),/NMS IoU 0\.7, максимум 300; потоки 2; вход модели 640/);
