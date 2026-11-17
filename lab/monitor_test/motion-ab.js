@@ -33,7 +33,7 @@
     if(factor==='build'){
       const a=profile(variants.A.value),b=profile(variants.B.value);
       if(!!a!==!!b||a&&canonical(Object.keys(a).sort())!==canonical(Object.keys(b).sort()))throw Error('Для профилей задайте одинаковые ключи в A и B.');
-      const allowed=['git_sha','app_version','confidence','nms_iou','nms_max_detections','model_sha256','model_input_size','backend','intra_op_threads','inter_op_threads','execution_mode','execution_provider','lk','yolo_period_ns','confirmation_ttl_ns','retry_ns','coordinate_timeout_ns'];
+      const allowed=['git_sha','app_version','version_code','build_type','confidence','nms_iou','nms_max_detections','model_sha256','model_input_size','backend','intra_op_threads','inter_op_threads','execution_mode','execution_provider','lk','yolo_period_ns','confirmation_ttl_ns','retry_ns','coordinate_timeout_ns'];
       if(a&&(!Object.keys(a).length||Object.keys(a).some(k=>!allowed.includes(k))))throw Error('Профиль содержит неподдерживаемые поля.');
     }
     if(['speed','acceleration'].includes(factor)&&['A','B'].some(s=>!finite(Number(variants[s].value))||Number(variants[s].value)<=0))throw Error('Значения движения должны быть положительными числами.');
@@ -93,7 +93,7 @@
     for(const [key,label] of [['capture','Первый захват'],['cleanup','Очистка'],['reacquisition','Повторный захват']]){
       const e=r[key];m[key]={label,...(e?.status==='bounded'?interval(e.lower_ms,e.upper_ms,'ms',{reason:e.reason}):missing(e?.reason||'Событие недоступно.',{status:e?.status||'unavailable',lower:e?.lower_ms??null,upper:e?.upper_ms??null,unit:'ms'}))};
     }
-    for(const [source,stats] of Object.entries(latencies(journal)))for(const p of ['p50','p95'])m['latency_'+source+'_'+p]={label:'Экспозиция → публикация '+source+' '+p,...exact(stats[p+'_ms'],'ms',{n:stats.n,coverage:stats.coverage,reason:'Только согласованные timestamps одного журнала; доля пригодных публикаций.'})};
+    for(const [source,stats] of Object.entries(latencies(journal)))for(const p of ['p50','p95'])m['latency_'+source+'_'+p]={label:'Экспозиция → публикация '+source+' '+p,...exact(stats[p+'_ms'],'ms',{n:stats.n,coverage:stats.coverage,reason:'По всему журналу, включая подготовку и завершение; только согласованные timestamps, покрытие по числу публикаций.'})};
     m.sync_readability={label:'Читаемость sync-кода по всему журналу',...exact(r.total_frames>0?r.matched_frames/r.total_frames:null,'fraction',{n:r.total_frames})};
     m.recording={label:'Полнота записи',status:r.recording_complete===true?'confirmed':'unknown',value:r.recording_complete??null,reason:r.recording_complete===true?'Подтверждено журналом.':'Полнота не подтверждена.'};
     m.synchronization={label:'Синхронизация',status:r.timing_status==='compatible'?'confirmed':'unavailable',value:r.timing_status??null,reason:r.timing_status||'Неизвестно.'};
@@ -124,8 +124,10 @@
     const selectedFields=new Set(profiles?.A?Object.keys(profiles.A):series.factor==='build'?['git_sha']:[]);
     for(const [slot,a] of [['A',analysisA],['B',analysisB]])if(Object.keys(a?.result?.provenance?.android?.conflicts||{}).length)issues.push('Противоречивые метаданные телефона для '+slot);
     for(const [key,label] of [['model_sha256','модель'],['device','устройство'],['confidence','порог confidence'],['nms_iou','порог NMS'],['backend','backend'],['model_input_size','размер входа модели']])if(!selectedFields.has(key))check('телефон: '+label,af[key],bf[key]);
-    if(!selectedFields.has('git_sha'))check('сборка приложения',af.git_sha,bf.git_sha);
-    const optionalFields=['app_version','nms_max_detections','intra_op_threads','inter_op_threads','execution_mode','execution_provider','lk','yolo_period_ns','confirmation_ttl_ns','retry_ns','coordinate_timeout_ns'];
+    const comparesBuilds=series.factor==='build'&&!profiles?.A;
+    for(const key of ['git_sha','git_dirty','app_version','version_code','build_type'])if(!comparesBuilds&&!selectedFields.has(key))check('сборка приложения / '+key,af[key],bf[key]);
+    if(af.git_dirty!==false||bf.git_dirty!==false)unknown.push('Идентичность сборки не подтверждена: неизвестное или изменённое рабочее дерево, одного git_sha недостаточно.');
+    const optionalFields=['nms_max_detections','intra_op_threads','inter_op_threads','execution_mode','execution_provider','lk','yolo_period_ns','confirmation_ttl_ns','retry_ns','coordinate_timeout_ns'];
     for(const key of optionalFields)if(!selectedFields.has(key)&&!(series.factor==='mode'&&['lk','yolo_period_ns','confirmation_ttl_ns','retry_ns'].includes(key))&&(known(af[key])||known(bf[key])))check('телефон: '+key,af[key],bf[key]);
     for(const key of ['logical_id','confirmed_zoom','latest_capture_zoom'])check('камера: '+key,af.camera_context?.[key],bf.camera_context?.[key]);
     for(const key of ['requested_physical_id','latest_active_physical_id'])if(known(af.camera_context?.[key])||known(bf.camera_context?.[key]))check('камера: '+key,af.camera_context?.[key],bf.camera_context?.[key]);
@@ -224,6 +226,7 @@
   }
   async function importBundle(bundle){
     if(bundle?.schema!=='dronecv-motion-ab-bundle-1'||bundle.series?.schema!==FORMAT||!Array.isArray(bundle.runs)||!Array.isArray(bundle.manifest))throw Error('Неподдерживаемый комплект A/B.');
+    if(!Number.isInteger(bundle.series.pair_count)||bundle.series.pair_count<1||bundle.series.pair_count>10||!Array.isArray(bundle.series.attempts)||!Array.isArray(bundle.series.journals)||!Array.isArray(bundle.series.analyses)||bundle.series.analyses.length>64||!bundle.series.selections)throw Error('Некорректная структура или лимиты серии A/B.');
     const copy=clone(bundle),expected=copy.integrity;delete copy.integrity;if(!expected||await sha256(canonical(copy))!==expected)throw Error('Контрольная сумма комплекта не совпала.');
     const restored=await exportBundle(copy.series,copy.runs);
     if(canonical(restored.manifest)!==canonical(copy.manifest))throw Error('Манифест источников не совпал.');

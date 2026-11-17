@@ -5,7 +5,7 @@ const require=createRequire(import.meta.url),AB=require('../motion-ab.js');
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
 function fixture(){
   const series=AB.create({id:'series',factor:'mode',variants:{A:{value:'yolo',description:'YOLO'},B:{value:'yolo_lk',description:'YOLO+LK'}},base_values:{target_width_px:40}});
-  const fields={git_sha:'abc',model_sha256:'model',device:'phone',confidence:.25,nms_iou:.45,backend:'cpu',model_input_size:640,camera_context:{logical_id:'0',confirmed_zoom:1,latest_capture_zoom:1}};
+  const fields={git_sha:'abc',git_dirty:false,app_version:'1.0',version_code:1,build_type:'debug',model_sha256:'model',device:'phone',confidence:.25,nms_iou:.45,backend:'cpu',model_input_size:640,camera_context:{logical_id:'0',confirmed_zoom:1,latest_capture_zoom:1}};
   const runs=['A','B'].map((slot,i)=>({run_id:'1234567'+i,complete:true,series_id:series.id,pair_index:1,slot,
     photo:{sha256:'photo',bbox:[0,0,1,1],width:100,height:100},conditions:{setup_id:'desk',zoom:'1',orientation:'landscape',camera_config:'rear',distance_cm:30,viewport:{width:1000,height:800,dpr:1}},
     sync_period_ms:100,scenario:{version:'simple-motion-v1',target_width_px:40,max_speed_px_s:150,acceleration_px_s2:500,laps:2,workspace:{x:0,y:0,width:1000,height:800},movement_ms:7000}}));
@@ -115,4 +115,19 @@ test('zero denominators and unobserved conditional metrics remain unavailable',(
   const base={expected_ms:0,evaluated_ms:0,coverage:0,good_fraction:0,good_fraction_lower:0,good_fraction_upper:0,good_ms:0,bad_ms:0,unknown_ms:0,longest_failure_ms:0,longest_possible_failure_ms:0,center_error:{p50_px:0,p95_px:0,evaluated_ms:0,coverage:0}};
   const empty=AB.metrics(base);for(const key of ['holding','coverage','good_ms','bad_ms','unknown_ms','good_fraction','longest_failure_ms','longest_possible_failure_ms','center_p50','center_p95','center_coverage'])assert.equal(empty[key].status,'unavailable',key);
   const unknown=AB.metrics({...base,expected_ms:1000,unknown_ms:1000,good_fraction_upper:1});assert.equal(unknown.good_fraction.status,'unavailable');assert.equal(unknown.good_fraction.value,null);assert.equal(unknown.holding.lower,0);assert.equal(unknown.holding.upper,1);assert.equal(unknown.unknown_ms.value,1000);
+});
+test('selected builds permit derived identity differences; dirty snapshots remain unconfirmed',()=>{
+  const {series,runs}=fixture();series.factor='build';series.variants={A:{value:'abc'},B:{value:'def'}};
+  const af=series.analyses[0].result.provenance.android.fields,bf=series.analyses[1].result.provenance.android.fields;
+  bf.git_sha='def';bf.app_version='2.0';bf.version_code=2;bf.build_type='release';series.analyses[1].result.mode='yolo';
+  assert.equal(AB.compare(series,1,runs).state,'complete');
+  bf.git_dirty=true;assert.equal(AB.compare(series,1,runs).state,'unconfirmed');bf.git_dirty=false;
+  series.factor='speed';series.variants={A:{value:150},B:{value:150}};
+  assert.match(AB.compare(series,1,runs).reasons.join(' '),/version_code/);
+  assert.equal(af.git_dirty,false);
+});
+test('bundle rejects excessive virtual pair count before allocating a summary',async()=>{
+  const series=AB.create({factor:'speed',variants:{A:{value:1},B:{value:2}}}),bundle=await AB.exportBundle(series,[]);
+  bundle.series.pair_count=1000000;delete bundle.integrity;bundle.integrity=await AB.sha256(AB.canonical(bundle));
+  await assert.rejects(AB.importBundle(bundle),/структура или лимиты/);
 });
