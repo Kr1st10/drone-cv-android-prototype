@@ -185,4 +185,10 @@ assert.equal(uncertainResult.expected_ms,uncertainResult.good_ms+uncertainResult
  assert.equal(result.pass,true);
 }
 
+
+// Single-run reference has no knowledge of the Android mode. Legacy explicit modes still match strictly.
+assert.equal(analyze({...run,mode:null},make(),points).mode,'yolo');
+assert.equal(analyze({...run,mode:null},{...make(),mode:'yolo_lk'},points).mode,'yolo_lk');
+assert.throws(()=>analyze({...run,mode:null},{...make(),mode:'unknown'},points));
+assert.deepEqual(maxima(['yolo','yolo_lk'].map(mode=>({run:{...run,mode:null},result:{run_id:run.run_id,mode}}))).map(g=>g.mode),['yolo','yolo_lk']);
 console.log('synthetic motion report tests passed');

@@ -69,7 +69,45 @@ python -m pytest lab/monitor_test/tests -q
 
 В этом же наборе `reference_test.mjs` проверяет расчёт эталонной оси (15 м, удвоение при уменьшении изображения), отказ при неизвестной геометрии и три профиля. `reference_smoke.mjs` проверяет вкладку, локальные фото, масштаб/расстояние, сохранение настроек, риски в окне 460 × 600 и сохранность прежних результатов/экспорта; синтетическая подтверждённая ось существует только внутри теста. Хеши шести исходных фото проверяются отдельно. Переключение девяти записей ракурсов, отсутствие устаревших метров после смены фотографии/калибровки и собственные размеры моделей проверяются браузером; прямоугольники с тестовыми осями не выдаются за реальные эталоны. Независимый Python-тест сравнивает JavaScript с фиксированными ответами и выводом через atan2/tan (равенство угловых размеров); промежуточные результаты не округляются. Эти проверки не подтверждают соответствие реального силуэта паспортному габариту или дальность детекции Xiaomi.
 
-Движение по заданным временам и кодирование метки проверяет `node lab/monitor_test/tests/motion_test.mjs`. Браузерный сценарий проверяет полноэкранный запуск, повтор пары, JSON эталона и отчёт на синтетическом Android-журнале. Синтетические расчёты IoU отдельно проверяет `node lab/monitor_test/tests/motion_report_test.mjs`, ошибки центра и метаданных: `node lab/monitor_test/tests/center_error_test.mjs`. `pytest lab/monitor_test/tests/test_motion.py` включает эти два набора, импорт timeline и браузерный сценарий. Браузерная проверка также загружает синтетический NDJSON, отмечает калибровочные точки и экспортирует отчёт v4 с условной статистикой ошибки и покрытием. Повторное чтение фактических Kotlin-файлов выполняется после их создания JVM-тестами; при отсутствии файлов соответствующие проверки пропускаются. Считывание метки камерой и точность отчёта на реальной съёмке проверяют отдельно по [протоколу движения](../../lab/monitor_test/PROTOCOL.md#7-движущаяся-цель).
+Ядро движения и неизменный sync-код проверяет `node lab/monitor_test/tests/motion_test.mjs`. Новые автономные проверки запускаются из корня репозитория:
+
+```bash
+node lab/monitor_test/tests/motion_scenario_test.mjs
+node lab/monitor_test/tests/sync_check_test.mjs
+node lab/monitor_test/tests/sync_check_end_test.mjs
+node lab/monitor_test/tests/motion_calibration_test.mjs
+node lab/monitor_test/tests/motion_report_v4_test.mjs
+node lab/monitor_test/tests/motion_journal_status_test.mjs
+node lab/monitor_test/tests/motion_report_test.mjs
+node lab/monitor_test/tests/center_error_test.mjs
+node lab/monitor_test/tests/timeline_import_test.mjs
+```
+
+Первый набор проверяет фазы, единое время, геометрию области и скрытое продолжение маршрута. Второй использует синтетические изображения с перспективой, разными размерами, пропуском и повтором ID. Третий проверяет новый `motion-scenario-v4`, включая временные доли, очистку, сохранённую рамку, повторный захват, цензурирование и неопределённость часов. В него входят пустое состояние, начавшееся до скрытия, избыточный `clear`, поздняя очистка и отсутствие фактически показанного возвращения. `motion_journal_status_test.mjs` проверяет читаемость без JPEG/эталона, временное сопоставление без пространственных точек и совпадение границ часов с прежним анализатором. Старые IoU, ошибка центра и импорт timeline проверяются отдельно, без изменения критерия `motion-retention-v3`.
+
+Для браузерных сценариев нужны локальные изображения, Chrome/Chromium и Playwright. Укажите каталог с `node_modules/playwright` в `PLAYWRIGHT_NODE_DIR`; запускайте Node из этого каталога, поскольку сценарии используют его для поиска пакета. Пример с абсолютными путями:
+
+```bash
+cd /absolute/path/to/playwright-workdir
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_auto_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_controls_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_calibration_jpeg_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_calibration_real_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_store_review_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_repeat_recovery_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_start_cleanup_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+CHROMIUM=/absolute/path/to/chromium node /absolute/path/to/repository/lab/monitor_test/tests/motion_report_review_smoke.mjs /absolute/path/to/repository/lab/monitor_test
+```
+
+`motion_auto_smoke.mjs` проверяет простой сценарий, постоянное хранение, повтор и автоматический импорт/анализ; `motion_calibration_jpeg_smoke.mjs` выполняет синтетический canvas→JPEG→decode без камеры. `motion_store_review_smoke.mjs` использует настоящий Chrome IndexedDB с искусственными отказами транзакций: импорт после записи метаданных/шагов, откат, повторная попытка, дедупликация, конфликт, reload и устойчивый выбор последнего локального запуска при обратном порядке ID. `motion_report_review_smoke.mjs` проверяет раздельные sync/временные/пространственные статусы, автоматическую обработку нескольких JPEG, имена проблемных журналов, ручной режим, быстрые переключения и импорт во время декодирования. Искусственные отказы и синтетические журналы не являются испытанием камеры. `sync_check_test.mjs` проверяет фазовое сопоставление, все размеры и отсутствие пересечений; `sync_check_smoke.mjs` — запуск без фото, 10 секунд + пять шагов, отдельное сохранение, отмену/очистку, JSON/NDJSON с пропусками, JPEG/угловые метки и движение с ячейкой 18. Старые браузерные фикстуры движения явно используют прежние 6 px; это проверка сохранности прежней геометрии. Физическая процедура — [проверка чтения](../../lab/monitor_test/README.md#проверка-чтения-sync-кода).
+
+Совместимость настоящего рендера проверяется неизменённым Android-декодером: `python3 lab/monitor_test/tests/motion_decoder_compat.py /absolute/path/to/frame.png 12345678 42`. Здесь `12345678` и `42` должны совпадать с кодом сохранённого PNG; `none` вместо ID ожидает отсутствие единственного валидного кода. Нужны JDK и кеш компилятора Kotlin 2.0.21 из обычной подготовки проекта; runner не редактирует Android и не заменяет device-тесты.
+
+Регрессии ревью `664d52f`: `sync_check_smoke.mjs` проверяет повреждённый импорт → Стоп/естественное завершение → следующий запуск, ошибки анализа/обновления и сохранения с экспортом из памяти. Стандартный `civ01` с целью 40 px и sync 18 px завершается в Chrome на 1024×768, 1280×800, 1366×768 и 1920×1080; проверяются повтор сохранённых 40/18 после изменения полей, восстановление прежних 6 px и отказ невозможной геометрии без изменения настроек. `motion_scenario_test.mjs` проверяет те же разрешения при DPR 1/1.5/2, целое фото, размер/координаты объекта и отсутствие пересечений с углами, sync и Стоп. Свидетельства и ограничения: [проверка стенда](../../lab/monitor_test/tests/simple-motion-verification.md#исправления-ревью-664d52f).
+
+Граница показа sync: `sync_check_end_test.mjs` загружает настоящие JS-модули в Node/VM с имитацией DOM/RAF и монотонных часов. Искусственные синхронные задержки хранения/анализа 500 мс проверяют порядок очистки, точный `end_ms`, совместимость журнала, строгий отказ кадру после снятия кода, Стоп/естественное завершение, раннюю отмену и восстановление обоих режимов после ошибок. Необязательный аргумент git ref позволяет повторить регрессию на старом коде: `node lab/monitor_test/tests/sync_check_end_test.mjs 6d41e8c` ожидаемо завершается с ошибкой. Это не браузерная проверка. Настоящий Chrome проверяется отдельно через `sync_check_smoke.mjs`, который также вводит синхронные задержки по 500 мс и использует общую имитированную шкалу для RAF и `performance.now`. Эти задержки не являются измерениями устройства. [Результаты](../../lab/monitor_test/tests/simple-motion-verification.md#граница-показа-sync-кода).
+
+Полный `pytest lab/monitor_test/tests` включает прежние режимы галереи; отсутствие Node, браузера, Playwright или изображений приводит к пропуску браузерных проверок. Проверки импорта фактических Kotlin-файлов требуют заранее созданных JVM-фикстур, иначе соответствующие проверки пропускаются. Синтетические журналы и изображения проверяют вычисления и программную совместимость. Читаемость меток на 5×, JPEG телефона, реальные размеры в кадре и точность сопровождения принимают отдельно по [протоколу движения](../../lab/monitor_test/PROTOCOL.md#аппаратная-проверка-на-xiaomi).
 
 Без ML-зависимостей можно проверить manifest стенда стандартной библиотекой Python:
 
@@ -84,6 +122,10 @@ python3 ml/scripts/analyze_android_sessions.py /absolute/path/to/report.ndjson -
 ```
 
 Анализатор проверяет целостность и пересчитывает производительность из `diagnostic_report` новых NDJSON либо прежнего корневого JSON, не выполняя infer. Для исторических и motion-NDJSON без полного отчёта сохраняется анализ интервалов. Пропуски и отсутствующий конец не позволяют считать запись полной; [контракт формата](../reference/data-model.md#поток-диагностической-сессии-dronecv-session-timeline-1). Ненулевой exit требует разбора errors/config_mismatches. Сопоставление потоков требует новых явных metadata, его условия — [ORT_THREAD_BENCHMARK](../ORT_THREAD_BENCHMARK.md).
+
+`motion_calibration_real_smoke.mjs` проверяет настоящий JPEG Xiaomi и отдельно обозначенные синтетические варианты яркости и поворота, передачу найденных точек в гомографию через UI, пропуски, неоднозначность и ручную разметку. Для полного исходного журнала задайте `CORNER_NDJSON`; без него импортируется синтетический журнал с настоящим JPEG. [Происхождение, SHA-256 и ограничения](../../lab/monitor_test/tests/fixtures/xiaomi-corners.md). Node-набор калибровки дополнительно проверяет перспективу, размеры 16/20 px без наклона и 24/32/48/96 px с наклоном, равномерное и неравномерное затемнение, повреждения, обрезку, отдельные и вложенные дубликаты ID, повторные наблюдения, sync и случайные контрастные объекты. Минимум 16×16 не гарантирует устойчивость при повороте или перспективе.
+
+`motion_repeat_recovery_smoke.mjs` использует настоящий Chrome и IndexedDB: завершённый A → начало B → сохранённая порция → принудительный обрыв renderer через CDP → новая вкладка того же профиля → повтор B. Отдельно проверяются обрыв первого запуска, отказ записи снимка в транзакции начала, Stop/Esc во время ожидающего начала и прежний несвязанный снимок. `motion_start_cleanup_smoke.mjs` внедряет отказ загрузки фото либо планирования и последующий отказ `exitFullscreen()`; проверяются обе причины, разблокировка Start/Repeat/sync и следующие запуски без reload. RAF-часы, ошибки и тестовые фотографии обозначены как синтетические; эти тесты не измеряют аппаратное поведение. `motion_report_v4_test.mjs` проверяет поздний захват также через настоящий `timelineImporter()`. [Воспроизведения и результаты](../../lab/monitor_test/tests/simple-motion-verification.md#три-замечания-к-3fef8c0-2026-11-16).
 
 ## Архив журналов
 

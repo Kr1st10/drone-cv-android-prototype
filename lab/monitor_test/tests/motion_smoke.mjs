@@ -1,3 +1,4 @@
+// Preserve the pre-enlargement movement fixture at an explicit 6 px cell.
 // Offline browser integration; simulated timing and operator inputs are not device measurements.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -22,7 +23,8 @@ await page.goto('file://' + path.join(dir, 'gallery.html'));
 await page.waitForFunction(() => /Изображений: 90/.test(document.getElementById('status').textContent), null, { polling: 100 });
 await page.click('[data-section=gallery]'); await page.click('#presetPilot'); await page.click('#start');
 const previous = await page.evaluate(() => JSON.parse(sessionJson()));
-await page.keyboard.press('s'); await page.click('[data-section=motion]');
+await page.keyboard.press('s'); await page.click('[data-section=motion]');await page.evaluate(()=>{const e=document.getElementById('motionSyncSize');e.value='6';e.dispatchEvent(new Event('input'));});
+for (const [key,value] of Object.entries({motionWidth:'40',motionSpeed:'300',motionAcceleration:'500',motionLaps:'1'})) assert.equal(await page.inputValue('#'+key),value);
 await page.click('#motionStart'); assert.match(await page.textContent('#motionStatus'), /Не удалось начать/);
 const original = await page.evaluate(() => MANIFEST.images.find(m => m.id === 'civ01'));
 await page.setInputFiles('#motionUpload', path.join(dir, original.file));
@@ -33,33 +35,64 @@ await page.click('#motionBounds');
 const bbox = original.object_bbox.map((v, i) => v * (i % 2 ? local.height / original.height : local.width / original.width));
 for (const [i, id] of ['boundX1', 'boundY1', 'boundX2', 'boundY2'].entries()) await page.fill('#' + id, String(bbox[i]));
 await page.click('#saveBounds'); assert.match(await page.textContent('#motionPhotoStatus'), /Границы подтверждены/);
-for (const [id, value] of Object.entries({ motionSetup: 'test setup', motionZoom: '1x', motionOrientation: 'landscape', motionCamera: 'test camera', motionWidth: '60', motionSpeed: '500', motionAcceleration: '1000' })) await page.fill('#' + id, value);
-await page.check('#motionConfirm');
-async function start() { if (!(await page.isChecked('#motionConfirm'))) await page.check('#motionConfirm'); await page.click('#motionStart'); await page.waitForFunction(() => document.fullscreenElement === document.getElementById('motionCanvas') && document.getElementById('settings').classList.contains('hidden'), null, { polling: 100 }); }
+for (const [id, value] of Object.entries({ motionWidth: '60', motionSpeed: '500', motionAcceleration: '1000', motionLaps: '2' })) await page.fill('#' + id, value);
+
+async function start(button = '#motionStart') { await page.click(button); await page.waitForFunction(() => document.fullscreenElement === document.getElementById('motionStage') && document.getElementById('settings').classList.contains('hidden'), null, { polling: 100 }); }
+async function cleanSettings() {
+  await page.waitForFunction(() => !document.fullscreenElement && !document.getElementById('settings').classList.contains('hidden') && document.getElementById('motionStage').classList.contains('hidden') && !document.getElementById('motionStart').disabled, null, { polling: 100 });
+  assert.deepEqual(await page.evaluate(() => ['stage','hud','geometry','stageControls','answer','record'].map(id => getComputedStyle(document.getElementById(id)).display)), Array(6).fill('none'));
+  assert.equal(await page.evaluate(() => document.getElementById('motionCanvas').width), 0);
+  assert.equal(await page.isEnabled('#motionStart'), true);
+  assert.equal(await page.isEnabled('#motionWidth'), true);
+}
+// Motion settings survive reload without altering the gallery's settings or shared bounds.
+const storageBefore = await page.evaluate(() => ({settings: localStorage.getItem(LS+'settings'), bounds: localStorage.getItem(LS+'object_bounds')}));
+await page.reload(); await page.click('[data-section=motion]');
+assert.equal(await page.inputValue('#motionPhoto'), selected);
+for (const [key, value] of Object.entries({motionWidth:'60',motionSpeed:'500',motionAcceleration:'1000',motionLaps:'2'})) assert.equal(await page.inputValue('#'+key),value);
+await page.fill('#motionLaps','1');
+assert.match(await page.textContent('#motionPhotoStatus'), /Границы подтверждены/);
+assert.deepEqual(await page.evaluate(() => ({settings: localStorage.getItem(LS+'settings'), bounds: localStorage.getItem(LS+'object_bounds')})), storageBefore);
 async function tick(ms) { await page.evaluate(ms => advanceMotion(ms), ms); }
 async function finish() { for (let i = 0; i < 100; i++) { if (!(await page.evaluate(() => !!document.fullscreenElement))) break; await tick(500); } await page.waitForFunction(() => !document.fullscreenElement, null, { polling: 100 }); }
-async function fullRun() { await start(); await tick(0); await tick(1000); await tick(250); await finish(); }
+async function fullRun(button) { await start(button); await tick(0); await tick(1000); await tick(250); await finish(); }
 async function exportJson(id) { const [download] = await Promise.all([page.waitForEvent('download'), page.click(id)]); return JSON.parse(fs.readFileSync(await download.path(), 'utf8')); }
 await start(); await tick(0); await tick(1000); await tick(250);
-assert.equal(await page.evaluate(() => document.fullscreenElement.id), 'motionCanvas');
+assert.equal(await page.evaluate(() => document.fullscreenElement.id), 'motionStage');
 assert.ok(await page.evaluate(() => { const c = document.getElementById('motionCanvas'); return c.width > 0 && c.height > 0 && c.getContext('2d').getImageData(16, 16, 1, 1).data[3] === 255; }));
-const markerPixels = await page.evaluate(() => { const c = document.getElementById('motionCanvas'), ctx = c.getContext('2d'), m = Math.max(4, Math.round(c.width / 100)), x = 16 + m, y = 16 + m; return Array.from({ length: 80 }, (_, i) => ctx.getImageData(x + (i % 10) * m + Math.floor(m / 2), y + Math.floor(i / 10) * m + Math.floor(m / 2), 1, 1).data[0] < 128 ? 1 : 0); });
+const markerPixels = await page.evaluate(() => { const c = document.getElementById('motionCanvas'), ctx = c.getContext('2d'), m = 6, x = c.width/2-5*m, y = c.height*.05+16+2*m; return Array.from({ length: 80 }, (_, i) => ctx.getImageData(x + (i % 10) * m + Math.floor(m / 2), y + Math.floor(i / 10) * m + Math.floor(m / 2), 1, 1).data[0] < 128 ? 1 : 0); });
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
 await finish(); const first = await exportJson('#motionExportLast');
-assert.equal(first.schema, 'dronecv-motion-run-1'); assert.equal(first.complete, true); assert.equal(first.mode, 'yolo'); assert.equal(first.order, 'AB');
+assert.equal(first.schema, 'dronecv-motion-run-2'); assert.equal(first.complete, true); assert.equal(first.mode, null); assert.equal(first.order, undefined);
 assert.ok(first.samples.some(s => s.visible)); assert.ok(first.samples.some(s => !s.visible));
 assert.deepEqual(markerPixels, await page.evaluate(({ run, step }) => Motion.markerBits(run, step), { run: first.run_id, step: 2 })); assert.equal(first.conditions.distance_cm, null);
 assert.equal(first.marker.module_px > 0, true); assert.equal(first.calibration_points.length, 4);
-await fullRun(); let bundle = await exportJson('#motionExport');
-assert.deepEqual(bundle.runs.map(r => r.mode), ['yolo', 'yolo_lk']);
-assert.deepEqual(bundle.runs[0].samples.map(({ run_id, ...s }) => s), bundle.runs[1].samples.map(({ run_id, ...s }) => s));
-await page.click('#motionNextPair'); await page.check('#motionConfirm');
-await fullRun(); await fullRun(); bundle = await exportJson('#motionExport');
-assert.equal(bundle.schema, 'dronecv-motion-series-1'); assert.deepEqual(bundle.runs.map(r => r.mode), ['yolo', 'yolo_lk', 'yolo_lk', 'yolo']);
-assert.deepEqual(bundle.runs.map(r => r.order), ['AB', 'AB', 'BA', 'BA']);
-await page.click('#motionNextPair'); await page.check('#motionConfirm'); await start(); await tick(0); await page.keyboard.press('Escape');
-const aborted = await exportJson('#motionExportLast'); assert.equal(aborted.complete, false); assert.ok(aborted.abort_reason); assert.equal(aborted.slot, 1);
-await fullRun(); bundle = await exportJson('#motionExport'); assert.equal(bundle.runs.at(-1).slot, 1);
+await cleanSettings();
+if (process.env.CLEAN_SHOT) await page.screenshot({path:process.env.CLEAN_SHOT});
+// Repeat uses the last snapshot even after controls and shared object bounds change.
+await page.fill('#motionWidth','50'); await page.fill('#motionSpeed','600');
+await page.evaluate(id => { BOUNDS[id].bbox[0] += 1; save('object_bounds',BOUNDS); }, selected);
+await fullRun('#motionRepeat'); let bundle = await exportJson('#motionExport');
+assert.deepEqual(bundle.runs[0].scenario, bundle.runs[1].scenario);
+assert.deepEqual(bundle.runs[0].photo, bundle.runs[1].photo);
+assert.deepEqual(bundle.runs[0].samples.map(({run_id,...s})=>s),bundle.runs[1].samples.map(({run_id,...s})=>s));
+await cleanSettings();
+await fullRun(); await cleanSettings();
+bundle = await exportJson('#motionExport');
+assert.equal(bundle.runs.length,3); assert.equal(bundle.runs[2].scenario.target_width_px,50);
+assert.equal(bundle.runs[2].scenario.max_speed_px_s,600);
+assert.equal(new Set(bundle.runs.map(r=>r.run_id)).size,3);
+assert.ok(bundle.runs.every(r=>r.mode===null && !('pair_index' in r)));
+await start(); await tick(0); await page.click('#motionStop'); await cleanSettings();
+let aborted = await exportJson('#motionExportLast'); assert.equal(aborted.complete,false); assert.match(aborted.abort_reason,/оператором/);
+await start(); await tick(0); await page.keyboard.press('Escape'); await cleanSettings();
+aborted = await exportJson('#motionExportLast'); assert.equal(aborted.complete,false);
+await start(); await tick(0); await page.evaluate(()=>document.exitFullscreen()); await cleanSettings();
+aborted = await exportJson('#motionExportLast'); assert.equal(aborted.complete,false);
+// Invalid motion must return to clean settings and permit the next run.
+await page.fill('#motionWidth','99999'); await page.click('#motionStart');
+await page.waitForFunction(()=>/Не удалось начать/.test(document.getElementById('motionStatus').textContent),null,{polling:100});
+await cleanSettings(); await page.fill('#motionWidth','60'); await fullRun(); await cleanSettings();
 // Synthetic Android journal exercises the local import, image calibration and report UI.
 const jpeg = await page.evaluate(() => { const c=document.createElement('canvas'); c.width=c.height=100; return c.toDataURL('image/jpeg'); });
 const syntheticSamples=Array.from({length:31},(_,i)=>({run_id:'12345678',step_id:i,elapsed_ms:i*100,visible:i>=5&&i<25,phase:i<5?'blank_before':i<25?'cruise':'blank_after',bbox_screen_px:i>=5&&i<25?[20,20,40,40]:null}));
@@ -69,10 +102,12 @@ const jsonFile=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.fr
 await page.setInputFiles('#reportReference',jsonFile('synthetic-reference.json',syntheticRun));
 await page.setInputFiles('#reportJournals',jsonFile('synthetic-journal.json',syntheticJournal));
 await page.waitForFunction(()=>document.getElementById('reportCanvas').width===100, null, {polling:100});
+await page.click('#reportReset');
 for(const [x,y] of [[10,10],[90,10],[90,90],[10,90]]) await page.locator('#reportCanvas').click({position:{x,y}});
 await page.click('#reportCalculate');
 assert.match(await page.textContent('#reportOutput'),/Результаты по прогонам/);
 assert.match(await page.textContent('#reportOutput'),/критерий: пройден/);
+assert.match(await page.textContent('#reportOutput'),/Сборка Android: неизвестно \(неизвестно\); тип неизвестно; commit неизвестно; локальные изменения: неизвестно/);
 const report=await exportJson('#reportExport');assert.equal(report.runs[0].capture_latency_ms,100);assert.equal(report.runs[0].pass,true);
 // Exercise the streamed NDJSON file input with exact Long values beyond 2^53.
 const origin=90071992547409930n, frameOrigin=90071992547419930n, timeline=[];
@@ -90,7 +125,8 @@ for(const p of syntheticJournal.publications) timelineRow('publication',{frame_i
 const accepted=String(timeline.length);
 timelineRow('session_end',{stop_ns:String(origin+3000000000n),recording_complete:true,experiment_status:'not_observed',interrupted:false,accepted_count:accepted,written_count:accepted,dropped_count:'0',missing_first_event_id:null,missing_last_event_id:null},3000000000);
 await page.setInputFiles('#reportJournals',{name:'synthetic-timeline.ndjson',mimeType:'application/x-ndjson',buffer:Buffer.from(timeline.map(r=>JSON.stringify(r)).join('\n')+'\n')});
-await page.waitForFunction(()=>document.getElementById('reportCanvas').width===100 && /Отмечено точек: 0/.test(document.getElementById('reportStatus').textContent), null, {polling:100});
+await page.waitForFunction(()=>document.getElementById('reportCanvas').width===100 && /Калибровка не выполнена/.test(document.getElementById('reportStatus').textContent), null, {polling:100});
+await page.click('#reportReset');
 for(const [x,y] of [[10,10],[90,10],[90,90],[10,90]]) await page.locator('#reportCanvas').click({position:{x,y}});
 await page.click('#reportCalculate');
 assert.match(await page.textContent('#reportOutput'),/критерий: пройден/);
@@ -116,11 +152,12 @@ await page.setInputFiles('#reportJournals',journals.map((j,i)=>jsonFile(`journal
 for(let i=0;i<journals.length;i++) {
  await page.selectOption('#reportSelect',String(i));
  await page.waitForFunction(()=>document.getElementById('reportCanvas').width===100, null, {polling:100});
+ await page.click('#reportReset');
  for(const [x,y] of [[10,10],[90,10],[90,90],[10,90]]) await page.locator('#reportCanvas').click({position:{x,y}});
 }
 await page.click('#reportCalculate');
 const outputText=await page.textContent('#reportOutput');
-assert.match(outputText,/критерий: не определён/); assert.match(outputText,/неизвестно: 400\.0 мс/);
+assert.match(outputText,/критерий: не определён/); assert.match(outputText,/[Нн]еизвестно: 400\.0 мс/);
 assert.match(outputText,/ограничение скорости 100 px\/с: 200 px\/с²/);
 assert.match(outputText,/ограничение скорости 300 px\/с: 600 px\/с²/);
 const multiReport=await exportJson('#reportExport');
@@ -140,6 +177,41 @@ assert.equal(multiReport.runs.find(r=>r.run_id==='u1').unknown_ms,400);
 assert.deepEqual(multiReport.maxima.map(m=>[m.max_speed_px_s,m.max_acceleration_px_s2]),[[100,200],[300,600]]);
 const after = await page.evaluate(() => JSON.parse(sessionJson()));
 assert.deepEqual(after.sample, previous.sample); assert.deepEqual(after.results, previous.results); assert.equal(after.trial.run_id, previous.trial.run_id);
+await page.evaluate(() => { const s=load('motion_settings',{}); s.photo_id='missing-saved-photo'; save('motion_settings',s); });
+await page.reload(); await page.click('[data-section=motion]');
+assert.equal(await page.inputValue('#motionPhoto'),'missing-saved-photo');
+assert.match(await page.textContent('#motionPhotoStatus'),/фотография недоступна/);
+await page.click('#motionStart');
+assert.match(await page.textContent('#motionStatus'),/фотография недоступна/);
+await cleanSettings();
+// Missing file with surviving metadata is reported too, without a fallback photo.
+await page.selectOption('#motionPhoto',selected);
+await page.evaluate(id => { M.find(m=>m.id===id).file='images/missing-motion-test.jpg'; MotionUI.refresh(); },selected);
+await page.waitForFunction(()=>/фотография недоступна/.test(document.getElementById('motionPhotoStatus').textContent),null,{polling:100});
+await page.click('#motionStart');
+await page.waitForFunction(()=>/Не удалось начать/.test(document.getElementById('motionStatus').textContent),null,{polling:100});
+await cleanSettings();
+// Real animation clock and native fullscreen: let one complete lap end by itself.
+const realtime = await context.newPage();
+realtime.on('pageerror',e=>errors.push(String(e)));
+await realtime.goto('file://' + path.join(dir,'gallery.html'));
+await realtime.click('[data-section=motion]'); await realtime.selectOption('#motionPhoto',selected);
+for (const [key,value] of Object.entries({motionWidth:'60',motionSpeed:'50000',motionAcceleration:'10000000',motionLaps:'1'})) await realtime.fill('#'+key,value);
+await realtime.click('#motionStart');
+await realtime.waitForFunction(()=>document.fullscreenElement?.id==='motionStage' && document.getElementById('settings').classList.contains('hidden'),null,{polling:100});
+await realtime.waitForFunction(()=>!document.fullscreenElement && /Запуск завершён/.test(document.getElementById('motionStatus').textContent),null,{polling:100});
+const [realDownload] = await Promise.all([realtime.waitForEvent('download'),realtime.click('#motionExportLast')]);
+const realRun=JSON.parse(fs.readFileSync(await realDownload.path(),'utf8'));
+assert.equal(realRun.complete,true); assert.equal(realRun.scenario.laps,1);
+assert.equal(realRun.samples.at(-1).phase,'blank_after');
+assert.ok(realRun.samples.at(-1).elapsed_ms>=realRun.duration_ms);
+assert.equal(await realtime.locator('#stage').isVisible(),false);
+assert.equal(await realtime.locator('#hud').isVisible(),false);
+assert.equal(await realtime.locator('#motionStage').isVisible(),false);
+assert.equal(await realtime.locator('#settings').isVisible(),true);
+assert.equal(await realtime.evaluate(()=>document.getElementById('motionCanvas').width),0);
+if (process.env.CLEAN_SHOT) await realtime.screenshot({path:process.env.CLEAN_SHOT});
+await realtime.close();
 assert.deepEqual(errors, []); assert.deepEqual(network, []);
 await context.close(); await browser.close();
-console.log('motion offline upload, bounds, validation, fullscreen, marker, exports, AB/BA, deterministic timing, abort and gallery preservation: OK');
+console.log('motion persistence, independent runs, repeat snapshot, natural finish, stop, Esc, error cleanup, legacy imports and gallery preservation: OK');

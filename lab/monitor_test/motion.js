@@ -29,7 +29,7 @@
     bytes.push(crc);
     return bytes.flatMap(byte => Array.from({ length: 8 }, (_, bit) => (byte >>> (7 - bit)) & 1));
   }
-  function planMotion(input) {
+  function planMotion(input, { reserveMarker = true } = {}) {
     if (!input || typeof input !== 'object') throw new TypeError('config is required');
     const c = {};
     for (const name of ['width', 'height', 'image_width', 'image_height', 'target_width_px', 'max_speed_px_s', 'acceleration_px_s2']) c[name] = positive(input[name], name);
@@ -42,11 +42,11 @@
     const scale = c.target_width_px / (r - l);
     const iw = c.image_width * scale, ih = c.image_height * scale;
     const m = Math.max(4, Math.round(c.width / 100));
-    const marker = { x: 16 + m, y: 16 + m, module_px: m };
-    const left = 16, top = 32 + 10 * m, right = c.width - 16, bottom = c.height - 16;
+    const marker = reserveMarker ? { x: 16 + m, y: 16 + m, module_px: m } : null;
+    const left = 16, top = reserveMarker ? 32 + 10 * m : 16, right = c.width - 16, bottom = c.height - 16;
     const inset = 24;
     const dx = right - left - 2 * inset - iw, dy = bottom - top - 2 * inset - ih;
-    if (![scale, iw, ih, dx, dy].every(Number.isFinite) || dx <= 0 || dy <= 0 || 16 + 12 * m > c.width - 16) throw new RangeError('image or marker does not fit the screen');
+    if (![scale, iw, ih, dx, dy].every(Number.isFinite) || dx <= 0 || dy <= 0 || (reserveMarker && 16 + 12 * m > c.width - 16)) throw new RangeError('image or marker does not fit the screen');
     const x0 = left + inset, y0 = top + inset;
     const positions = [[x0, y0], [x0 + dx, y0], [x0 + dx, y0 + dy], [x0, y0 + dy], [x0, y0]];
     function leg(distance, from, to) {
