@@ -107,7 +107,7 @@
       if(current.run.pair_index)MotionABUI.finished(current.run);
       flush(current);
       current.writes=current.writes.then(()=>current.run.pair_index?MotionABUI.write(()=>MotionStore.end(current.key,current.run,MotionABUI.finished(current.run))):MotionStore.end(current.key,current.run)).then(()=>window.MotionABUI?.render());
-      current.finalWrite=current.writes.catch(e=>{saveFailure=e;});
+      current.finalWrite=current.writes.catch(e=>{saveFailure=e;if(current.run.pair_index){current.run.complete=false;current.run.abort_reason='ошибка сохранения: '+e.message;MotionABUI.finished(current.run);}});
       attempt=null;
       finishing=current;
     }
@@ -121,7 +121,7 @@
       status(message);
     } finally { finishing=false;update(); }
   }
-  function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;const metadata=structuredClone({...current.run,samples:[]});current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples,metadata));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
+  function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;const metadata=structuredClone({...current.run,complete:false,abort_reason:current.run.abort_reason||'не завершён',samples:[]});current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples,metadata));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
   async function startCheck(){
     if(attempt||active||finishing)return;
     const pending={cancelled:false};attempt=pending;update();

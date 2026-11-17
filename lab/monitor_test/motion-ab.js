@@ -39,7 +39,7 @@
     if(['speed','acceleration'].includes(factor)&&['A','B'].some(s=>!finite(Number(variants[s].value))||Number(variants[s].value)<=0))throw Error('Значения движения должны быть положительными числами.');
     return {schema:FORMAT,id:options.id||globalThis.crypto.randomUUID(),created_at:new Date().toISOString(),factor,
       variants:clone(variants),pair_count,base_values:clone(base_values),snapshots:{},attempts:[],selections:{},journals:[],analyses:[],
-      metadata_provenance:{variant_descriptions:'operator',base_values:'browser_snapshot'}};
+      metadata_provenance:{variant_descriptions:'operator',conditions:'operator_input',base_values:'browser_snapshot',viewport:'browser_measurement',scenario:'browser_plan',phone_fields:'journal_metadata'}};
   }
   function schedule(series){return Array.from({length:series.pair_count},(_,i)=>{
     const planned_order=i%2?'BA':'AB';return [...planned_order].map((slot,j)=>({pair_index:i+1,slot,planned_order,sequence:i*2+j+1}));

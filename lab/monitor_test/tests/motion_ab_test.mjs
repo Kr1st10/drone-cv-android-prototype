@@ -21,6 +21,7 @@ function fixture(){
 test('frozen snapshot and AB BA schedule, attempts require explicit selection',()=>{
   const input={id:'x',factor:'speed',variants:{A:{value:150},B:{value:300}},base_values:{width:40}},s=AB.create(input);input.base_values.width=100;input.variants.A.value=1;
   assert.equal(s.base_values.width,40);assert.equal(s.variants.A.value,150);assert.deepEqual(AB.schedule(s).map(r=>r.slot),['A','B','B','A','A','B']);
+  assert.equal(s.metadata_provenance.conditions,'operator_input');assert.equal(s.metadata_provenance.phone_fields,'journal_metadata');
   AB.begin(s,{run_id:'a',pair_index:1,slot:'A'});AB.begin(s,{run_id:'b',pair_index:1,slot:'A'});
   assert.equal(s.attempts[1].attempt,2);assert.equal(s.attempts[1].actual_order,2);assert.deepEqual(s.selections,{});AB.select(s,1,'A','a');assert.equal(s.selections['1:A'],'a');
   assert.throws(()=>AB.select(s,1,'B','a'));assert.throws(()=>AB.begin(s,{run_id:'a',pair_index:1,slot:'B'}));

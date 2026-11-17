@@ -104,6 +104,13 @@ try{
   const memoryRun=await p.evaluate(()=>MotionUI.runs().at(-1));assert.ok(memoryRun.samples.length>=120);assert.equal(memoryRun.complete,false);
   const memoryExport=JSON.parse(await download(p,'#abExport'));assert.deepEqual(memoryExport.runs.find(r=>r.run_id===memoryRun.run_id).samples,memoryRun.samples);
   await p.evaluate(()=>MotionStore.append=window.realAppend);
+  // Even a naturally finished display cannot become a completed pair if end commit fails.
+  await p.evaluate(()=>{window.realEnd=MotionStore.end;MotionStore.end=()=>Promise.reject(Error('synthetic end quota'));});
+  await start(p);for(let i=0;i<1300;i++){if(!await p.evaluate(()=>!!document.fullscreenElement))break;await p.evaluate(()=>abTick(100));}
+  await p.waitForFunction(()=>!MotionUI.busy(),null,{polling:50});
+  const endFailure=JSON.parse(await download(p,'#abExport'));assert.equal(endFailure.series.attempts.at(-1).complete,false);assert.match(endFailure.series.attempts.at(-1).abort_reason,/synthetic end quota/);
+  assert.equal(endFailure.runs.find(r=>r.run_id===endFailure.series.attempts.at(-1).run_id).complete,false);
+  await p.evaluate(()=>MotionStore.end=window.realEnd);
   // Storage failure before launch leaves the old persisted history intact and exportable.
   const stored=(await state(p)).series[0].attempts.length;
   await p.evaluate(()=>{window.realAB=MotionStore.ab;MotionStore.ab=function(...args){return args.length?Promise.reject(Error('synthetic quota')):realAB();};});
