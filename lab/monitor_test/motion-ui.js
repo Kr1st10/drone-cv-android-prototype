@@ -12,6 +12,14 @@
   function id() { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0].toString(16).padStart(8, '0'); }
   function freshRunId() { let x; do { x = id(); } while (runs.some(r => r.run_id === x) || SyncCheckUI.hasId(x)); return x; }
   function sampleCount() { return runs.reduce((n, r) => n + r.samples.length, 0); }
+  function startBlockReason(){
+    if(!ready)return 'Дождитесь восстановления истории запусков.';
+    if(attempt||active||finishing)return 'Дождитесь завершения текущего запуска и его сохранения.';
+    const continuation='Экспортируйте записи и продолжите в отдельном профиле браузера. История и исходники сохраняются.';
+    if(runs.length>=maxRuns)return 'Достигнут предел 20 запусков. '+continuation;
+    if(sampleCount()>=maxSeriesSamples)return 'Достигнут предел 120 000 samples. '+continuation;
+    return null;
+  }
   function status(message) { $('motionStatus').textContent = message; }
   function rememberLocalRun(run){runs.push(run);lastLocalRun=run;$('motionHistoryStatus').textContent='Последний локальный запуск: '+run.run_id;}
   function persist() {
@@ -21,18 +29,18 @@
     const [x,y,w,h]=['motionAreaX','motionAreaY','motionAreaWidth','motionAreaHeight'].map(k=>Number($(k).value));c.strokeRect(x*p.width/100,y*p.height/100,w*p.width/100,h*p.height/100);c.fillStyle='#111';c.font='16px sans-serif';c.fillText('Рабочая область (без sync-кода)',12,22);
   }
   function update() {
-    const busy = !!attempt || !!active || finishing, limit = runs.length >= maxRuns || sampleCount() >= maxSeriesSamples;
+    const busy = !!attempt || !!active || finishing, blocked = startBlockReason();
     $('syncCheckStart').disabled=busy;
     document.querySelectorAll('[data-sync-size]').forEach(b=>b.disabled=busy);
-    $('motionStart').disabled = busy || limit || !ready;
-    $('motionRepeat').disabled = busy || limit || !lastScenario || !ready;
+    $('motionStart').disabled = !!blocked;
+    $('motionRepeat').disabled = !!blocked || !lastScenario;
     $('motionNewSeries').disabled = busy;
     $('motionExport').disabled = !runs.length;
     $('motionExportLast').disabled = !lastLocalRun;
     inputs.forEach(key => $(key).disabled = busy);
     $('motionUpload').disabled = busy;
     $('motionBounds').disabled = busy || !MotionGallery.images().some(m => m.id === selectedId);
-    if (limit) status('Достигнут предел серии. Экспортируйте записи и начните новую серию.');
+    if (ready&&!busy&&blocked) status(blocked);
     window.MotionABUI?.render();
   }
   async function refresh(selected) {
@@ -104,10 +112,9 @@
       canvas.width=0;
       MotionTimeline.close(current.run,current.start===null?null:Math.max(current.run.samples.at(-1)?.elapsed_ms??0,performance.now()-current.start));
       rememberLocalRun(current.run);
-      if(current.run.pair_index)MotionABUI.finished(current.run);
       flush(current);
-      current.writes=current.writes.then(()=>current.run.pair_index?MotionABUI.write(()=>MotionStore.end(current.key,current.run,MotionABUI.finished(current.run))):MotionStore.end(current.key,current.run)).then(()=>window.MotionABUI?.render());
-      current.finalWrite=current.writes.catch(e=>{saveFailure=e;if(current.run.pair_index){current.run.complete=false;current.run.abort_reason='ошибка сохранения: '+e.message;MotionABUI.finished(current.run);}});
+      current.writes=current.writes.then(()=>current.run.pair_index?MotionABUI.end(current.key,current.run):MotionStore.end(current.key,current.run));
+      current.finalWrite=current.writes.catch(e=>{saveFailure=e;if(current.run.pair_index){current.run.complete=false;current.run.abort_reason='ошибка сохранения: '+e.message;MotionABUI.failed(current.run);}});
       attempt=null;
       finishing=current;
     }
@@ -161,7 +168,7 @@
     finally{if(attempt===pending)attempt=null;update();}
   }
   async function start(repeat = false, ab = null) {
-    if (attempt || active || finishing || runs.length >= maxRuns || sampleCount() >= maxSeriesSamples) return;
+    const blocked=startBlockReason();if(blocked){status(blocked);return;}
     const pending = { cancelled: false }; attempt = pending; update();
     let operation='fullscreen';
     try {
@@ -196,7 +203,7 @@
       lastScenario=scenario;
       if(pending.cancelled){
         run.abort_reason='старт отменён';rememberLocalRun(run);
-        try{if(ab)await MotionABUI.write(()=>MotionStore.end(key,run,MotionABUI.finished(run)));else await MotionStore.end(key,run);}catch(e){saveFailure=e;}
+        try{if(ab)await MotionABUI.end(key,run);else await MotionStore.end(key,run);}catch(e){saveFailure=e;}
         await returnToSettings();
         status(saveFailure?`Ошибка сохранения: ${saveFailure.message}. Экспортируйте эталон до закрытия страницы.`:'Запуск прерван до первого кадра. Эталон сохранён как неполный.');
         return;
@@ -253,7 +260,7 @@
   document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement !== stage) finish('выход из полного экрана'); });
   window.addEventListener('resize', () => { if (active && !same(viewport(), active.viewport)) finish('размер окна изменён'); });
   window.addEventListener('beforeunload', e => { if (active || finishing || saveFailure) { e.preventDefault(); e.returnValue = ''; } });
-  window.MotionUI = { refresh, values, startAB:ab=>start(false,ab), freshRunId, busy:()=>!!attempt||!!active||!!finishing, runs:()=>runs };
+  window.MotionUI = { refresh, values, startAB:ab=>start(false,ab), startBlockReason, freshRunId, busy:()=>!!attempt||!!active||!!finishing, runs:()=>runs };
   status('Настройте движение и нажмите «Старт».');
   MotionStore.history().then(history=>{runs=history.runs;lastLocalRun=history.last_local_run;lastScenario=history.last_scenario;ready=true;update();$('motionHistoryStatus').textContent=lastLocalRun?'Последний локальный запуск: '+lastLocalRun.run_id+(lastScenario?'':'. Связанный снимок повторения отсутствует. Начните новый сценарий.'):history.chronology_unknown?'Порядок прежних записей неизвестен. Экспортируйте все записи кнопкой «Экспорт серии»; последний запуск не выбран произвольно.':'Локальных запусков ещё нет. Импорт эталонов не назначает последний запуск.';}).catch(e=>{status('Хранилище эталонов недоступно: '+e.message);});
   refresh();

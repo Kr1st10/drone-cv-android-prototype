@@ -13,9 +13,9 @@
   }
   function updateReferences(rows){references=rows;render();}
   function persist(){
-    const snapshot=clone(workspace);
-    const write=writes.catch(()=>{}).then(()=>MotionStore.ab(snapshot));writes=write;
-    return write.catch(e=>{notice('Ошибка хранения A/B: '+e.message+'. Данные остаются в памяти; выгрузите JSON до закрытия страницы.');throw e;});
+    // Snapshot after earlier transactions settle, so a queued background save
+    // cannot restore pre-commit attempt state over a successful finalization.
+    return write(()=>MotionStore.ab(clone(workspace))).catch(e=>{notice('Ошибка хранения A/B: '+e.message+'. Данные остаются в памяти; выгрузите JSON до закрытия страницы.');throw e;});
   }
   function options(retro=false){return {factor:$('abFactor').value,pair_count:Number($('abPairs').value),base_values:retro?{}:MotionUI.values(),variants:Object.fromEntries(['A','B'].map(slot=>[slot,{value:$('abValue'+slot).value.trim(),description:$('abDescription'+slot).value.trim(),provenance:'operator'}]))};}
   function next(s){return MotionAB.schedule(s).find(item=>!s.attempts.some(a=>a.pair_index===item.pair_index&&a.slot===item.slot&&a.complete));}
@@ -28,11 +28,12 @@
   function node(tag,value,parent){const n=document.createElement(tag);n.textContent=value;parent.append(n);return n;}
   function render(){
     const s=current(),locked=busy||!!window.MotionUI?.busy();
+    const blocked=window.MotionUI?.startBlockReason();
     $('abPanel').hidden=!enabled();
     for(const id of ['motionStart','motionRepeat','motionNewSeries'])$(id).hidden=enabled();
     $('motionTestMode').disabled=locked;
-    $('abNext').disabled=!ready||locked||!s||s.retrospective||!next(s);
-    $('abRetry').disabled=!ready||locked||!s||s.retrospective;
+    $('abNext').disabled=!ready||locked||!!blocked||!s||s.retrospective||!next(s);
+    $('abRetry').disabled=!ready||locked||!!blocked||!s||s.retrospective;
     for(const id of ['abCreate','abRetro','abImport','abSeriesSelect'])$(id).disabled=!ready||locked;
     $('abExport').disabled=$('abCSV').disabled=!s;
     const select=$('abSeriesSelect');select.replaceChildren();
@@ -40,6 +41,7 @@
     const n=s&&!s.retrospective?next(s):null;
     $('abInstruction').textContent=n?`Пара ${n.pair_index} из ${s.pair_count}. Вариант ${n.slot}. Подготовьте телефон и начните запись`:
       s?s.retrospective?'Ретроспективная серия: заранее запланированного порядка нет.':'Все запланированные варианты выполнены. Импортируйте журналы и выберите попытки.':'Создайте серию из настроек движения ниже.';
+    if(s&&!s.retrospective&&!locked&&blocked)$('abInstruction').textContent=blocked;
     $('abRetryInstruction').textContent=s?`Повтор: пара ${$('abRetryPair').value} из ${s.pair_count}. Вариант ${$('abRetrySlot').value}. Подготовьте телефон и начните запись перед нажатием «Повторить выбранный вариант».`:'';
     const root=$('abResults');root.replaceChildren();if(!s)return;
     node('p',`Фактор: ${s.factor}; A: ${s.variants.A.value} (${s.variants.A.description}); B: ${s.variants.B.value} (${s.variants.B.description}). Описания: ввод оператора.`,root);
@@ -82,6 +84,7 @@
   }
   async function launch(item){
     if(busy||MotionUI.busy())return;
+    const blocked=MotionUI.startBlockReason();if(blocked)throw Error(blocked);
     const s=current();if(!s||!item)throw Error('Нет следующего запуска.');
     busy=true;render();
     try{
@@ -108,11 +111,20 @@
     return p;
   }
   function started(ab){const a=current().attempts.find(a=>a.run_id===ab.run_id);a.abort_reason='не завершён';a.state='started';return clone(workspace);}
-  function finished(run){
-    const s=workspace.series.find(s=>s.id===run.series_id),a=s?.attempts.find(a=>a.run_id===run.run_id);if(!a)return;
-    Object.assign(a,{complete:run.complete,abort_reason:run.abort_reason,ended_at:new Date().toISOString(),end_ms:run.end_ms});return clone(workspace);
+  function attemptFor(state,run){return state.series.find(s=>s.id===run.series_id)?.attempts.find(a=>a.run_id===run.run_id);}
+  async function end(key,run){
+    return write(async()=>{
+      const snapshot=clone(workspace),a=attemptFor(snapshot,run);
+      if(!a)throw Error('Попытка завершения отсутствует в серии.');
+      const completion={complete:run.complete,abort_reason:run.abort_reason,ended_at:new Date().toISOString(),end_ms:run.end_ms};
+      Object.assign(a,completion);
+      // The shared workspace remains incomplete until the transaction containing
+      // both the run and this private completion snapshot commits.
+      await MotionStore.end(key,run,snapshot);
+      Object.assign(attemptFor(workspace,run),completion);
+    });
   }
-  async function ended(run){finished(run);await persist();render();}
+  function failed(run){const a=attemptFor(workspace,run);if(a)Object.assign(a,{complete:false,abort_reason:run.abort_reason,end_ms:run.end_ms});render();}
   async function settled(ab){const a=current()?.attempts.find(a=>a.run_id===ab.run_id);if(!ab.committed){if(a){a.abort_reason='отмена или отказ до начала движения';a.state='preflight_failed';}await persist();}render();}
   async function retainSource(s,j,valid){
     const candidate={attempts:s.attempts,journals:s.journals.slice()},registration=await MotionAB.registerSource(candidate,{name:j.name,raw:j.raw,data:j.data});
@@ -171,6 +183,6 @@
     for(const r of bundle.runs)await MotionStore.save(r);
     workspace.series.push(bundle.series);workspace.selected=bundle.series.id;++revision;await persist();location.reload();
   },true);
-  window.MotionABUI={enabled,notice,plan,started,finished,ended,settled,capture,render,write,ingest,analysisError,references:updateReferences};
+  window.MotionABUI={enabled,notice,plan,started,end,failed,settled,capture,render,write,ingest,analysisError,references:updateReferences};
   MotionStore.ab().then(data=>{if(data?.schema==='dronecv-motion-ab-workspace-1')workspace=data;$('motionTestMode').value=workspace.mode||'single';ready=true;render();}).catch(e=>notice('Хранилище A/B недоступно: '+e.message));
 })();

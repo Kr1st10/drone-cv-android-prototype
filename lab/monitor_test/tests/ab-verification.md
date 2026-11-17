@@ -135,3 +135,74 @@ git ls-files -u
 Это локальные проверки подготовленного объединения. Новый коммит не создан, GitHub Actions для него не запускались; старый зелёный CI не подтверждает этот результат. Gradle, AndroidTest, Safari и телефон в этой задаче не запускались. Перед публикацией остаются review подготовленного diff, отдельное разрешение на commit/push в существующий №52 и проверки нового HEAD. Для подтверждённого сравнения нужны новые записи телефона с зафиксированными условиями и независимые повторы; повторный анализ сохранённых данных не является новым испытанием Xiaomi или доказательством аппаратной повторяемости.
 
 Проверка интерфейса: Hard Gate PASS (реальные источники, рабочие импорт/калибровка/экспорт/восстановление); Purpose Gate PASS (оформление не менялось); Liveliness PASS (сохранена существующая форма 1/1/1); Craftsmanship PASS (51 тест и полный реальный сценарий, ограничения видимы). Markdown проверен по структуре, ссылкам и отдельным редакторским проходом.
+
+## Два P2: финализация и лимиты запуска, 2026-11-17
+
+Проверенный удалённый HEAD №52 перед работой: `a0c4e49703646e11c9e799ee46fe0c74f71559fe`; замечания в нём не исправлены. Новая ветка `codex/pr52-ab-p2`, worktree `/private/tmp/drone-pr52-p2`. Прежние worktree и чужие незакоммиченные изменения сохранены. Коммиты, push и слияние PR в этом этапе запрещены и не выполнялись.
+
+### Причины и изменения
+
+1. `finish()` преждевременно вызывал `MotionABUI.finished(run)`, записывая complete=true в общий workspace ещё до завершения последних samples и `MotionStore.end()`. Callback импорта мог сохранить этот признак независимо от финальной транзакции. При её отказе откатывалась только память. Теперь `MotionABUI.end(key,run)` формирует отдельную копию завершения в общей очереди, передаёт её в существующую атомарную транзакцию runs/settings и меняет общий workspace только после подтверждения commit. До этого фоновые сохранения видят complete=false. Ошибка обновляет память и экспорт, не требует успешного repair-save. Кроме того, `persist()` снимает копию при выполнении своей очереди: отложенная запись с прежним incomplete не может затереть успешную финализацию. Метаданные импорта и ручной выбор, сделанные во время ожидания транзакции, сохраняются следующей записью.
+2. `launch()` регистрировал попытку до вызова `startAB()`, а `start()` молча отказывал при лимите. Теперь `MotionUI.startBlockReason()` используется и кнопками, и обработчиками одиночного/A/B-запуска. Проверка восстановления истории, занятости и границ 20/120 000 выполняется до регистрации новой попытки; отказ не запрашивает fullscreen. Интерфейс объясняет причину, предлагает экспорт и отдельный профиль. Отказы fullscreen/хранилища после допуска остаются учтёнными попытками. [Канонический контракт](../AB_COMPARISON.md#экспорт-и-хранение).
+
+Изменены только два контроллера браузера, регрессия, её включение в pytest и документация. `MotionStore`, форматы, анализаторы, метрики, параметры движения, Android и CV не менялись.
+
+### Настоящий браузер и воспроизведение до исправления
+
+Новый `motion_ab_lifecycle_smoke.mjs` использует Chrome, производственные модули и настоящий IndexedDB. Изображения, журналы и RAF-время синтетические; задержки загрузки изображения, финального append/end и abort транзакции явно тестовые. Хранилище и DOM не заменяются имитациями. Состояние диска читается отдельной readonly-транзакцией напрямую из settings/runs/chunks, независимо от convenience-методов `MotionStore`.
+
+| Сценарий | a0c4e49 | Исправленное дерево |
+|---|---|---|
+| Успешный A; задержанный JPEG импорта; завершение B с задержкой последней порции; callback импорта сохраняет ошибку калибровки; abort финальной транзакции | FAIL: B complete=true в workspace на диске, хотя run=false | PASS: попытка и run=false; память и экспорт неполные, все 18 доступных samples сохранены |
+| То же ожидание, успешная финализация и фоновая запись выбора за ней | FAIL: общий workspace преждевременно содержит complete=true | PASS: до commit false; после commit попытка/run=true; следующая запись сохраняет true и выбор A |
+| Восстановлены 20 запусков; три запроса «Следующий» и три «Повторить», плюс прямые обращения startAB | FAIL: обе кнопки активны, попыток 1→7 | PASS: обе кнопки отключены, попыток 1→1, fullscreen не запрошен |
+| Восстановлены 3 запуска по 40 000 samples, те же повторные запросы | FAIL: обе кнопки активны, попыток 1→7 | PASS: обе кнопки отключены, попыток 1→1, fullscreen не запрошен |
+
+В первом сценарии блокируется настоящий `MotionStore.append()`, после разрешения он пишет порцию в IndexedDB. Обёртка `end()` вызывает исходную реализацию; тест прерывает её реальную транзакцию после put запуска и попытки. Запрет всех последующих workspace-записей включён до `abort()`, поскольку request error может предшествовать событию abort транзакции. Проверяется, что хотя бы одна такая запись действительно отклонена. Следовательно, PASS не зависит от успешного исправляющего persist. После reload B остаётся incomplete и предлагается следующим; реальный повтор B создаёт новую попытку №2 с независимым ID. Источник A и история сохраняются.
+
+При проверках лимитов уже имеются попытка A и исходный журнал с привязкой. Контролируются память через экспорт, фактическое содержимое IndexedDB, сохранность всех runs/chunks и исходника. Реальные обработчики вызываются повторно даже при disabled, чтобы проверка не ограничивалась состоянием кнопок. Новый набор: **4 сценария FAIL до исправления, 4 PASS после**. Логи и наблюдения: `/private/tmp/drone-pr52-p2-evidence/{before-final.log,before.json,after.log,after.json}`.
+
+### Команды
+
+Использовано существующее окружение: Node 22.22.1, Chrome 157.0.8103.79, Playwright `/private/tmp/dronecv-auto-browser`, Python `/private/tmp/drone-ab-venv`. Браузерные команды выполнялись вне sandbox, где Chrome запускается штатно. Исходный код для сравнения извлечён через `git archive a0c4e49 lab/monitor_test` в `/private/tmp/drone-pr52-p2-baseline`.
+
+```bash
+cd /private/tmp/drone-pr52-p2
+ln -s /Users/macbookair/Documents/cb/dron-cv/lab/monitor_test/images lab/monitor_test/images
+python3 lab/monitor_test/build_manifest.py --write-js
+mkdir -p /private/tmp/drone-pr52-p2-baseline
+git archive a0c4e49 lab/monitor_test | tar -x -C /private/tmp/drone-pr52-p2-baseline
+ln -s /Users/macbookair/Documents/cb/dron-cv/lab/monitor_test/images /private/tmp/drone-pr52-p2-baseline/lab/monitor_test/images
+python3 /private/tmp/drone-pr52-p2-baseline/lab/monitor_test/build_manifest.py --write-js
+cd /private/tmp/dronecv-auto-browser
+CHROMIUM='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+AB_LIFECYCLE_EVIDENCE=/private/tmp/drone-pr52-p2-evidence/before.json \
+node /private/tmp/drone-pr52-p2/lab/monitor_test/tests/motion_ab_lifecycle_smoke.mjs \
+  /private/tmp/drone-pr52-p2-baseline/lab/monitor_test
+CHROMIUM='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+AB_LIFECYCLE_EVIDENCE=/private/tmp/drone-pr52-p2-evidence/after.json \
+node /private/tmp/drone-pr52-p2/lab/monitor_test/tests/motion_ab_lifecycle_smoke.mjs \
+  /private/tmp/drone-pr52-p2/lab/monitor_test
+cd /private/tmp/drone-pr52-p2
+PLAYWRIGHT_NODE_DIR=/private/tmp/dronecv-auto-browser \
+CHROMIUM='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+/private/tmp/drone-ab-venv/bin/python -m pytest lab/monitor_test/tests -q
+node lab/monitor_test/tests/motion_ab_test.mjs
+node lab/monitor_test/tests/capture_exposure_test.mjs
+node lab/monitor_test/tests/motion_test.mjs
+node --check lab/monitor_test/motion-ab-ui.js
+node --check lab/monitor_test/motion-ui.js
+node --check lab/monitor_test/tests/motion_ab_lifecycle_smoke.mjs
+git diff --check
+```
+
+Финальный полный набор: **52 passed, 0 skipped**, 149,48 с; первый полный прогон также прошёл: 52 passed, 149,58 с. Включены прежние сценарии ошибок fullscreen, порций/финализации/квоты, экспорта и чистого восстановления. Отдельно Node A/B: **19/19**, capture: **33/33**, ядро движения passed. Синтаксис трёх изменённых/добавленных JS проверен; `git diff --check`, проверка нового untracked-теста через `git diff --no-index --check`, локальные цели ссылок и отсутствие правок Android/ML/Gradle/CI прошли. Временная ссылка images удалена после проверки. Логи: `/private/tmp/drone-pr52-p2-evidence/{full-pytest.log,final-pytest.log,ab-node.log,capture-node.log,motion-node.log}`. Карта SHA-256 двух контроллеров и регрессий: `code-sha256.json` в том же каталоге; базовые контроллеры архива побайтно сверены с Git a0c4e49.
+
+Независимое чтение документации и сверка с кодом/свидетельствами подтверждённых замечаний не выявили. Интерфейс проверен без смены оформления:
+
+- Hard Gate PASS: настоящие кнопки/обработчики, состояния disabled и сообщения проверены на обеих границах; фиктивных CV-результатов нет.
+- Purpose Gate PASS: новые графика, раскладка и декоративные элементы не добавлялись.
+- Liveliness PASS: сохранена существующая лабораторная форма 1/1/1 и явное действие продолжения.
+- Craftsmanship PASS: полный набор и четыре регрессии проверяют ошибку, успешный путь, экспорт, reload, повтор и сохранность данных.
+
+ Ранее проверенный зелёный CI a0c4e49 не является проверкой этого незакоммиченного дерева. Новые GitHub Actions и испытания телефона не запускались; телефон для этих двух P2 не требуется. Повторный анализ настоящих журналов из предыдущего этапа не выполнялся: анализаторы и метрики здесь не менялись.
