@@ -69,8 +69,17 @@
     j?.points.forEach(([x,y],i)=>{ctx.fillStyle='#d00';ctx.beginPath();ctx.arc(x*canvas.width,y*canvas.height,5,0,2*Math.PI);ctx.fill();ctx.font='bold 18px sans-serif';ctx.fillText(['TL','TR','BR','BL'][i],x*canvas.width+8,y*canvas.height-8);});
   }
   const percent=x=>x==null?'нет данных':(x*100).toFixed(1)+'%';
+  function buildText(p){
+    const f=p.fields,value=k=>Object.hasOwn(p.conflicts,k)?'противоречие':f[k]??'неизвестно';
+    const dirty=Object.hasOwn(p.conflicts,'git_dirty')?'противоречие':f.git_dirty===true?'да':f.git_dirty===false?'нет':'неизвестно';
+    return `Сборка Android: ${value('app_version')} (${value('version_code')}); тип ${value('build_type')}; commit ${value('git_sha')}; локальные изменения: ${dirty}\n`+
+      `Конфигурация: ${value('mode')}; confidence ${value('confidence')}; NMS IoU ${value('nms_iou')}, максимум ${value('nms_max_detections')}; потоки ${value('intra_op_threads')}; вход модели ${value('model_input_size')}\n`+
+      `Модель: ${value('model_asset')}; SHA-256 ${value('model_sha256')}. camera_context: снимок контекста, не покадровые параметры; сведения сохранены в JSON.\n`+
+      (Object.keys(p.conflicts).length?`Противоречивые метаданные: ${Object.keys(p.conflicts).join(', ')}; исходные варианты сохранены в JSON.\n`:'');
+  }
   function eventText(e){if(!e)return 'нет данных';const names={bounded:'границы',right_censored:'не подтверждено до конца наблюдения',unavailable:'нет оценки',not_applicable:'не измеряется',no_confirmed_absence:'отсутствие координат не подтверждено'};return `${names[e.status]||e.status}: ${e.lower_ms==null?'':ms(e.lower_ms)}${e.upper_ms==null?'':'…'+ms(e.upper_ms)}${e.lower_ms==null?'':' мс'}. ${e.reason||''}`;}
   function resultText(results){return results.length?'Результаты по прогонам\n'+results.map(r=>`Журнал ${r.journal}; прогон ${r.run_id}; режим телефона: ${r.mode}; ${r.criterion_version}\n`+
+    buildText(r.provenance.android)+
     `Правильная рамка: ${percent(r.good_fraction_lower)}…${percent(r.good_fraction_upper)}; покрытие: ${percent(r.coverage)}\nНеизвестно: ${ms(r.unknown_ms)} мс\n`+
     (r.criterion_version==='motion-retention-v3'?`критерий: ${r.pass===true?'пройден':r.pass===false?'не пройден':'не определён'}\n`:'')+
     `Самый длинный провал: ${ms(r.longest_failure_ms)}…${ms(r.longest_possible_failure_ms)} мс\n`+

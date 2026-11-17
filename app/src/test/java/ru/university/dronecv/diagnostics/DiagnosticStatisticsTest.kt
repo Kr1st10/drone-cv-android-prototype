@@ -4,6 +4,52 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DiagnosticStatisticsTest {
+    @Test fun metadataAndOperationsSurviveExportWithOrWithoutTrackingSamples() {
+        for (withSamples in listOf(false, true)) {
+            val store = DiagnosticFrames(trackingCapacity = 1)
+            val first = store.start(0)
+            val metadata = """{"git_sha":"${"a".repeat(40)}","git_dirty":true,"mode":"yolo_lk","confidence":0.5,"intra_op_threads":2}"""
+            store.event(first, "metadata", metadata, 0)
+            store.trackingEvent(first, ru.university.dronecv.tracking.TrackingEvent(
+                ru.university.dronecv.tracking.TrackingEventKind.REQUEST_STARTED))
+            store.trackingEvent(first, ru.university.dronecv.tracking.TrackingEvent(
+                ru.university.dronecv.tracking.TrackingEventKind.REQUEST_REJECTED,
+                ru.university.dronecv.tracking.TrackingFailure.PROCESSING_EXCEPTION))
+            if (withSamples) {
+                val stamp = ru.university.dronecv.camera.FrameStamp(1,
+                    ru.university.dronecv.camera.CaptureTimebase.ELAPSED_REALTIME, 1)
+                val observation = ru.university.dronecv.tracking.TrackingObservation(
+                    ru.university.dronecv.tracking.FrameKey(1, 1, 1), stamp,
+                    ru.university.dronecv.tracking.VisualPhase.SEARCHING, null, null,
+                    ru.university.dronecv.tracking.ClassConfirmation.NONE, null, null, null)
+                val signal = ru.university.dronecv.camera.TrackingSignal(observation,
+                    ru.university.dronecv.camera.TrackingSampleKind.FRAME, 100, 100, 1, 0.0)
+                repeat(3) { store.tracking(first, 1, signal) }
+            }
+            val snapshot = store.stop(first, 10, true, "test")!!
+            assertEquals(metadata, snapshot.sessionMetadata)
+            val tracking = snapshot.tracking!!
+            assertEquals(if (withSamples) 1 else 0, tracking.samples.size)
+            assertEquals(if (withSamples) 2L else 0L, tracking.unstoredSamples)
+            assertEquals(1L, tracking.operations!!.counts[ru.university.dronecv.tracking.TrackingEventKind.REQUEST_REJECTED])
+            assertEquals(0L, tracking.operations.unfinishedRequests)
+            val json = DiagnosticReport(0, "test", "test", 35, "test", "model", "sha", .5f, snapshot, emptyList()).toJson()
+            assertTrue(json.contains("\"metadata\":$metadata"))
+            assertTrue(json.contains("\"request_rejected\":1"))
+            System.getenv("DRONE_MERGE_FIXTURE_DIR")?.let {
+                java.io.File(it, "merged-$withSamples.json").writeText(json)
+            }
+            val second = store.start(20)
+            store.event(first, "metadata", metadata, 20)
+            store.trackingEvent(first, ru.university.dronecv.tracking.TrackingEvent(
+                ru.university.dronecv.tracking.TrackingEventKind.REQUEST_STARTED))
+            val clean = store.stop(second, 30, false, null)!!
+            assertNull(clean.sessionMetadata)
+            assertNull(clean.tracking)
+            assertEquals(1L, tracking.operations.counts[ru.university.dronecv.tracking.TrackingEventKind.REQUEST_REJECTED])
+        }
+    }
+
     @Test fun lazyEventsRejectAbsentAndObsoleteRecipientsBeforeSerialization() {
         val store = DiagnosticFrames()
         var calls = 0

@@ -31,7 +31,8 @@ class TrackingSessionTest {
     }
     private class Fixture {
         val flows = ArrayList<Flow>()
-        val session = TrackingSession({ Flow().also { flows.add(it) } })
+        val events = mutableListOf<TrackingEvent>()
+        val session = TrackingSession({ Flow().also { flows.add(it) } }).also { it.events = events::add }
         init { session.reset(1, 2) }
         fun acquire(): TrackingObservation {
             val a = frame(1)
@@ -89,6 +90,7 @@ class TrackingSessionTest {
         for (i in 2L..11) f.session.observe(frame(i))
         val ticket = f.session.requestYolo(true, frame(11).stamp.analyzerEntryNs)!!
         assertNull(f.session.prepareCorrection(ticket, listOf(drone(.99f, .7f, .9f))))
+        assertEquals(TrackingEvent(TrackingEventKind.REQUEST_REJECTED, TrackingFailure.ASSOCIATION_REJECTED), f.events.last())
         val missed = f.session.observe(frame(12))!!
         assertEquals(initial.trackId, missed.trackId)
         assertEquals(ClassConfirmation.MISSED, missed.classification)
@@ -105,6 +107,8 @@ class TrackingSessionTest {
         assertEquals(VisualPhase.LOST, observed!!.phase)
         assertEquals(ClassConfirmation.EXPIRED, observed.classification)
         assertNull(observed.estimate); assertNull(observed.trackId)
+        assertEquals(listOf(TrackingFailure.CONFIRMATION_EXPIRED),
+            f.events.filter { it.kind == TrackingEventKind.TRACK_LOST }.map { it.reason })
         val request = f.session.requestYolo(true, frame(21).stamp.analyzerEntryNs)!!
         val replacement = f.session.prepareCorrection(request, listOf(drone()))!!.replay()!!
         assertNotEquals(initial.trackId, f.session.commit(replacement, frame(21).stamp.analyzerEntryNs)!!.trackId)
@@ -119,6 +123,7 @@ class TrackingSessionTest {
         val lost = f.session.observe(frame(12))!!
         assertNull(lost.estimate)
         assertEquals(VisualPhase.LOST, lost.phase)
+        assertEquals(TrackingFailure.UNKNOWN, f.events.last { it.kind == TrackingEventKind.TRACK_LOST }.reason)
         assertNull(f.session.commit(correction, frame(12).stamp.analyzerEntryNs))
         assertEquals(1, f.flows.last().closes)
     }
@@ -135,6 +140,9 @@ class TrackingSessionTest {
             correction.close()
             assertEquals(1, f.flows.single().closes)
             assertNull(f.session.observe(frame(2)))
+            val rejections = f.events.filter { it.kind == TrackingEventKind.REQUEST_REJECTED }
+            assertEquals(1, rejections.size)
+            assertEquals(if (close) TrackingFailure.CANCELLED else TrackingFailure.STALE_SESSION, rejections.single().reason)
         }
     }
 
@@ -147,6 +155,7 @@ class TrackingSessionTest {
             val now = if (stopped) frame(1).stamp.analyzerEntryNs + 2_000_000_000L else frame(4).stamp.analyzerEntryNs
             assertNull(f.session.commit(correction, now))
             assertEquals(1, f.flows.single().closes)
+            assertEquals(TrackingFailure.STALE_CORRECTION, f.events.last().reason)
         }
     }
 
@@ -155,12 +164,18 @@ class TrackingSessionTest {
         val request = f.session.requestYolo(true, frame(1).stamp.analyzerEntryNs)!!
         for (i in 2L..34) f.session.observe(frame(i))
         assertNull(f.session.prepareCorrection(request, listOf(drone())))
+        assertEquals(TrackingFailure.HISTORY_MISSING, f.events.last().reason)
         val next = f.session.requestYolo(true, frame(34).stamp.analyzerEntryNs)!!
         val plan = f.session.prepareCorrection(next, listOf(drone()))!!
         var time = 0L
         assertNull(plan.replay(nanoTime = { time.also { time += 200_000_000L } }))
         assertEquals(1, f.flows.single().closes)
+        f.session.rejectCorrection(next)
         f.session.finish(next)
+        assertEquals(TrackingFailure.REPLAY_BUDGET, f.events.last().reason)
+        assertEquals(2, f.events.count { it.kind == TrackingEventKind.REQUEST_REJECTED })
+        f.session.observe(frame(36))
+        assertNotNull(f.session.requestYolo(true, frame(36).stamp.analyzerEntryNs))
     }
 
     @Test fun `unknown clock has null exposure age but bounded analyzer expiry`() {
@@ -226,8 +241,42 @@ class TrackingSessionTest {
         assertNull(lost.estimate)
         assertNull(lost.trackId)
         assertEquals(VisualPhase.LOST, lost.phase)
+        assertEquals(listOf(TrackingEvent(TrackingEventKind.TRACK_LOST, TrackingFailure.PROCESSING_EXCEPTION)),
+            f.events.filter { it.kind == TrackingEventKind.TRACK_LOST })
         f.session.close()
         assertEquals(1, f.flows.last().closes)
+    }
+
+    @Test fun `gap and geometry losses count once and allow reacquisition`() {
+        for (geometry in listOf(false, true)) {
+            val f = Fixture()
+            val initial = f.acquire()
+            val next = if (geometry) GrayFrame.copyOf(FrameKey(1, 2, 3), frame(3).stamp, 120, 100, ByteArray(12000))
+                else frame(10)
+            assertNull(f.session.observe(next)!!.estimate)
+            assertEquals(if (geometry) TrackingFailure.GEOMETRY_CHANGED else TrackingFailure.FRAME_GAP,
+                f.events.last().reason)
+            val request = f.session.requestYolo(true, next.stamp.analyzerEntryNs)!!
+            val corrected = f.session.prepareCorrection(request, listOf(drone()))!!.replay()!!
+            assertNotEquals(initial.trackId, f.session.commit(corrected, next.stamp.analyzerEntryNs)!!.trackId)
+            assertEquals(1, f.events.count { it.kind == TrackingEventKind.TRACK_LOST })
+            assertEquals(1, f.flows.first().closes)
+            f.session.close()
+        }
+    }
+
+    @Test fun `empty candidate has one terminal outcome even with repeated callbacks`() {
+        val f = Fixture()
+        f.session.observe(frame(1))
+        val request = f.session.requestYolo(true, frame(1).stamp.analyzerEntryNs)!!
+        assertNull(f.session.prepareCorrection(request, emptyList()))
+        assertNull(f.session.prepareCorrection(request, emptyList()))
+        f.session.finish(request)
+        f.session.observe(frame(2)); f.session.observe(frame(3))
+        assertEquals(listOf(TrackingEvent(TrackingEventKind.REQUEST_REJECTED, TrackingFailure.NO_CANDIDATE)),
+            f.events.filter { it.kind == TrackingEventKind.REQUEST_REJECTED })
+        assertTrue(f.flows.isEmpty())
+        assertNotNull(f.session.requestYolo(true, frame(3).stamp.analyzerEntryNs))
     }
 
     companion object {

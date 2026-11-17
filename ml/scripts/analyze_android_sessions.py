@@ -6,6 +6,7 @@ import json
 import math
 import statistics
 from pathlib import Path
+from timeline_analysis import metadata_provenance, metadata_record
 
 STAGES = {'conversion': 'conversion_ms', 'preprocessing': 'preprocess_ms',
           'ort_including_tensor_copy': 'ort_ms', 'postprocessing_nms': 'postprocess_ms',
@@ -165,6 +166,47 @@ def analyze_camera_input(d, errors):
     return dict(data, fps_session=fps)
 
 
+def analyze_tracking_operations(value, errors):
+    """Operation events are independent of publication samples; old omissions remain unknown."""
+    if value is None:
+        return None
+    kinds = ('request_started', 'replay_planned', 'initialization_attempt', 'initialization_succeeded',
+             'initialization_failed', 'replay_succeeded', 'replay_failed',
+             'correction_accepted', 'request_rejected', 'track_lost')
+    failed = ('initialization_failed', 'replay_failed', 'request_rejected', 'track_lost')
+    if not isinstance(value, dict) or value.get('schema_version') != 1:
+        raise ValueError('unsupported tracking operations schema_version')
+    counts, reasons = value.get('counts'), value.get('failure_reasons')
+    if not isinstance(counts, dict) or any(type(counts.get(k)) is not int or counts[k] < 0 for k in kinds):
+        raise ValueError('invalid tracking operation counters')
+    if not isinstance(reasons, dict):
+        raise ValueError('invalid tracking failure reasons')
+    for kind in failed:
+        histogram = reasons.get(kind)
+        if not isinstance(histogram, dict) or not histogram or any(
+                not isinstance(k, str) or type(v) is not int or v < 0 for k, v in histogram.items()):
+            raise ValueError('invalid tracking failure histogram')
+        if sum(histogram.values()) != counts[kind]:
+            errors.append('tracking operations: reason count mismatch ' + kind)
+    unfinished = value.get('unfinished_requests')
+    if type(unfinished) is not int or unfinished < 0 or unfinished != (
+            counts['request_started'] - counts['correction_accepted'] - counts['request_rejected']):
+        errors.append('tracking operations: inconsistent unfinished requests')
+    if counts['initialization_succeeded'] + counts['initialization_failed'] > counts['initialization_attempt']:
+        errors.append('tracking operations: inconsistent initialization outcomes')
+    unknown_replay = value.get('replay_details_unknown')
+    if type(unknown_replay) is not int or unknown_replay < 0 or unknown_replay != (
+            counts['replay_planned'] - counts['replay_succeeded'] - counts['replay_failed']):
+        errors.append('tracking operations: inconsistent unknown replay details')
+    if counts['replay_planned'] > counts['request_started']:
+        errors.append('tracking operations: more plans than requests')
+    if counts['replay_succeeded'] + counts['replay_failed'] > counts['request_started']:
+        errors.append('tracking operations: more replay outcomes than requests')
+    if counts['correction_accepted'] > counts['replay_succeeded']:
+        errors.append('tracking operations: accepted without replay')
+    return value
+
+
 def analyze_tracking(d, errors):
     """LK publications are separate from detector frames; a correction is not a new input image."""
     t = d['tracking']
@@ -262,7 +304,8 @@ def analyze_tracking(d, errors):
         check_summary(calculated, t['timing_summary_ms'].get(name), 'tracking: ' + name, errors)
     return {**{k: t[k] for k in names}, 'updates_fps_session': fps, 'stored_updates': len(work),
             'timing_semantics_counts': timing_semantics_counts(t['samples']),
-            'updates_with_capture_timing': len(capture), 'timing_summary_ms': timings}
+            'updates_with_capture_timing': len(capture), 'timing_summary_ms': timings,
+            'operations': analyze_tracking_operations(t.get('operations'), errors)}
 
 
 def tracking_times(frame, dispatch):
@@ -333,6 +376,7 @@ def analyze(d, filename='', digest=''):
         ort_share = sum(r['ort_ms'] for r in frames) / total_pipeline if total_pipeline else None
     else: ort_share = None
     result = {'file': filename, 'sha256': digest, 'started_epoch_ms': d['started_epoch_ms'],
+            'provenance': metadata_provenance([metadata_record('diagnostic_report', d)]),
             'device': d['device'], 'android_release': d['android_release'], 'android_sdk': d['android_sdk'],
             'app_version': d['app_version'], 'model': d['model'], 'duration_ms': duration,
             'interrupted': d['interrupted'], 'reason': d['reason'], 'accepted': accepted,
@@ -436,7 +480,9 @@ def main():
     runs = []
     for path, timeline, report in zip(args.inputs, timelines, archived):
         if timeline is not None:
-            runs.append(analyze(report, path.as_posix(), timeline['sha256']))
+            result = analyze(report, path.as_posix(), timeline['sha256'])
+            result['provenance'] = timeline['provenance']
+            runs.append(result)
         else:
             raw = path.read_bytes()
             d = json.loads(raw, parse_constant=lambda x: (_ for _ in ()).throw(ValueError('non-finite JSON')))

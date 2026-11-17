@@ -1,7 +1,10 @@
 import copy
 import importlib.util
+import sys
 from pathlib import Path
 import pytest
+
+sys.path.insert(0, str(Path(__file__).parents[1] / 'scripts'))
 
 spec = importlib.util.spec_from_file_location('analyzer', Path(__file__).parents[1] / 'scripts/analyze_android_sessions.py')
 a = importlib.util.module_from_spec(spec); spec.loader.exec_module(a)
@@ -24,6 +27,23 @@ def test_roundtrip_and_wall_fps():
     r=a.analyze(sample()); assert not r['errors']; assert r['fps']==20
     assert r['ort_share_of_pipeline']==pytest.approx(3/11)
     assert r['pss_delta_kb']==20
+
+
+def test_performance_retains_optional_build_metadata_and_conflicts():
+    old = a.analyze(sample())['provenance']
+    assert old['fields']['git_sha'] is None and old['fields']['git_dirty'] is None
+    d = sample()
+    d.update(git_sha='a'*40, git_dirty=False, version_code=7, build_type='debug',
+             metadata=dict(git_sha='b'*40, git_dirty=True, confidence=.5,
+                           camera_context=dict(requested_zoom=5, confirmed_zoom=None,
+                                               scope='latest_context_not_frame_bound')))
+    evidence = a.analyze(d)['provenance']
+    assert evidence['fields']['git_sha'] is None
+    assert len(evidence['conflicts']['git_sha']) == 2
+    assert evidence['fields']['git_dirty'] is None
+    assert evidence['fields']['version_code'] == 7
+    assert evidence['fields']['confidence'] == .5
+    assert evidence['fields']['camera_context']['confirmed_zoom'] is None
 
 
 def test_mismatches_are_reported():

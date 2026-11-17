@@ -6,6 +6,7 @@ import ru.university.dronecv.tracking.FrameKey
 import ru.university.dronecv.tracking.GrayFrame
 import ru.university.dronecv.tracking.TrackingObservation
 import ru.university.dronecv.tracking.YoloRequest
+import ru.university.dronecv.tracking.TrackingFailure
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import ru.university.dronecv.detection.Detection
@@ -74,6 +75,7 @@ class LiveController<Frame : AutoCloseable>(
     val motion: MotionJournal? = null,
     private val motionFrame: ((Frame, Long, FrameStamp) -> Long?)? = null,
     private val onFailure: ((String) -> Unit)? = null,
+    private val packagedMetadataFields: String? = null,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     init {
@@ -118,6 +120,8 @@ class LiveController<Frame : AutoCloseable>(
     private var generation = 0L
     private var revision = 0L
     private var source = 0L
+    // Own scalar snapshot only; never retain a frame lease for an inventory export.
+    private var latestFrameGeometry: (() -> String)? = null
     private var nextSource = 0L
     private val completions = ArrayDeque<Long>()
     private val arrivals = ArrayDeque<Long>()
@@ -199,7 +203,12 @@ class LiveController<Frame : AutoCloseable>(
     private fun clearTimeline(now: Long, reason: String, token: Long? = motion?.token()) {
         updateTimeline(now, reason, token, null, null, null, null, null)
     }
-    private fun metadata(extra: String): String = "{\"mode\":\"${if (trackingEnabled) "yolo_lk" else "yolo"}\",\"confidence\":$confidence,\"nms_iou\":${ru.university.dronecv.detection.yolo.PostprocessConfig().iouThreshold},\"nms_max_detections\":${ru.university.dronecv.detection.yolo.PostprocessConfig().maxDetections},\"model_input_size\":${mutableState.value.result?.modelInputSize},\"backend\":\"onnxruntime_cpu_sequential\",\"intra_op_threads\":${mutableThreads.value.threads},\"yolo_period_ns\":${quoted(tracking?.session?.yoloPeriodNs)},\"confirmation_ttl_ns\":${quoted(tracking?.session?.confirmationTtlNs)},\"retry_ns\":${quoted(tracking?.session?.retryNs)},\"coordinate_timeout_ns\":${quoted(MAX_TRACKING_SILENCE_NS)},\"lk\":{\"max_points\":${ru.university.dronecv.tracking.LkParameters.MAX_POINTS},\"min_points\":${ru.university.dronecv.tracking.LkParameters.MIN_POINTS},\"corner_quality\":${ru.university.dronecv.tracking.LkParameters.CORNER_QUALITY},\"corner_distance\":${ru.university.dronecv.tracking.LkParameters.CORNER_DISTANCE},\"window\":${ru.university.dronecv.tracking.LkParameters.WINDOW},\"pyramid_levels\":${ru.university.dronecv.tracking.LkParameters.PYRAMID_LEVELS},\"iterations\":${ru.university.dronecv.tracking.LkParameters.ITERATIONS},\"epsilon\":${ru.university.dronecv.tracking.LkParameters.EPSILON},\"forward_back_error\":${ru.university.dronecv.tracking.LkParameters.FORWARD_BACK_ERROR},\"inlier_distance\":${ru.university.dronecv.tracking.LkParameters.INLIER_DISTANCE},\"retained_fraction\":${ru.university.dronecv.tracking.LkParameters.RETAINED_FRACTION},\"min_correlation\":${ru.university.dronecv.tracking.LkParameters.MIN_CORRELATION}},\"camera_context\":$extra}"
+    private fun metadata(extra: String): String = "{${packagedMetadataFields?.let { "$it," } ?: ""}\"mode\":\"${if (trackingEnabled) "yolo_lk" else "yolo"}\",\"confidence\":$confidence,\"nms_iou\":${ru.university.dronecv.detection.yolo.PostprocessConfig().iouThreshold},\"nms_max_detections\":${ru.university.dronecv.detection.yolo.PostprocessConfig().maxDetections},\"model_input_size\":${mutableState.value.result?.modelInputSize},\"model_input_size_source\":\"latest retained inference result; null means unavailable (not measured or result cleared)\",\"backend\":\"ONNX Runtime CPU, intra-op ${mutableThreads.value.threads}, inter-op 1\",\"inter_op_threads\":1,\"execution_mode\":\"SEQUENTIAL\",\"execution_provider\":\"CPU\",\"intra_op_threads\":${mutableThreads.value.threads},\"yolo_period_ns\":${quoted(tracking?.session?.yoloPeriodNs)},\"confirmation_ttl_ns\":${quoted(tracking?.session?.confirmationTtlNs)},\"retry_ns\":${quoted(tracking?.session?.retryNs)},\"coordinate_timeout_ns\":${quoted(MAX_TRACKING_SILENCE_NS)},\"lk\":{\"max_points\":${ru.university.dronecv.tracking.LkParameters.MAX_POINTS},\"min_points\":${ru.university.dronecv.tracking.LkParameters.MIN_POINTS},\"corner_quality\":${ru.university.dronecv.tracking.LkParameters.CORNER_QUALITY},\"corner_distance\":${ru.university.dronecv.tracking.LkParameters.CORNER_DISTANCE},\"window\":${ru.university.dronecv.tracking.LkParameters.WINDOW},\"pyramid_levels\":${ru.university.dronecv.tracking.LkParameters.PYRAMID_LEVELS},\"iterations\":${ru.university.dronecv.tracking.LkParameters.ITERATIONS},\"epsilon\":${ru.university.dronecv.tracking.LkParameters.EPSILON},\"forward_back_error\":${ru.university.dronecv.tracking.LkParameters.FORWARD_BACK_ERROR},\"inlier_distance\":${ru.university.dronecv.tracking.LkParameters.INLIER_DISTANCE},\"retained_fraction\":${ru.university.dronecv.tracking.LkParameters.RETAINED_FRACTION},\"min_correlation\":${ru.university.dronecv.tracking.LkParameters.MIN_CORRELATION}},\"camera_context\":$extra}"
+    /** Snapshot current controls at the caller boundary, never on a frame callback. */
+    fun exportMetadata(extra: String = "null"): String = publicationTransaction {
+        metadata(extra).dropLast(1) + ",\"frame_geometry\":${latestFrameGeometry?.invoke() ?: "null"}," +
+            "\"frame_geometry_source\":\"latest received frame of current generation/source; null means not measured; not a recording-wide value\"}"
+    }
     fun startDiagnostics(extra: String = "null", start: () -> Unit): Unit = publicationTransaction {
         if (publicationDepth > 1) {
             deferredControls.addLast { startDiagnostics(extra, start) }
@@ -262,7 +271,7 @@ class LiveController<Frame : AutoCloseable>(
 
     /** Takes ownership even on rejection. One current pump and one replaceable pending snapshot exist. */
     fun offerFrame(frame: Frame, token: LiveFrameToken, stamp: FrameStamp, preparationMs: Double) {
-        if (frame is CameraFrameSnapshot && diagnostics?.hasTimeline(token.diagnosticToken) == true) {
+        if (frame is CameraFrameSnapshot) {
             // Capture scalar metadata only: the writer must never retain the leased image.
             val sourceId = token.source
             val frameGeneration = token.generation
@@ -274,9 +283,12 @@ class LiveController<Frame : AutoCloseable>(
             val cropBottom = frame.cropBottom
             val rotation = frame.rotationDegrees
             eventTime?.invoke()?.let { now ->
-                diagnostics.event(token.diagnosticToken, "frame_geometry", observedPayload("frame_geometry") {
+                val payload = observedPayload("frame_geometry") {
                     "{\"source_id\":${quoted(sourceId)},\"generation\":${quoted(frameGeneration)},\"analyzer_entry_ns\":${quoted(stamp.analyzerEntryNs)},\"source_width\":$sourceWidth,\"source_height\":$sourceHeight,\"crop\":[$cropLeft,$cropTop,$cropRight,$cropBottom],\"rotation_degrees\":$rotation}"
-                }, now)
+                }
+                synchronized(lock) { if (valid(token)) latestFrameGeometry = payload }
+                diagnostics?.event(token.diagnosticToken, "frame_geometry", payload, now)
+                motion?.event(token.motionToken, "frame_geometry", payload)
             }
         }
         try { token.motionToken?.let { token.motionFrame = motionFrame?.invoke(frame, it, stamp) } }
@@ -326,6 +338,9 @@ class LiveController<Frame : AutoCloseable>(
             }
             if (!accepted) return
             live.reset(token.generation, token.source)
+            live.session.events = token.diagnosticToken?.let { diagnosticToken ->
+                { event -> diagnostics?.trackingEvent(diagnosticToken, event); Unit }
+            }
             val start = nanoTime()
             val gray = live.grayscale(frame, FrameKey(token.generation, token.source, ++live.sequence), stamp)
             val observation = live.session.observe(gray) ?: return
@@ -359,8 +374,10 @@ class LiveController<Frame : AutoCloseable>(
     private fun runTrackingYolo(live: LiveTracking<Frame>, frame: Frame, token: LiveFrameToken, stamp: FrameStamp,
                                 preparationMs: Double, queued: Long, request: YoloRequest) {
         try {
-            val result = analyze(frame, token.source, stamp, token, preparationMs, queued, forTracking = true)
-            onVision(live, token) { handleYolo(live, token, request, result) }
+            var failure = TrackingFailure.UNKNOWN
+            val result = analyze(frame, token.source, stamp, token, preparationMs, queued, forTracking = true,
+                onDiscard = { failure = it })
+            onVision(live, token) { handleYolo(live, token, request, result, failure) }
         } catch (e: Exception) {
             trackingFailed(live, token, request, e)
         } catch (e: OutOfMemoryError) {
@@ -371,10 +388,14 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     private fun handleYolo(live: LiveTracking<Frame>, token: LiveFrameToken, request: YoloRequest,
-                           result: LiveInference?) {
+                           result: LiveInference?, failure: TrackingFailure) {
         var replayScheduled = false
         try {
-            if (!publicationTransaction { valid(token) } || result == null) return
+            if (!publicationTransaction { valid(token) }) return
+            if (result == null) {
+                live.session.reject(request, failure)
+                return
+            }
             check(result.width == request.anchor.cropWidth && result.height == request.anchor.cropHeight) {
                 "Размер кадра YOLO не совпадает с кадром трекера."
             }
@@ -413,7 +434,11 @@ class LiveController<Frame : AutoCloseable>(
             }
             replayScheduled = true
         } catch (_: RejectedExecutionException) {
+            live.session.reject(request, TrackingFailure.PROCESSING_EXCEPTION)
             fail(token.generation, "Worker обработки кадров недоступен.", release = false)
+        } catch (e: Throwable) {
+            live.session.reject(request, TrackingFailure.PROCESSING_EXCEPTION)
+            throw e
         } finally { if (!replayScheduled) finishTracking(live, request) }
     }
 
@@ -436,6 +461,7 @@ class LiveController<Frame : AutoCloseable>(
 
     private fun trackingFailed(live: LiveTracking<Frame>, token: LiveFrameToken, request: YoloRequest, error: Throwable) {
         onVision(live, token) {
+            live.session.reject(request, TrackingFailure.PROCESSING_EXCEPTION)
             finishTracking(live, request)
             fail(token.generation, error.message ?: error.javaClass.simpleName)
         }
@@ -520,6 +546,7 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     private fun invalidatePending() {
+        latestFrameGeometry = null
         pumpEpoch++
         pumpScheduled = false
         clearPending()
@@ -644,7 +671,8 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     private fun analyze(frame: Frame, sourceId: Long?, stamp: FrameStamp?, ticket: LiveFrameToken?,
-                        preparationMs: Double, queuedNs: Long?, forTracking: Boolean = false): LiveInference? {
+                        preparationMs: Double, queuedNs: Long?, forTracking: Boolean = false,
+                        onDiscard: ((TrackingFailure) -> Unit)? = null): LiveInference? {
         try {
             val request = publicationTransaction {
                 if (closed || !active || busy || (ticket != null && !valid(ticket)) || (sourceId != null && sourceId != source) ||
@@ -656,6 +684,7 @@ class LiveController<Frame : AutoCloseable>(
                 if (stamp?.ageAt(stamp.analyzerEntryNs)?.let { it > maxAnalyzerAgeMs } == true) {
                     if (token != null) diagnostics?.discardStale(token)
                     publicationTransaction { eventTime?.invoke()?.let { discarded(it, ticket, stamp, "stale_capture") } }
+                    onDiscard?.invoke(TrackingFailure.STALE_CAPTURE)
                     return null
                 }
                 val start = nanoTime()
@@ -664,6 +693,7 @@ class LiveController<Frame : AutoCloseable>(
                     publicationTransaction { if (ticket != null) inputEvent(ticket, CameraInputEvent.STALE) }
                     if (token != null) diagnostics?.discardStale(token)
                     publicationTransaction { eventTime?.invoke()?.let { discarded(it, ticket, stamp, "stale_queue") } }
+                    onDiscard?.invoke(TrackingFailure.STALE_QUEUE)
                     return null
                 }
                 if (token != null) diagnostics?.received(token)
@@ -724,9 +754,11 @@ class LiveController<Frame : AutoCloseable>(
                     } else null
                 }
             } catch (e: Exception) {
+                if (forTracking && ticket != null) throw e
                 fail(request.first, e.message ?: e.javaClass.simpleName)
                 return null
-            } catch (_: OutOfMemoryError) {
+            } catch (e: OutOfMemoryError) {
+                if (forTracking && ticket != null) throw e
                 fail(request.first, "Недостаточно памяти. Остановите детекцию и повторите запуск.")
                 return null
             } finally {

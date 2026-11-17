@@ -15,14 +15,20 @@ val droneModelAsset: String = droneModel.getValue("asset_path")
 val droneModelSha256: String = droneModel.getValue("onnx_sha256")
 
 // Captured at configuration time and packaged in this APK; never inspect a repository on device.
-val buildGitSha = providers.exec {
-    commandLine("git", "rev-parse", "HEAD")
-    isIgnoreExitValue = true
-}.standardOutput.asText.get().trim().ifEmpty { "unknown" }
-val buildGitStatus = providers.exec {
-    commandLine("git", "status", "--porcelain", "--untracked-files=normal")
-    isIgnoreExitValue = true
-}.standardOutput.asText.get()
+val buildGitSha = runCatching {
+    providers.exec {
+        commandLine("git", "rev-parse", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().ifEmpty { "unknown" }
+}.getOrDefault("unknown")
+val buildGitStatusInfo = runCatching {
+    val result = providers.exec {
+        commandLine("git", "status", "--porcelain", "--untracked-files=normal")
+        isIgnoreExitValue = true
+    }
+    result.standardOutput.asText.get() to (result.result.get().exitValue == 0)
+}.getOrDefault("" to false)
+val (buildGitStatus, buildGitStatusKnown) = buildGitStatusInfo
 
 
 android {
@@ -39,6 +45,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BUILD_GIT_SHA", "\"$buildGitSha\"")
         buildConfigField("boolean", "BUILD_GIT_DIRTY", buildGitStatus.isNotBlank().toString())
+        buildConfigField("boolean", "BUILD_GIT_STATUS_KNOWN", buildGitStatusKnown.toString())
         buildConfigField("String", "DRONE_MODEL_ASSET", "\"$droneModelAsset\"")
         buildConfigField("String", "DRONE_MODEL_SHA256", "\"$droneModelSha256\"")
 

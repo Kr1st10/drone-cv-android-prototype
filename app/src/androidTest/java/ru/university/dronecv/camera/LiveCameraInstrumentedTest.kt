@@ -85,7 +85,12 @@ class LiveCameraInstrumentedTest {
     }
 
     @Test fun cameraRunsRealModelAndStopClearsLateResults() {
+        compose.onNodeWithText("Камера").performClick()
+        compose.onNodeWithTag("build-identity").assertIsDisplayed()
+        compose.onNodeWithText(ru.university.dronecv.PackagedBuild.identity.label()).assertExists()
+        val initialPreview = compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot
         openAndStart()
+        assertEquals(initialPreview, compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithTag("live-frame-ready").assertExists()
         // LK can publish a search observation without a box; YOLO completion does not imply a fresh signal.
         compose.waitUntil(30_000) {
@@ -100,6 +105,8 @@ class LiveCameraInstrumentedTest {
         compose.onNodeWithText("Детекция остановлена").assertExists()
         compose.onNodeWithTag("live-frame-ready").assertDoesNotExist()
         compose.onNodeWithTag("capture-to-signal").assertDoesNotExist()
+        compose.onNodeWithTag("build-identity").performScrollTo().assertIsDisplayed()
+        assertEquals(initialPreview, compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithText("Начать детекцию").performClick()
         awaitResult()
         // Switching to Photo disposes camera/model and retains the original photo entry point.

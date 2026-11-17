@@ -40,6 +40,38 @@ def report():
 
 
 class TrackingReportTest(unittest.TestCase):
+    def test_legacy_operation_details_are_unknown(self):
+        errors = []
+        result = analyzer.analyze_tracking(report(), errors)
+        self.assertIsNone(result['operations'])
+        self.assertFalse(errors)
+
+    def test_operation_counts_are_independent_of_retained_samples(self):
+        d = report()
+        counts = dict(request_started=10, replay_planned=8, initialization_attempt=8, initialization_succeeded=6,
+                      initialization_failed=2, replay_succeeded=5, replay_failed=3,
+                      correction_accepted=4, request_rejected=5, track_lost=2)
+        operations = dict(schema_version=1, counts=counts, unfinished_requests=1, replay_details_unknown=0,
+                          failure_reasons=dict(initialization_failed={'insufficient_points': 2},
+                                               replay_failed={'insufficient_points': 2, 'replay_budget': 1},
+                                               request_rejected={'no_candidate': 2, 'replay_budget': 1, 'unknown': 2},
+                                               track_lost={'frame_gap': 1, 'update_quality': 1}))
+        d['tracking']['operations'] = operations
+        errors = []
+        result = analyzer.analyze_tracking(d, errors)
+        self.assertFalse(errors)
+        self.assertEqual(operations, result['operations'])
+        operations['failure_reasons']['request_rejected']['unknown'] = 3
+        analyzer.analyze_tracking(d, errors)
+        self.assertTrue(any('reason count mismatch' in e for e in errors))
+        operations['unfinished_requests'] = -1
+        errors.clear()
+        analyzer.analyze_tracking(d, errors)
+        self.assertTrue(any('unfinished' in e for e in errors))
+        operations['counts']['initialization_attempt'] = True
+        with self.assertRaises(ValueError):
+            analyzer.analyze_tracking(d, [])
+
     def test_optional_assignment_metadata_keeps_legacy_timestamps(self):
         d = report()
         row = d['tracking']['samples'][0]

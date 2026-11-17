@@ -249,7 +249,7 @@
   const cabinetWidth45 = (cabinetDimensions.motor_transverse + cabinetDimensions.motor_longitudinal) / Math.SQRT2 +
     2 * cabinetDimensions.propeller_radius;
 
-  function cabinetPhoto({ view, label, number, crop, bounds, points, extent, segmentLabel, issue, horizontal = false }) {
+  function historicalCabinetPhoto({ view, label, number, crop, bounds, points, extent, segmentLabel, issue, horizontal = false }) {
     const [left, top, right, bottom] = crop;
     const divisor = 4;
     const toTrial = ([x, y]) => [(x - left) / divisor, (y - top) / divisor];
@@ -258,7 +258,7 @@
     if (horizontal) from[1] = to[1] = (from[1] + to[1]) / 2;
     const base = 'reference_assets/cabinet/IMG_' + number;
     return {
-      id: 'cabinet_' + view, view, label,
+      id: 'cabinet_' + view, view, label: 'Архив · ' + label,
       file: base + '_trial.jpg', source: base + '.jpg', width: (right - left) / divisor, height: (bottom - top) / divisor,
       bounds_px: [...toTrial(bounds.slice(0, 2)), ...toTrial(bounds.slice(2))],
       original_size_px: [4284, 5712], crop_px: crop, source_points_px: points,
@@ -271,6 +271,53 @@
     };
   }
 
+  const cabinetGeometryRevision = 'cabinet_motor_geometry_v2';
+
+  function projectMotorSegment(physicalMm, direction, yawDeg, elevationDeg) {
+    const [transverse, longitudinal] = direction;
+    const yaw = yawDeg * Math.PI / 180;
+    const elevation = elevationDeg * Math.PI / 180;
+    const depthFraction = Math.cos(elevation) *
+      (-transverse * Math.sin(yaw) + longitudinal * Math.cos(yaw)) / Math.hypot(transverse, longitudinal);
+    return physicalMm * Math.sqrt(1 - depthFraction ** 2);
+  }
+
+  function modelledCabinetPhoto({ number, view, label, size, sha256, auditSha256 = sha256,
+    crop, bounds, auditPoints, pair, yaw, elevation, diagonal }) {
+    const [width, height] = size;
+    const [left, top, right, bottom] = crop;
+    const auditSize = [1536, 2048];
+    const motorPoints = Object.fromEntries(auditPoints.map(([x, y], i) =>
+      ['M' + (i + 1), [x * width / auditSize[0], y * height / auditSize[1]]]));
+    const sourcePoints = pair.map(motor => motorPoints[motor]);
+    const toCrop = ([x, y]) => [x - left, y - top];
+    const [from, to] = sourcePoints.map(toCrop);
+    const base = 'reference_assets/cabinet/IMG_' + number;
+    const { motor_diagonal, motor_transverse, motor_longitudinal } = cabinetDimensions;
+    const physicalMm = diagonal ? motor_diagonal : motor_transverse;
+    const direction = [motor_transverse, diagonal ? motor_longitudinal : 0];
+    // At 90° elevation the projection is independent of the unspecified yaw.
+    const projectedMm = projectMotorSegment(physicalMm, direction, yaw ?? 0, elevation);
+    return {
+      id: 'cabinet_img_' + number + '_v2', view, label: label + ' · IMG_' + number,
+      file: base + '_v2.png', source: base + '.jpg', width: right - left, height: bottom - top,
+      bounds_px: [...toCrop(bounds.slice(0, 2)), ...toCrop(bounds.slice(2))],
+      original_size_px: size, source_sha256: sha256, crop_px: crop, source_points_px: sourcePoints,
+      source_motor_points_px: motorPoints,
+      audit_image: { size_px: auditSize, sha256: auditSha256, motor_points_px: auditPoints },
+      geometry_revision: cabinetGeometryRevision,
+      operator_angles_deg: { yaw, elevation },
+      transparent: false, model_confirmed: true, object_complete: true, projection_confirmed: false, axis: null,
+      review_segment: {
+        from, to, motor_pair: pair, label: 'Центры моторов ' + pair.join('–'),
+        physical_mm: physicalMm, projected_mm: projectedMm, source: cabinetSource,
+        status: 'modelled_approximate'
+      },
+      issue: 'Углы заданы по описанию оператора. Перспектива исходной съёмки не калибрована.' +
+        (diagonal ? ' Измерена одна диагональ. Равенство второй принято по симметрии.' : '')
+    };
+  }
+
   profiles.unshift({
     id: 'cabinet_reference', model: 'Эталонный БПЛА из кабинета',
     dimensions_mm: [cabinetDimensions.span_transverse, cabinetDimensions.span_longitudinal, cabinetDimensions.height_with_propellers],
@@ -278,19 +325,49 @@
     dimension_note: 'Поперечный × продольный размах × высота с винтами. Высота без винтов: 60 мм. ' +
       'Моторная база: 325 мм поперёк, 275 мм вдоль; измеренная диагональ: 428 мм.',
     photos: [
-      cabinetPhoto({
+      modelledCabinetPhoto({
+        number: 2751, view: 'front', label: 'Спереди', size: [1536, 2048],
+        sha256: '1198e322712b1c7412ffe37bda751ebaddca638ee8513c319f963409816ef12e',
+        crop: [250, 915, 1180, 1090], bounds: [270, 933, 1161, 1066],
+        auditPoints: [[470, 994], [957, 997], [926, 999], [528, 994]],
+        pair: ['M1', 'M2'], yaw: 0, elevation: 0, diagonal: false
+      }),
+      modelledCabinetPhoto({
+        number: 2704, view: 'top', label: 'Сверху', size: [4284, 5712],
+        sha256: 'ddcb633b2d56fab3224df9fa0d8491340114c9fda2d421a4fd2552bd9820bb54',
+        auditSha256: '64d9b20530e69b9ce53976d3c4789a226011665e33b44ca51e21cf5cf30f85ce',
+        crop: [278, 432, 4017, 3905], bounds: [359, 527, 3939, 3805],
+        auditPoints: [[358, 1108], [1115, 1110], [1125, 484], [350, 475]],
+        pair: ['M4', 'M2'], yaw: null, elevation: 90, diagonal: true
+      }),
+      modelledCabinetPhoto({
+        number: 2755, view: 'oblique', label: 'Под углом · elevation ≈15°', size: [1536, 2048],
+        sha256: 'b645e3b8cfd6e4dfc7333db0a603f1dbaca39d799cfc286c964ccc3274bdc4fd',
+        crop: [418, 646, 1278, 896], bounds: [440, 672, 1256, 870],
+        auditPoints: [[538, 747], [789, 796], [1096, 757], [811, 720]],
+        pair: ['M1', 'M3'], yaw: 45, elevation: 15, diagonal: true
+      }),
+      modelledCabinetPhoto({
+        number: 2711, view: 'oblique', label: 'Под углом · elevation ≈45°', size: [4284, 5712],
+        sha256: '297df9773f0a04967b1ea6500a419d9425730ceffca9400d64431a123afe080f',
+        auditSha256: '0771cf58b9edfad23fccd61b2a6e5fda86c51682540f7d349b74992c5c53b0fc',
+        crop: [415, 1536, 4123, 4123], bounds: [513, 1626, 4047, 4028],
+        auditPoints: [[400, 826], [755, 1184], [1189, 942], [785, 658]],
+        pair: ['M1', 'M3'], yaw: 45, elevation: 45, diagonal: true
+      }),
+      historicalCabinetPhoto({
         view: 'front', label: 'Спереди', number: 2707,
         crop: [160, 1760, 4200, 2720], bounds: [223, 1810, 4150, 2675], points: [[981, 2307], [3229, 2339]],
         extent: cabinetDimensions.motor_transverse, segmentLabel: 'Оси двух ближних моторов',
         issue: 'Измерена поперечная база. Привязка по двум ближним осям; остаточная перспектива и небольшой наклон камеры не калиброваны.'
       }),
-      cabinetPhoto({
+      historicalCabinetPhoto({
         view: 'oblique_candidate', label: 'Под углом ¾', number: 2711, horizontal: true,
         crop: [480, 1600, 4100, 4080], bounds: [520, 1630, 4040, 4040], points: [[525, 2240], [4031, 2758]],
         extent: cabinetWidth45, segmentLabel: 'Горизонталь между крайними видимыми кончиками лопастей',
         issue: 'Модель 45° даёт полный размах области вращения винтов. На снимке видны неподвижные лопасти; их горизонтальный размах используется как приближение. Угол и перспектива снимка не проверены.'
       }),
-      cabinetPhoto({
+      historicalCabinetPhoto({
         view: 'top', label: 'Сверху', number: 2704,
         crop: [320, 480, 4000, 3840], bounds: [365, 530, 3930, 3810], points: [[976, 1325], [3107, 3096]],
         extent: cabinetDimensions.motor_diagonal, segmentLabel: 'Центры противоположных моторов по диагонали',
@@ -334,11 +411,12 @@
     const widthMm = geometry.physicalWidth(p.bounds_px, p.width, p.height, render.scale, mmPerCssPx);
     if (!positive(widthMm)) return empty;
     const segment = p.review_segment;
-    if (positive(segment?.real_mm) && p.object_complete !== false) {
+    const projectedMm = segment?.status === 'modelled_approximate' ? segment.projected_mm : segment?.real_mm;
+    if (positive(projectedMm) && p.object_complete !== false) {
       const segmentMm = reviewSegmentLength(p, render, mmPerCssPx);
       return { ...empty, display_width_cm: widthMm / 10, display_axis_cm: segmentMm == null ? null : segmentMm / 10,
-        assumed_extent_mm: segment.real_mm, geometry_status: segment.status, assumption: p.issue,
-        equivalent_distance_m: geometry.equivalentDistance(segment.real_mm / 10, distanceCm, segmentMm) };
+        assumed_extent_mm: projectedMm, geometry_status: segment.status, assumption: p.issue,
+        equivalent_distance_m: geometry.equivalentDistance(projectedMm / 10, distanceCm, segmentMm) };
     }
     const d = profile.estimate_dimensions_mm;
     let extent, assumption;
@@ -407,7 +485,9 @@
     const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), viewport = $('referenceViewport');
     let image = $('referenceDisplay');
     const decodedImages = new Map();
-    let photo = selected.photos.find(p => p.id === saved?.photo_id) || selected.photos[0];
+    // Older saved cabinet settings without a photo ID selected IMG_2707.
+    const savedPhotoId = saved?.photo_id ?? (saved?.model_id === 'cabinet_reference' ? 'cabinet_front' : null);
+    let photo = selected.photos.find(p => p.id === savedPhotoId) || selected.photos[0];
     for (const p of profiles) select.add(new Option(p.model, p.id));
     function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, camera }); }
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
@@ -421,7 +501,7 @@
       $('referenceDimensions').textContent = `${selected.dimensions_mm.join(' × ')} мм; ${propellers}`;
       $('referenceDimensionNote').textContent = selected.dimension_note;
       link($('referenceSpecSource'), selected.source, 'Источник характеристик');
-      link($('referencePhotoSource'), p.source, p.original_size_px ? 'Полный кадр с линейкой' : 'Страница источника фотографии');
+      link($('referencePhotoSource'), p.source, p.original_size_px ? 'Полный кадр' : 'Страница источника фотографии');
       $('referenceView').textContent = p.label;
       // Decode a separate request-owned image. Old events can never publish into the new selection.
       const expected = p.file && new URL(p.file, document.baseURI).href;
@@ -520,7 +600,9 @@
       }
       const range = loadState === 'loading' ? 'Загрузка выбранной фотографии…' : m.equivalent_distance_m == null ? 'нет данных' :
         `${activeMode === 'approximate' ? '≈ ' : ''}${m.equivalent_distance_m.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} м`;
-      $('referenceAssumption').textContent = candidate?.status === 'measured' ?
+      $('referenceAssumption').textContent = candidate?.status === 'modelled_approximate' ?
+        `Модельная оценка по ${candidate.label.toLowerCase()}. Физическая длина ${fmt(candidate.physical_mm)} мм, расчётная проекция ${fmt(candidate.projected_mm)} мм.` :
+        candidate?.status === 'measured' ?
         `Измеренный отрезок: ${candidate.label}, ${fmt(candidate.real_mm)} мм. Дальность по проекции фотографии.` :
         candidate?.status === 'preliminary' ?
         `Предварительная оценка по модели вращения винтов при 45°: ${candidate.real_mm.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} мм.` :
@@ -538,6 +620,8 @@
       return { model_id: selected.id, photo_id: p.id, view: p.view, scale_percent: scale, screen_distance_cm: getDistance(),
         trial_phase: trialPhase, load_state: loadState, preview_visible: previewVisible, fullscreen_fits: fullscreenFits,
         image_width_css_px: loaded ? r.width : null, image_height_css_px: loaded ? r.height : null, review_segment_display_mm: segmentMm,
+        ...(p.geometry_revision ? { geometry_revision: p.geometry_revision, projection_confirmed: p.projection_confirmed,
+          physical_segment_mm: candidate.physical_mm, projected_segment_mm: candidate.projected_mm } : {}),
         camera_label: camera + '×', background, range_mode: activeMode, geometry_status: m.geometry_status ?? null, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
     }
