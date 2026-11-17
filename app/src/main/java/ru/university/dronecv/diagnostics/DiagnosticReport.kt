@@ -39,7 +39,8 @@ private fun summary(values: List<Double>): String {
 /** Build only on a background thread: the report can contain thousands of frame samples. */
 fun DiagnosticReport.toJson(): String = buildString {
     val f = frames
-    append("{\"schema_version\":1,\"started_epoch_ms\":$startEpochMs,\"device\":${q(device)},\"android_release\":${q(androidRelease)},\"android_sdk\":$sdk,\"app_version\":${q(appVersion)},")
+    append("{\"metadata\":${f.sessionMetadata ?: "null"},")
+    append("\"schema_version\":1,\"started_epoch_ms\":$startEpochMs,\"device\":${q(device)},\"android_release\":${q(androidRelease)},\"android_sdk\":$sdk,\"app_version\":${q(appVersion)},")
     append("\"build_type\":${q(buildType)},\"warmup\":{\"method\":\"manual\",\"completed_frames_before_session\":$warmupCompletedFrames},")
     append("\"model\":{\"name\":\"YOLO11s\",\"asset\":${q(modelAsset)},\"sha256\":${q(modelSha256)},\"input_width\":640,\"input_height\":640,\"backend\":\"ONNX Runtime CPU, intra-op $intraOpThreads, inter-op 1\",\"intra_op_threads\":$intraOpThreads,\"inter_op_threads\":1,\"execution_mode\":\"SEQUENTIAL\",\"execution_provider\":\"CPU\",\"confidence\":$confidence,\"nms_iou\":0.7},")
     append("\"duration_ms\":${f.durationNanos / 1_000_000.0},\"interrupted\":${f.interrupted},\"reason\":${f.reason?.let(::q) ?: "null"},")

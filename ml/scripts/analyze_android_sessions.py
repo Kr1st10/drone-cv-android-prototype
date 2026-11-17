@@ -6,6 +6,7 @@ import json
 import math
 import statistics
 from pathlib import Path
+from timeline_analysis import metadata_provenance, metadata_record
 
 STAGES = {'conversion': 'conversion_ms', 'preprocessing': 'preprocess_ms',
           'ort_including_tensor_copy': 'ort_ms', 'postprocessing_nms': 'postprocess_ms',
@@ -333,6 +334,7 @@ def analyze(d, filename='', digest=''):
         ort_share = sum(r['ort_ms'] for r in frames) / total_pipeline if total_pipeline else None
     else: ort_share = None
     result = {'file': filename, 'sha256': digest, 'started_epoch_ms': d['started_epoch_ms'],
+            'provenance': metadata_provenance([metadata_record('diagnostic_report', d)]),
             'device': d['device'], 'android_release': d['android_release'], 'android_sdk': d['android_sdk'],
             'app_version': d['app_version'], 'model': d['model'], 'duration_ms': duration,
             'interrupted': d['interrupted'], 'reason': d['reason'], 'accepted': accepted,
@@ -436,7 +438,9 @@ def main():
     runs = []
     for path, timeline, report in zip(args.inputs, timelines, archived):
         if timeline is not None:
-            runs.append(analyze(report, path.as_posix(), timeline['sha256']))
+            result = analyze(report, path.as_posix(), timeline['sha256'])
+            result['provenance'] = timeline['provenance']
+            runs.append(result)
         else:
             raw = path.read_bytes()
             d = json.loads(raw, parse_constant=lambda x: (_ for _ in ()).throw(ValueError('non-finite JSON')))

@@ -161,6 +161,10 @@ internal fun CameraPreview(
             probe.actualZoom = null
             probe.captureZoom = null
             probe.activePhysicalId = null
+            probe.logicalId = null
+            probe.requestedAf = null; probe.requestedAe = null; probe.requestedStabilization = null
+            probe.actualAf = null; probe.actualAe = null; probe.actualStabilization = null
+            probe.availableAf = null; probe.availableAe = null; probe.availableStabilization = null
             val selectedPhysical = probe.physicalId
             val selectionEpoch = probe.selectionEpoch
             val selectedZoom = probe.requestedZoom

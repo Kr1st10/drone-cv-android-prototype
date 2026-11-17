@@ -18,14 +18,14 @@ import org.json.JSONObject
 import org.json.JSONArray
 
 @Composable
-internal fun CameraInventoryPanel(probe: CameraProbeState) {
+internal fun CameraInventoryPanel(probe: CameraProbeState, metadata: () -> String) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var json by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
-        val data = json?.let { saved -> exportCameraInventory(saved, probe) }
+        val data = json?.let { saved -> exportCameraInventory(saved, probe, metadata()) }
         if (uri != null && data != null) scope.launch {
             error = try { withContext(Dispatchers.IO) {
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(data) }
@@ -49,8 +49,11 @@ internal fun CameraInventoryPanel(probe: CameraProbeState) {
 }
 
 /** Capture current state at export; null means unreported, not an absent lens. */
-internal fun exportCameraInventory(saved: String, probe: CameraProbeState): String =
-    JSONObject(saved).put("current_camera", JSONObject()
+internal fun exportCameraInventory(saved: String, probe: CameraProbeState, metadata: String? = null): String =
+    JSONObject(saved).put("metadata", metadata?.let(::JSONObject) ?: JSONObject("{${ru.university.dronecv.PackagedBuild.metadataFields}}"))
+        .put("camera_context", JSONObject(cameraContext(probe)))
+        .put("current_camera", JSONObject()
+        .put("scope", "latest_context_not_frame_bound")
         .put("logical_id", probe.logicalId ?: JSONObject.NULL)
         .put("requested_physical_id", probe.physicalId ?: JSONObject.NULL)
         .put("active_physical_id", probe.activePhysicalId ?: JSONObject.NULL)

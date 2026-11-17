@@ -45,8 +45,27 @@ try{
   await start('#motionRepeat');await tick(0);await complete();const second=await exportRun();assert.notEqual(second.run_id,first.run_id);assert.deepEqual(second.scenario,first.scenario);assert.deepEqual(second.calibration_markers,first.calibration_markers);assert.deepEqual(second.photo,first.photo);
   const journal={schema:'dronecv-motion-android-1',mode:'yolo_lk',complete:true,truncated:false,stop_ns:(first.samples.at(-1).elapsed_ms+100)*1e6,geometry:{width:pixels.width,height:pixels.height},calibration_image:{width:pixels.width,height:pixels.height,data_url:jpeg},frames:first.samples.map((s,i)=>({frame_id:i,capture_ns:(s.elapsed_ms+40)*1e6,analyzer_ns:(s.elapsed_ms+45)*1e6,marker:{run_id:first.run_id,step_id:s.step_id}})),detections:[],publications:first.samples.map((s,i)=>({frame_id:i,published_ns:(s.elapsed_ms+50)*1e6,bbox:s.bbox_screen_px?.map((v,k)=>v/(k%2?pixels.height:pixels.width))??null,source:s.visible?'yolo':'clear'}))};
   journal.detections=journal.publications.filter(p=>p.bbox).map(p=>({...p,confidence:.99}));
+  const buildMetadata={git_sha:'a'.repeat(40),git_dirty:true,app_version:'0.5.2',version_code:7,build_type:'debug',
+    mode:'yolo_lk',confidence:.5,nms_iou:.7,nms_max_detections:300,intra_op_threads:2,model_input_size:640,
+    model_asset:'synthetic.onnx',model_sha256:'b'.repeat(64),camera_context:{scope:'latest_context_not_frame_bound',requested_zoom:5,confirmed_zoom:null}};
+  journal.metadata_records=[{type:'metadata',data:buildMetadata}];
   await uploadJournal(journal);await page.waitForFunction(()=>!document.getElementById('reportExport').disabled,null,{polling:50});assert.match(await page.textContent('#reportStatus'),/4 из 4 найдены/);assert.match(await page.textContent('#reportOutput'),/режим телефона: yolo_lk/);assert.equal(await page.evaluate(()=>document.getElementById('reportCanvas').width),pixels.width);
   const [reportDownload]=await Promise.all([page.waitForEvent('download'),page.click('#reportExport')]);const report=JSON.parse(fs.readFileSync(await reportDownload.path(),'utf8'));assert.equal(report.runs[0].run_id,first.run_id);assert.equal(report.runs[0].calibration.markers.length,4);
+  assert.equal(report.schema,'dronecv-motion-scenario-report-1');
+  for(const [key,value] of Object.entries(buildMetadata))assert.deepEqual(report.runs[0].provenance.android.fields[key],value);
+  assert.match(await page.textContent('#reportOutput'),/Сборка Android: 0\.5\.2 \(7\); тип debug; commit a{40}; локальные изменения: да/);
+  assert.match(await page.textContent('#reportOutput'),/NMS IoU 0\.7, максимум 300; потоки 2; вход модели 640/);
+  assert.match(await page.textContent('#reportOutput'),/camera_context: снимок контекста, не покадровые параметры/);
+  await uploadJournal({...journal,metadata_records:[...journal.metadata_records,{type:'metadata',data:{git_sha:'c'.repeat(40),git_dirty:false}}]},'conflicting-build.json');
+  await page.waitForFunction(()=>!document.getElementById('reportExport').disabled,null,{polling:50});
+  assert.match(await page.textContent('#reportOutput'),/commit противоречие; локальные изменения: противоречие/);
+  assert.match(await page.textContent('#reportOutput'),/Противоречивые метаданные: git_sha, git_dirty/);
+  const [conflictDownload]=await Promise.all([page.waitForEvent('download'),page.click('#reportExport')]);
+  const conflict=JSON.parse(fs.readFileSync(await conflictDownload.path(),'utf8')).runs[0].provenance.android;
+  assert.equal(conflict.fields.git_sha,null);assert.equal(conflict.fields.git_dirty,null);
+  assert.deepEqual(conflict.conflicts.git_sha.map(v=>v.value),['a'.repeat(40),'c'.repeat(40)]);
+  assert.deepEqual(conflict.conflicts.git_dirty.map(v=>v.value),[true,false]);
+  await uploadJournal(journal);await page.waitForFunction(()=>!document.getElementById('reportExport').disabled,null,{polling:50});
   await page.screenshot({path:'/private/tmp/dronecv-motion-settings.png',fullPage:true});
   // The manual fallback uses the actual decoded image and automatically recalculates.
   await page.click('#reportReset');

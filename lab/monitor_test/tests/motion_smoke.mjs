@@ -107,11 +107,17 @@ for(const [x,y] of [[10,10],[90,10],[90,90],[10,90]]) await page.locator('#repor
 await page.click('#reportCalculate');
 assert.match(await page.textContent('#reportOutput'),/Результаты по прогонам/);
 assert.match(await page.textContent('#reportOutput'),/критерий: пройден/);
+assert.match(await page.textContent('#reportOutput'),/Сборка Android: неизвестно \(неизвестно\); тип неизвестно; commit неизвестно; локальные изменения: неизвестно/);
 const report=await exportJson('#reportExport');assert.equal(report.runs[0].capture_latency_ms,100);assert.equal(report.runs[0].pass,true);
 // Exercise the streamed NDJSON file input with exact Long values beyond 2^53.
 const origin=90071992547409930n, frameOrigin=90071992547419930n, timeline=[];
 function timelineRow(type,data,time) {timeline.push({schema:'dronecv-session-timeline-1',session_id:'synthetic',event_id:String(timeline.length+1),event_ns:String(origin+BigInt(time)),type,data});}
 timelineRow('header',{start_ns:String(origin),clock:'elapsed_realtime_ns',mode:'yolo'},0);
+const buildMetadata={git_sha:'a'.repeat(40),git_dirty:true,app_version:'0.5.2',version_code:7,build_type:'debug',
+  mode:'yolo',confidence:.5,nms_iou:.7,nms_max_detections:300,intra_op_threads:2,model_input_size:640,
+  model_asset:'synthetic.onnx',model_sha256:'b'.repeat(64),camera_context:{scope:'latest_context_not_frame_bound',
+    requested_zoom:5,confirmed_zoom:null,latest_capture_zoom:null,requested_physical_id:'2',latest_active_physical_id:null}};
+timelineRow('metadata',buildMetadata,0);
 timelineRow('metadata',{geometry:syntheticJournal.geometry,calibration_image:syntheticJournal.calibration_image},0);
 for(const f of syntheticJournal.frames) timelineRow('frame',{frame_id:String(frameOrigin+BigInt(f.frame_id)),analyzer_entry_ns:String(origin+BigInt(f.analyzer_ns)),capture_ns:String(origin+BigInt(f.capture_ns)),timebase:'elapsed_realtime',marker:f.marker},f.analyzer_ns);
 for(const d of syntheticJournal.detections) timelineRow('detection',{frame_id:String(frameOrigin+BigInt(d.frame_id)),published_ns:String(origin+BigInt(d.published_ns)),bbox:d.bbox},d.published_ns);
@@ -130,6 +136,9 @@ assert.equal(timelineReport.runs[0].capture_latency_ms,100);
 assert.equal(timelineReport.runs[0].capture_frame_id,String(frameOrigin+5n));
 assert.equal(timelineReport.runs[0].pass,true);
 assert.equal(timelineReport.runs[0].good_fraction_lower,report.runs[0].good_fraction_lower);
+for(const [key,value] of Object.entries(buildMetadata)) assert.deepEqual(timelineReport.runs[0].provenance.android.fields[key],value);
+assert.match(await page.textContent('#reportOutput'),/Сборка Android: 0\.5\.2 \(7\); тип debug; commit a{40}; локальные изменения: да/);
+assert.match(await page.textContent('#reportOutput'),/camera_context: снимок контекста, не покадровые параметры/);
 // Synthetic multiple conditions and uncertain observation must agree in UI and export.
 const runs=[]; const journals=[];
 for (const [id,speed,accel,missing] of [['a1',100,200,false],['a2',100,200,false],['b1',300,600,false],['b2',300,600,false],['u1',100,300,true]]) {
@@ -156,6 +165,8 @@ assert.equal(multiReport.schema,'dronecv-motion-report-4');
 assert.equal(multiReport.runs[0].center_error.version,'motion-center-error-v1');
 assert.equal(multiReport.runs[0].center_error.units,'camera_px');
 assert.equal(multiReport.runs[0].provenance.android.fields.git_sha,null);
+assert.equal(multiReport.runs[0].provenance.android.fields.version_code,null);
+assert.match(await page.textContent('#reportOutput'),/Сборка Android: неизвестно \(неизвестно\); тип неизвестно; commit неизвестно; локальные изменения: неизвестно/);
 assert.match(await page.textContent('#reportOutput'), /Ошибка центра.*условно/);
 assert.match(await page.textContent('#reportOutput'), /p50.*p95/);
 assert.equal(multiReport.runs.find(r=>r.run_id==='u1').pass,null);
