@@ -134,28 +134,44 @@
     };
   }
 
-  function toCsv(result) {
-    const shared = {
+  function sharedFields(result) {
+    return {
       schema: result.schema, ...result.source, ...result.conditions, ...result.selection, ...result.summary,
       ...result.input_rows, ...result.ground_truth, independent_trials: result.independent_trials,
     };
+  }
+
+  function csvCell(value) {
+    if (value == null) return '';
+    // Text can come from the Android file or the operator. Keep spreadsheet formulas inert.
+    const content = Array.isArray(value) ? JSON.stringify(value) : String(value);
+    const safe = typeof value === 'string' && /^\s*[=+@-]|^[\t\r\n]/.test(value) ? "'" + content : content;
+    return '"' + safe.replaceAll('"', '""') + '"';
+  }
+
+  function csvRows(header, rows) {
+    return [header.map(csvCell).join(','), ...rows.map(row =>
+      header.map(field => row[field]).map(csvCell).join(','))].join('\r\n') + '\r\n';
+  }
+
+  function toCsv(result) {
+    const shared = sharedFields(result);
     const fields = ['attempt', 'offset_ms', 'diagnostic_row', 'source_id', 'frame_id', 'analyzer_entry_ns',
       'capture_ns', 'candidate', 'confidence', 'offset_ns', 'publication_ns', 'generation', 'state_event_id', 'evidence',
       'sample_completion_link'];
-    function cell(value) {
-      if (value == null) return '';
-      // Text can come from the Android file or the operator. Keep spreadsheet formulas inert.
-      const content = Array.isArray(value) ? JSON.stringify(value) : String(value);
-      const safe = typeof value === 'string' && /^\s*[=+@-]|^[\t\r\n]/.test(value) ? "'" + content : content;
-      return '"' + safe.replaceAll('"', '""') + '"';
-    }
-    const rows = result.samples.length ? result.samples.map(row => ({ ...row, sample_completion_link: row.completion_link })) : [{}];
-    const header = [...Object.keys(shared), ...fields];
-    return [header.map(cell).join(','), ...rows.map(row =>
-      [...Object.values(shared), ...fields.map(field => row[field])].map(cell).join(','))].join('\r\n') + '\r\n';
+    const samples = result.samples.length ? result.samples : [{}];
+    return csvRows([...Object.keys(shared), ...fields],
+      samples.map(sample => ({ ...shared, ...Object.fromEntries(fields.map(field => [field, sample[field]])),
+        sample_completion_link: sample.completion_link })));
   }
 
-  const pilot = { analyze, analyzeText, toCsv };
+  function toSummaryCsv(results) {
+    const rows = results.map((run, index) => ({ run_number: index + 1, ...sharedFields(run) }));
+    const fields = [...new Set(rows.flatMap(Object.keys))];
+    return csvRows(fields, rows);
+  }
+
+  const pilot = { analyze, analyzeText, toCsv, toSummaryCsv };
   if (typeof module === 'object') module.exports = pilot;
   else root.YoloPilot = pilot;
 })(globalThis);

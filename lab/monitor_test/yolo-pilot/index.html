@@ -14,15 +14,19 @@
     input, button { font: inherit; padding: .35rem .55rem; }
     input { min-width: 0; }
     button { cursor: pointer; }
-    button[type="submit"] { background: #155c51; color: white; border: 1px solid transparent; border-radius: .3rem; }
+    button[type="submit"], #csv { background: #155c51; color: white; border: 1px solid transparent; border-radius: .3rem; }
     .table-scroll { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
     th, td { text-align: left; padding: .4rem; border-bottom: 1px solid GrayText; }
-    .actions { display: flex; gap: .5rem; margin: 1rem 0; }
+    .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
     #status { font-weight: 600; }
+    #errors, #run-source, #run-title, #runs td:first-child { overflow-wrap: anywhere; }
+    #runs small { display: block; }
+    #run-select { font: inherit; width: 100%; }
   </style>
   <script defer src="timeline.js"></script>
   <script defer src="pilot.js"></script>
+  <script defer src="archive.js"></script>
   <script defer src="pilot-ui.js"></script>
 </head>
 <body>
@@ -32,33 +36,47 @@
     <p>Удерживайте одну фотографию, дальность и настройки камеры на протяжении записи в режиме «YOLO».
       Укажите начало заранее. Анализатор берёт первый пригодный инференс с этого момента и каждый следующий
       не раньше чем через секунду после предыдущего, до 20 кадров.</p>
-    <form id="pilot">
-      <fieldset>
-        <legend>Запись</legend>
-        <div class="fields">
-          <label>Диагностика Android (JSON или NDJSON) <input type="file" name="report" accept=".json,.ndjson,application/json,application/x-ndjson" required></label>
-          <label>Начало от старта записи, с <input type="number" name="start" min="0" step="any" value="0" required></label>
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Условия серии</legend>
-        <div class="fields">
-          <label>Эталон / фотография <input name="reference" required></label>
-          <label>Ракурс <input name="view" required></label>
-          <label>Эквивалентная дальность, м <input type="number" name="equivalent_range_m" min="0" step="any" required></label>
-          <label>От объектива до экрана, см <input type="number" name="monitor_distance_cm" min="0" step="any" required></label>
-          <label>Фон <input name="background" required></label>
-          <label>Камера / зум <input name="camera" required></label>
-          <label>Порог confidence, % (если его нет в журнале)
-            <input type="number" name="threshold_pct" min="0" max="100" step="any">
-          </label>
-        </div>
-      </fieldset>
-      <button type="submit">Проанализировать</button>
-    </form>
+    <label>Журналы диагностики Android
+      <input type="file" id="reports" accept=".zip,.json,.ndjson,application/zip,application/json,application/x-ndjson" multiple>
+    </label>
+    <p>Выберите ZIP из архива Android или несколько файлов JSON и NDJSON.</p>
     <p id="status" role="status"></p>
+    <ul id="errors" aria-live="polite" hidden></ul>
     <section id="result" hidden>
-      <h2>Результат серии</h2>
+      <h2>Сводка прогонов</h2>
+      <div class="table-scroll">
+        <table id="runs" aria-label="Сводка прогонов">
+          <thead><tr><th scope="col">Прогон</th><th scope="col">Проверено</th>
+            <th scope="col">С кандидатом</th><th scope="col">Доля с кандидатом</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="actions"><button id="csv" type="button">Скачать общий CSV</button></div>
+
+      <h2>Подробности прогона</h2>
+      <label>Прогон <select id="run-select"></select></label>
+      <h3 id="run-title"></h3>
+      <p id="run-source"></p>
+      <form id="conditions">
+        <fieldset>
+          <legend>Условия выбранного прогона</legend>
+          <div class="fields">
+            <label>Начало от старта записи, с <input type="number" name="start" min="0" step="any" value="0"></label>
+            <label>Эталон / фотография <input name="reference"></label>
+            <label>Ракурс <input name="view"></label>
+            <label>Эквивалентная дальность, м <input type="number" name="equivalent_range_m" min="0" step="any"></label>
+            <label>От объектива до экрана, см <input type="number" name="monitor_distance_cm" min="0" step="any"></label>
+            <label>Фон <input name="background"></label>
+            <label>Камера / зум <input name="camera"></label>
+            <label>Порог confidence, % (если его нет в журнале)
+              <input type="number" name="threshold_pct" min="0" max="100" step="any">
+            </label>
+          </div>
+          <div class="actions"><button type="submit">Применить к прогону</button></div>
+        </fieldset>
+      </form>
+      <p id="conditions-status" role="status"></p>
+      <p id="series-status"></p>
       <p id="summary"></p>
       <p id="details"></p>
       <p>Кандидат означает срабатывание YOLO. Для TP, FN, FP и подтверждённого Recall нужны проверенная разметка,
@@ -71,7 +89,8 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="actions"><button id="csv">Скачать CSV</button><button id="json">Скачать JSON</button></div>
+      <div class="actions"><button id="attempt-csv" type="button">Скачать кадры в CSV</button>
+        <button id="json" type="button">Скачать прогон в JSON</button></div>
     </section>
   </main>
 </body>

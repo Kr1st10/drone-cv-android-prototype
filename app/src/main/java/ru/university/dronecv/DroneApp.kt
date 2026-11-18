@@ -1,5 +1,7 @@
 package ru.university.dronecv
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +35,8 @@ fun DroneApp() {
     var cameraThreads by rememberSaveable { mutableIntStateOf(2) }
     val photos: PhotoViewModel = viewModel()
     val archive: JournalArchiveViewModel = viewModel()
+    val saveJournal = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-ndjson"), archive::export)
+    val saveZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip"), archive::export)
     Scaffold(topBar = {
         Column(Modifier.statusBarsPadding()) {
             Text(stringResource(R.string.app_name), Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -49,7 +53,9 @@ fun DroneApp() {
                 0 -> PhotoScreen(photos)
                 1 -> CameraScreen(cameraConfidence, cameraThreads, { cameraThreads = it },
                     onOpenJournals = { mode = 2 }) { cameraConfidence = it }
-                else -> JournalArchiveScreen(archive)
+                else -> JournalArchiveScreen(archive) { filename, zipped ->
+                    if (zipped) saveZip.launch(filename) else saveJournal.launch(filename)
+                }
             }
         }
     }
