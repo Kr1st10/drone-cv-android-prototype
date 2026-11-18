@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -135,6 +136,23 @@ class LiveCameraInstrumentedTest {
             awaitResult()
             compose.onNodeWithText("Остановить").performScrollTo().performClick()
             drainNativeWork()
+        }
+    }
+
+    @Test fun yoloOnlyOmitsTransientCandidateRowEvenWithFreshResult() {
+        compose.onNodeWithText("Камера").performClick()
+        compose.onNodeWithText("A: YOLO").performScrollTo().performClick()
+        compose.onNodeWithText("Режим: A: YOLO").assertExists()
+        compose.onNodeWithText("Начать детекцию").performScrollTo().performClick()
+
+        val ready = hasTestTag("live-frame-ready")
+        val transient = hasText("Последний YOLO:", substring = true)
+        compose.waitUntil(90_000) {
+            val nodes = compose.onAllNodes(ready or transient).fetchSemanticsNodes()
+            if (nodes.any(ready::matches)) {
+                assertTrue("Candidate row must stay out of the YOLO-only controls", nodes.none(transient::matches))
+                true
+            } else false
         }
     }
 

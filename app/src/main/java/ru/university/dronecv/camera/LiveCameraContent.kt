@@ -148,8 +148,10 @@ private fun LiveControls(
         Text("Вход: ${input.fps?.let(::format) ?: "—"} FPS · кадров: ${input.received}\n" +
             "Заменено: ${input.superseded} · без буфера: ${input.noBuffer}",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("camera-input-stats"))
-        state.result?.let {
-            Text("Последний YOLO: ${it.detections.size} кандидатов · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
+        if (motionUi.mode != "yolo") {
+            state.result?.let {
+                Text("Последний YOLO: ${it.detections.size} кандидатов · ${it.width}×${it.height}", style = MaterialTheme.typography.bodySmall)
+            }
         }
         state.tracking?.let { signal ->
             val latency = signal.captureToSignalMs?.let { "${format(it)} мс" } ?: when (signal.timingIssue) {
