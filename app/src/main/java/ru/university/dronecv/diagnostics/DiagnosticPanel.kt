@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ru.university.dronecv.journals.JournalTitleDialog
 import java.util.Locale
 
 @Composable
@@ -36,6 +37,7 @@ fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: 
         ui.ort?.let { Text("ORT: среднее ${fmt(it.mean)}, медиана ${fmt(it.median)} мс", style = MaterialTheme.typography.bodySmall) }
 
     }
+    if (ui.namingJournalId != null) JournalTitleDialog(onDismiss = { model.finishNaming() }, onSave = model::finishNaming)
     if (ui.starting) Text("Подготовка записи…", style = MaterialTheme.typography.bodySmall)
     ui.recordingIssue?.let { Text("Запись неполна: $it", style = MaterialTheme.typography.bodySmall) }
     ui.exportStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

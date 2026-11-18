@@ -41,6 +41,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     private var sampler: Job? = null
     private var report: DiagnosticReport? = null
     private var timeline: TimelineWriter? = null
+    private var archiveId: String? = null
     private val archive = JournalArchives.get(app)
     private var startRevision = 0L
     private val mutableUi = MutableStateFlow(DiagnosticUi())
@@ -89,6 +90,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             return@synchronized
         }
         timeline = writer
+        archiveId = reservation.file.name
         writer.record("header", "{${ru.university.dronecv.PackagedBuild.identity.jsonFields()},\"start_ns\":\"$timelineStartNs\",\"started_epoch_ms\":\"$startedEpochMs\",\"clock\":\"elapsed_realtime_ns\",\"measurement_clock\":\"monotonic_nano_time\",\"device\":${quote("${Build.MANUFACTURER} ${Build.MODEL}")},\"android_release\":${quote(Build.VERSION.RELEASE)},\"model_asset\":${quote(BuildConfig.DRONE_MODEL_ASSET)},\"model_sha256\":${quote(BuildConfig.DRONE_MODEL_SHA256)},\"confidence\":$confidence,\"intra_op_threads\":$threads,\"diagnostic_report_required\":true,\"android_sdk\":${Build.VERSION.SDK_INT},\"warmup\":{\"method\":\"manual\",\"completed_frames_before_session\":$warmupCompletedFrames}}", timelineStartNs)
         frames.timeline = { type, data, _ -> writer.record(type, data, SystemClock.elapsedRealtimeNanos()) }
         sampler = viewModelScope.launch(Dispatchers.Default) {
@@ -118,7 +120,9 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             snapshot, resources.toList(), intraThreads, BuildConfig.BUILD_TYPE, warmupFrames)
         report = result
         timeline?.finishDiagnostic(result, SystemClock.elapsedRealtimeNanos())
-        mutableUi.update { it.copy(recording = false, report = result) }
+        val namingJournalId = archiveId.takeUnless { interrupted }
+        archiveId = null
+        mutableUi.update { it.copy(recording = false, report = result, namingJournalId = namingJournalId) }
         viewModelScope.launch(Dispatchers.Default) {
             val pipeline = durationSummary(snapshot.frames.map { it.pipelineMs })
             val ort = durationSummary(snapshot.frames.map { it.inferenceMs })
@@ -127,6 +131,22 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             }
         }
     }
+    fun finishNaming(title: String? = null) {
+        val current = mutableUi.value
+        val id = current.namingJournalId ?: return
+        mutableUi.update { it.copy(namingJournalId = null) }
+        if (title.isNullOrBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                archive.rename(id, title)
+            } catch (e: Exception) {
+                mutableUi.updateForSession(checkNotNull(current.sessionId), { it.sessionId }) {
+                    it.copy(exportStatus = "Не удалось сохранить название: ${e.message}")
+                }
+            }
+        }
+    }
+
     private fun sampleResources(start: Long): ResourceSample {
         val now = System.nanoTime()
         val pss = try { Debug.getPss().takeIf { it > 0 } } catch (_: Exception) { null }
@@ -147,4 +167,5 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
 
 data class DiagnosticUi(val recording: Boolean = false, val report: DiagnosticReport? = null, val exportStatus: String? = null,
                         val pipeline: DurationSummary? = null, val ort: DurationSummary? = null, val elapsedSeconds: Long = 0,
-                        val sessionId: String? = null, val recordingIssue: String? = null, val starting: Boolean = false)
+                        val sessionId: String? = null, val recordingIssue: String? = null, val starting: Boolean = false,
+                        val namingJournalId: String? = null)

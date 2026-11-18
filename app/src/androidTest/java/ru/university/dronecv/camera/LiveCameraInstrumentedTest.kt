@@ -16,10 +16,13 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -30,6 +33,7 @@ import java.io.FileInputStream
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -135,6 +139,23 @@ class LiveCameraInstrumentedTest {
         }
     }
 
+    @Test fun yoloOnlyOmitsTransientCandidateRowEvenWithFreshResult() {
+        compose.onNodeWithText("Камера").performClick()
+        compose.onNodeWithText("A: YOLO").performScrollTo().performClick()
+        compose.onNodeWithText("Режим: A: YOLO").assertExists()
+        compose.onNodeWithText("Начать детекцию").performScrollTo().performClick()
+
+        val ready = hasTestTag("live-frame-ready")
+        val transient = hasText("Последний YOLO:", substring = true)
+        compose.waitUntil(90_000) {
+            val nodes = compose.onAllNodes(ready or transient).fetchSemanticsNodes()
+            if (nodes.any(ready::matches)) {
+                assertTrue("Candidate row must stay out of the YOLO-only controls", nodes.none(transient::matches))
+                true
+            } else false
+        }
+    }
+
     @Test fun zoomRequestKeepsCameraRunningAndCanReturnToOne() {
         openAndStart()
         compose.onNodeWithTag("zoom-five").performScrollTo().performClick()
@@ -191,6 +212,59 @@ class LiveCameraInstrumentedTest {
         val exportTag = "archive-export-$archiveId"
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag(exportTag))
         compose.onNodeWithTag(exportTag).assertIsDisplayed().assertIsEnabled()
+    }
+
+    @Test fun diagnosticStopNamesOnlyItsJournalAndArchiveCanRenameIt() {
+        openAndStart()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val archive = JournalArchives.get(context.applicationContext as Application)
+        val previousIds = archive.inventory().entries.map { it.id }.toSet()
+
+        fun finishSession() {
+            compose.onNodeWithTag("diagnostic-start").performScrollTo().performClick()
+            compose.waitUntil(15_000) {
+                compose.onAllNodesWithTag("diagnostic-stop").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithTag("diagnostic-stop").performScrollTo().performClick()
+        }
+
+        finishSession()
+        compose.onNodeWithText("Пропустить").performClick()
+        compose.waitUntil(15_000) {
+            archive.inventory().entries.any { it.id !in previousIds && it.state == JournalState.COMPLETE }
+        }
+        val skipped = archive.inventory().entries.single { it.id !in previousIds }
+        assertTrue(skipped.title.matches(Regex("""\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}""")))
+
+        finishSession()
+        val title = "Фронт · лес · 150 м · 5×"
+        compose.onNodeWithTag("journal-title").performTextInput(title)
+        compose.onNodeWithText("Сохранить название").performClick()
+
+        compose.onNodeWithText("Журналы").performClick()
+        val archiveModel = compose.runOnIdle {
+            ViewModelProvider(compose.activity)[JournalArchiveViewModel::class.java]
+        }
+        compose.waitUntil(15_000) {
+            archiveModel.ui.value.inventory?.entries?.any {
+                it.id !in previousIds && it.id != skipped.id && it.state == JournalState.COMPLETE && it.title == title
+            } == true
+        }
+        val saved = archiveModel.ui.value.inventory!!.entries.single { it.id !in previousIds && it.id != skipped.id }
+        val rename = "archive-rename-${saved.id}"
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag(rename))
+        compose.onNodeWithTag(rename).performClick()
+        compose.onNodeWithTag("journal-title").performTextReplacement("Фронт · чистый фон · 150 м · 5×")
+        compose.onNodeWithText("Сохранить название").performClick()
+        compose.waitUntil(15_000) {
+            archiveModel.ui.value.inventory?.entries?.any {
+                it.id == saved.id && it.title == "Фронт · чистый фон · 150 м · 5×"
+            } == true
+        }
+        val restored = archive.inventory().entries.single { it.id == saved.id }
+        assertEquals(saved.bytes, restored.bytes)
+        assertEquals(JournalState.COMPLETE, restored.state)
+        assertEquals(skipped.title, archive.inventory().entries.single { it.id == skipped.id }.title)
     }
 
     @Test fun backgroundRecreationAndBothLandscapeDirectionsResumeInference() {

@@ -1,6 +1,12 @@
 'use strict';
 
-const form = document.querySelector('#pilot');
+const fileInput = document.querySelector('#reports');
+const errors = document.querySelector('#errors');
+const form = document.querySelector('#conditions');
+const editor = form.querySelector('fieldset');
+const formStatus = document.querySelector('#conditions-status');
+const runSelect = document.querySelector('#run-select');
+const runsBody = document.querySelector('#runs tbody');
 const statusLine = document.querySelector('#status');
 const resultSection = document.querySelector('#result');
 const table = document.querySelector('#attempts');
@@ -18,42 +24,138 @@ const integrityLabels = {
   reported_loss: 'журнал сообщает о потерях',
   inconsistent_counts: 'расхождение счётчиков',
 };
-let result = null;
+let runs = [];
 let revision = 0;
 
-function clearResult() {
-  revision++;
-  result = null;
-  resultSection.hidden = true;
-  statusLine.textContent = '';
+function sourceLabel(source) {
+  return source.archive ? `${source.archive} / ${source.path}` : source.filename;
 }
 
-form.addEventListener('input', clearResult);
+async function analyze(source, start = 0, conditions = {}) {
+  const run = YoloPilot.analyzeText(await source.text(), start, conditions, source.filename);
+  run.source = {
+    run_name: source.title, archive_id: source.id ?? null, archive_file: source.archive ?? null,
+    archive_path: source.path ?? null, ...run.source,
+  };
+  return run;
+}
+
+fileInput.addEventListener('change', async () => {
+  const submitted = ++revision;
+  const files = Array.from(fileInput.files);
+  runs = [];
+  errors.replaceChildren();
+  errors.hidden = true;
+  resultSection.hidden = true;
+  editor.disabled = runSelect.disabled = false;
+  statusLine.textContent = files.length ? 'Читаю журналы…' : '';
+  if (!files.length) return;
+
+  const imported = [];
+  const onError = (filename, error) => {
+    if (submitted !== revision) return;
+    const message = document.createElement('li');
+    message.textContent = `${filename} — ${error.message}`;
+    errors.append(message);
+    errors.hidden = false;
+  };
+  for (const file of files) {
+    try {
+      const sources = await YoloPilotArchive.journals(file, onError);
+      for (const source of sources) {
+        if (submitted !== revision) return;
+        try {
+          imported.push({ source, result: await analyze(source), draft: { start: '0' } });
+        } catch (error) {
+          onError(sourceLabel(source), error);
+        }
+      }
+    } catch (error) {
+      onError(file.name, error);
+    }
+  }
+  if (submitted !== revision) return;
+  runs = imported;
+  statusLine.textContent = runs.length ? `Загружено прогонов: ${runs.length}.` : 'Не удалось загрузить ни одного прогона.';
+  if (!runs.length) return;
+  runSelect.replaceChildren(...runs.map(({ source }, index) => new Option(`${index + 1}. ${source.title}`, index)));
+  renderRuns();
+  showSelected();
+  resultSection.hidden = false;
+});
+
+function renderRuns() {
+  runsBody.replaceChildren();
+  runs.forEach(({ source, result }, index) => {
+    const row = runsBody.insertRow();
+    const { summary, selection } = result;
+    const name = row.insertCell();
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = `${index + 1}. ${source.title}`;
+    button.addEventListener('click', () => {
+      if (runSelect.disabled) return;
+      runSelect.value = String(index);
+      showSelected();
+    });
+    name.append(button);
+    if (result.source.integrity_issues?.length) {
+      const warning = document.createElement('small');
+      warning.textContent = 'Проблемы целостности';
+      name.append(warning);
+    }
+    row.insertCell().textContent = `${summary.checked} / ${selection.target}`;
+    row.insertCell().textContent = summary.with_candidate;
+    row.insertCell().textContent = summary.candidate_fraction === null ? '—' : percent.format(summary.candidate_fraction);
+  });
+}
+
+function showSelected() {
+  const run = runs[runSelect.value];
+  for (const input of form.querySelectorAll('input')) input.value = run.draft[input.name] ?? '';
+  formStatus.textContent = run.dirty ? 'Примените условия, чтобы включить их в CSV.' : '';
+  document.querySelector('#run-title').textContent = run.source.title;
+  document.querySelector('#run-source').textContent = sourceLabel(run.source);
+  render(run.result);
+}
+
+runSelect.addEventListener('change', showSelected);
+form.addEventListener('input', () => {
+  const run = runs[runSelect.value];
+  run.draft = Object.fromEntries(new FormData(form));
+  run.dirty = true;
+  formStatus.textContent = 'Примените условия, чтобы включить их в CSV.';
+});
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  clearResult();
+  const run = runs[runSelect.value];
   const submitted = revision;
-  const { report: file, start, threshold_pct: threshold, ...conditions } = Object.fromEntries(new FormData(form));
+  const { start, threshold_pct: threshold, ...fields } = Object.fromEntries(new FormData(form));
+  const conditions = Object.fromEntries(Object.entries(fields).map(([field, value]) => [field, value.trim() || null]));
+  for (const field of ['equivalent_range_m', 'monitor_distance_cm']) {
+    if (conditions[field] === null) continue;
+    conditions[field] = Number(conditions[field]);
+    if (!(conditions[field] > 0) || !Number.isFinite(conditions[field])) {
+      formStatus.textContent = 'Укажите положительную дальность и расстояние до экрана либо оставьте поле пустым.';
+      return;
+    }
+  }
+  if (threshold !== '') conditions.confidence_threshold = Number(threshold) / 100;
+  editor.disabled = runSelect.disabled = true;
+  formStatus.textContent = 'Обновляю прогон…';
   try {
-    for (const field of ['equivalent_range_m', 'monitor_distance_cm']) {
-      conditions[field] = Number(conditions[field]);
-      if (!(conditions[field] > 0) || !Number.isFinite(conditions[field])) {
-        throw new RangeError('Дальность и расстояние до экрана должны быть положительными числами.');
-      }
-    }
-    for (const field of ['reference', 'view', 'background', 'camera']) {
-      conditions[field] = conditions[field].trim();
-      if (!conditions[field]) throw new TypeError('Заполните все условия серии.');
-    }
-    if (threshold !== '') conditions.confidence_threshold = Number(threshold) / 100;
-    statusLine.textContent = 'Читаю журнал…';
-    const text = await file.text();
+    const result = await analyze(run.source, start || 0, conditions);
     if (submitted !== revision) return;
-    result = YoloPilot.analyzeText(text, start, conditions, file.name);
-    render(result);
+    run.result = result;
+    run.dirty = false;
+    renderRuns();
+    showSelected();
+    formStatus.textContent = 'Условия применены.';
   } catch (error) {
-    if (submitted === revision) statusLine.textContent = 'Импорт не выполнен. ' + error.message;
+    if (submitted === revision) formStatus.textContent = error.message;
+  } finally {
+    if (submitted === revision) editor.disabled = runSelect.disabled = false;
   }
 });
 
@@ -62,7 +164,7 @@ function render(run) {
   const fromTimeline = rows.diagnostic_frames_unlinked !== null;
   const status = summary.complete ? 'Полная серия' : fromTimeline && summary.checked === selection.target
     ? 'Полнота серии не подтверждена' : 'Неполная серия';
-  statusLine.textContent = `${status} · ${summary.checked} из ${selection.target}`;
+  document.querySelector('#series-status').textContent = `${status} · ${summary.checked} из ${selection.target}`;
   const share = summary.candidate_fraction === null ? '—' : percent.format(summary.candidate_fraction);
   document.querySelector('#summary').textContent =
     `Проверено ${summary.checked}. С кандидатом ${summary.with_candidate}, без кандидата ${summary.without_candidate}. Доля с кандидатом ${share}.`;
@@ -99,7 +201,6 @@ function render(run) {
     ];
     for (const value of values) row.insertCell().textContent = value;
   }
-  resultSection.hidden = false;
 }
 
 function download(name, mime, data) {
@@ -112,8 +213,13 @@ function download(name, mime, data) {
 }
 
 document.querySelector('#csv').addEventListener('click', () => {
-  if (result) download('yolo-pilot.csv', 'text/csv;charset=utf-8', '\uFEFF' + YoloPilot.toCsv(result));
+  if (runs.length) download('yolo-pilot-runs.csv', 'text/csv;charset=utf-8', '\uFEFF' + YoloPilot.toSummaryCsv(runs.map(run => run.result)));
+});
+document.querySelector('#attempt-csv').addEventListener('click', () => {
+  const run = runs[runSelect.value]?.result;
+  if (run) download('yolo-pilot.csv', 'text/csv;charset=utf-8', '\uFEFF' + YoloPilot.toCsv(run));
 });
 document.querySelector('#json').addEventListener('click', () => {
-  if (result) download('yolo-pilot.json', 'application/json', JSON.stringify(result, null, 2) + '\n');
+  const run = runs[runSelect.value]?.result;
+  if (run) download('yolo-pilot.json', 'application/json', JSON.stringify(run, null, 2) + '\n');
 });

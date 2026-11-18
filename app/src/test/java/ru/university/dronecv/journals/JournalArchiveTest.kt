@@ -3,6 +3,7 @@ package ru.university.dronecv.journals
 import org.junit.Assert.*
 import org.junit.Test
 import ru.university.dronecv.timeline.TimelineWriter
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FilterOutputStream
@@ -12,6 +13,7 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipInputStream
 
 class JournalArchiveTest {
     private fun root(): File = Files.createTempDirectory("journal-archive").toFile()
@@ -83,6 +85,81 @@ class JournalArchiveTest {
             assertTrue(restored.entries.first { it.id==first.name }.exported)
             assertFalse(restored.entries.first { it.id==second.name }.exported)
         } finally {root.deleteRecursively()}
+    }
+
+    @Test fun titlesPersistSeparatelyAndEqualTitlesExportAsSeparateMembers() {
+        val root = root()
+        try {
+            val store = JournalArchive(root, epochMillis = { 1_800_000_000_000L })
+            val first = finish(store)
+            val legacy = File(root, "diagnostic-legacy.ndjson").apply { writeText("old journal\n") }
+            val original = first.readBytes()
+            val defaultTitle = store.inventory().entries.single { it.id == first.name }.title
+            assertTrue(defaultTitle.matches(Regex("""\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}""")))
+            store.rename(first.name, " ")
+            assertEquals(defaultTitle, store.inventory().entries.single { it.id == first.name }.title)
+
+            val title = "Фото / лес \"A\" · 5×"
+            store.rename(first.name, "  $title  ")
+            store.rename(legacy.name, title)
+            val restored = JournalArchive(root)
+            assertEquals(listOf(title, title), restored.inventory().entries.map { it.title })
+
+            val single = restored.selectExport(first.name)
+            assertEquals("Фото _ лес _A_ · 5×.ndjson", single.suggestedName)
+            val output = ByteArrayOutputStream()
+            single.copy({ output })
+            assertArrayEquals(original, output.toByteArray())
+            output.reset()
+
+            restored.selectZip(listOf(first.name, legacy.name, first.name)).copy({ output })
+            val members = ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
+                buildMap {
+                    while (true) {
+                        val entry = zip.nextEntry ?: break
+                        put(entry.name, zip.readBytes())
+                    }
+                }
+            }
+            val firstPath = "1 - Фото _ лес _A_ · 5×.ndjson"
+            val secondPath = "2 - Фото _ лес _A_ · 5×.ndjson"
+            assertEquals(setOf(firstPath, secondPath, "manifest.json"), members.keys)
+            assertArrayEquals(original, members.getValue(firstPath))
+            assertArrayEquals(legacy.readBytes(), members.getValue(secondPath))
+            assertArrayEquals(original, first.readBytes())
+            val manifest = members.getValue("manifest.json").decodeToString()
+            assertTrue(manifest.contains("""{"path":"$firstPath","id":"${first.name}","title":"Фото / лес \"A\" · 5×"}"""))
+            assertTrue(manifest.contains("""{"path":"$secondPath","id":"${legacy.name}","title":"Фото / лес \"A\" · 5×"}"""))
+            assertTrue(restored.inventory().entries.all { it.exported && !it.inUse })
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun batchSelectionPinsAllAndCancellationOrFailedDestinationCloseAllowsRetry() {
+        val root = root()
+        try {
+            val store = JournalArchive(root)
+            val ids = listOf(finish(store).name, finish(store, JournalKind.MOTION).name)
+            rejected { store.selectZip(ids + "diagnostic-missing.ndjson") }
+            assertTrue(store.inventory().entries.none { it.inUse })
+
+            val selection = store.selectZip(ids)
+            assertTrue(store.inventory().entries.all { it.inUse && !it.exported })
+            ids.forEach { id -> rejected { store.delete(id, true) } }
+            selection.close()
+            assertTrue(store.inventory().entries.none { it.inUse || it.exported })
+
+            try {
+                store.selectZip(ids).copy({
+                    object : ByteArrayOutputStream() {
+                        override fun close() { throw IOException("destination close failed") }
+                    }
+                })
+                fail("Expected destination close to fail")
+            } catch (_: IOException) { }
+            assertTrue(store.inventory().entries.none { it.inUse || it.exported })
+            store.selectZip(ids).copy({ ByteArrayOutputStream() })
+            assertTrue(JournalArchive(root).inventory().entries.all { it.exported && !it.inUse })
+        } finally { root.deleteRecursively() }
     }
 
     @Test fun countAdmissionDeletesOnlyOldestCompletedExportedUnusedFile() {

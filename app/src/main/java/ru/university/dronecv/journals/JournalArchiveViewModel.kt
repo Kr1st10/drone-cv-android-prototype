@@ -22,10 +22,16 @@ object JournalArchives {
     }
 }
 
-data class ArchiveUi(val inventory: JournalInventory? = null, val busy: Boolean = false,
-                     val message: String? = null, val error: String? = null, val loadError: String? = null)
+data class ArchiveUi(
+    val inventory: JournalInventory? = null,
+    val busy: Boolean = false,
+    val checkedIds: Set<String> = emptySet(),
+    val message: String? = null,
+    val error: String? = null,
+    val loadError: String? = null,
+)
 
-/** Owns the selected file across rotation and mode switches, including the system picker interval. */
+/** Owns selected files across rotation, mode changes and the system picker. */
 class JournalArchiveViewModel(private val app: Application) : AndroidViewModel(app) {
     private val store = JournalArchives.get(app)
     val policy: JournalPolicy get() = store.policy
@@ -34,25 +40,45 @@ class JournalArchiveViewModel(private val app: Application) : AndroidViewModel(a
     val ui = mutableUi.asStateFlow()
 
     fun refresh() = viewModelScope.launch(Dispatchers.IO) {
-        try { mutableUi.update { it.copy(inventory = store.inventory(), loadError = null) } }
-        catch (e: Exception) { mutableUi.update { it.copy(loadError = "Не удалось прочитать архив: ${e.message}") } }
+        try {
+            val inventory = store.inventory()
+            val ids = inventory.entries.map { it.id }.toSet()
+            mutableUi.update { it.copy(inventory = inventory, checkedIds = it.checkedIds.intersect(ids), loadError = null) }
+        } catch (e: Exception) {
+            mutableUi.update { it.copy(loadError = "Не удалось прочитать архив: ${e.message}") }
+        }
     }
-    fun select(id: String, launchPicker: (String) -> Unit) {
+    fun toggle(id: String) {
+        mutableUi.update {
+            if (it.busy) it
+            else it.copy(checkedIds = if (id in it.checkedIds) it.checkedIds - id else it.checkedIds + id)
+        }
+    }
+
+    fun select(id: String, launchPicker: (String, Boolean) -> Unit) =
+        prepareExport(listOf(id), zipped = false, launchPicker)
+
+    fun selectChecked(launchPicker: (String, Boolean) -> Unit) =
+        prepareExport(mutableUi.value.checkedIds.toList(), zipped = true, launchPicker)
+
+    private fun prepareExport(ids: List<String>, zipped: Boolean, launchPicker: (String, Boolean) -> Unit) {
         if (mutableUi.value.busy) return
         mutableUi.update { it.copy(busy = true, message = null, error = null) }
         viewModelScope.launch(Dispatchers.IO) {
             var selected: JournalArchive.Export? = null
             try {
-                selected = store.selectExport(id)
+                val lease = if (zipped) store.selectZip(ids) else store.selectExport(ids.single())
+                selected = lease
+                val filename = lease.suggestedName
                 withContext(Dispatchers.Main.immediate) {
-                    pending = selected
-                    launchPicker(id)
+                    pending = lease
+                    launchPicker(filename, zipped)
                     selected = null // Ownership is now in pending, until the picker callback.
                 }
             } catch (e: Exception) {
                 withContext(NonCancellable + Dispatchers.Main.immediate) {
                     pending?.close(); pending = null
-                    mutableUi.update { it.copy(busy = false, error = "Не удалось выбрать журнал: ${e.message}") }
+                    mutableUi.update { it.copy(busy = false, error = "Не удалось подготовить экспорт: ${e.message}") }
                 }
             } finally { selected?.close() }
         }
@@ -70,7 +96,9 @@ class JournalArchiveViewModel(private val app: Application) : AndroidViewModel(a
             try {
                 selected.copy({ checkNotNull(app.contentResolver.openOutputStream(uri)) { "Не удалось открыть файл" } },
                     { coroutineContext.ensureActive() })
-                mutableUi.update { it.copy(message = "Журнал экспортирован", error = null) }
+                mutableUi.update {
+                    it.copy(message = if (selected.zipped) "ZIP с журналами экспортирован" else "Журнал экспортирован", error = null)
+                }
             } catch (e: Exception) {
                 mutableUi.update { it.copy(error = "Экспорт не завершён: ${e.message}") }
             } finally {
@@ -81,15 +109,22 @@ class JournalArchiveViewModel(private val app: Application) : AndroidViewModel(a
         }
         job.invokeOnCompletion { selected.close() }
     }
-    fun delete(id: String, confirmed: Boolean) {
+    fun rename(id: String, title: String) =
+        updateArchive("Название сохранено", "Переименование не выполнено") { store.rename(id, title) }
+
+    fun delete(id: String, confirmed: Boolean) =
+        updateArchive("Журнал удалён", "Удаление не выполнено") { store.delete(id, allowUnexported = confirmed) }
+
+    private fun updateArchive(success: String, failure: String, action: () -> Unit) {
         if (mutableUi.value.busy) return
         mutableUi.update { it.copy(busy = true, message = null, error = null) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                store.delete(id, allowUnexported = confirmed)
-                mutableUi.update { it.copy(message = "Журнал удалён") }
-            } catch (e: Exception) { mutableUi.update { it.copy(error = "Удаление не выполнено: ${e.message}") } }
-            finally { mutableUi.update { it.copy(busy = false) }; refresh() }
+                action()
+                mutableUi.update { it.copy(message = success) }
+            } catch (e: Exception) {
+                mutableUi.update { it.copy(error = "$failure: ${e.message}") }
+            } finally { mutableUi.update { it.copy(busy = false) }; refresh() }
         }
     }
     override fun onCleared() { pending?.close(); pending = null; super.onCleared() }
