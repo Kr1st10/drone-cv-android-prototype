@@ -21,10 +21,12 @@ try {
   const snap = () => page.evaluate(() => referenceTab.snapshot());
   const ready = () => page.waitForFunction(() => referenceTab.snapshot().load_state === 'ready');
   const gray = 'neutral_gray_808080_v1';
+  const forest = 'forest_40_let_pobedy_v1';
   const backgrounds = {
     [gray]: { hex: '#808080', rgb: 'rgb(128, 128, 128)' },
+    sky: { hex: null, asset: 'reference_assets/sky.svg' },
     neutral: { hex: '#FFFFFF', rgb: 'rgb(255, 255, 255)' },
-    sky: { hex: null, asset: 'reference_assets/sky.svg' }
+    [forest]: { hex: null, asset: 'reference_assets/forest_40_let_pobedy_v1.jpg' }
   };
   const viewport = page.locator('#referenceViewport');
   const selector = page.locator('#referenceBackground');
@@ -34,10 +36,14 @@ try {
     return [img.left - box.left, img.top - box.top];
   });
   const checkBackground = async id => {
-    const { color, image } = await viewport.evaluate(v => ({
-      color: getComputedStyle(v).backgroundColor, image: getComputedStyle(v).backgroundImage
-    }));
-    if (id === 'sky') assert.match(image, /reference_assets\/sky\.svg/);
+    const { color, image, size } = await viewport.evaluate(v => {
+      const style = getComputedStyle(v);
+      return { color: style.backgroundColor, image: style.backgroundImage, size: style.backgroundSize };
+    });
+    if (backgrounds[id].asset) {
+      assert.ok(image.includes(backgrounds[id].asset));
+      assert.equal(size, 'cover');
+    }
     else assert.deepEqual([color, image], [backgrounds[id].rgb, 'none']);
     const state = await snap();
     assert.equal(state.background, id);
@@ -124,12 +130,14 @@ try {
       }
       assert.match(await page.textContent('#referenceBackgroundNote'),
         variant === 'original' ? /только за её краями/ : /в прозрачных областях/);
+      let white;
       for (const id of Object.keys(backgrounds)) {
         const previous = await currentRun();
         await selector.selectOption(id);
         await checkBackground(id);
         assert.equal(await currentRun(), previous);
         const selected = await snap();
+        if (id === 'neutral') white = selected;
         for (const field of ['scale_percent', 'calibration_id', 'image_width_css_px', 'image_height_css_px',
           'review_segment_display_mm', 'equivalent_distance_m', 'geometry_revision', 'source_sha256',
           'source_size_px', 'crop_ltrb_px', 'segment_a_source_px', 'segment_b_source_px']) {
@@ -143,6 +151,11 @@ try {
         assert.equal(captured(lastRun).stimulus_variant, variant);
         runs.set(key, lastRun);
       }
+      await selector.selectOption('neutral');
+      await checkBackground('neutral');
+      assert.deepEqual(await snap(), white);
+      assert.deepEqual(await position(), baselinePosition);
+      assert.equal(await currentRun(), lastRun);
     }
     const clean = await snap();
     await page.click('#referenceDouble');
@@ -153,13 +166,17 @@ try {
   }
   for (const samples of [previews, shows]) {
     const [original] = samples.get('2751_original_' + gray);
-    for (const [id, channel] of [[gray, 128], ['neutral', 255], ['sky', null]]) {
+    for (const [id, channel] of [[gray, 128], ['neutral', 255], ['sky', null], [forest, null]]) {
       const [inside, outside] = samples.get('2751_original_' + id);
       const [transparent, around] = samples.get('2751_clean_' + id);
       assert.deepEqual(inside, original);
       assert.deepEqual(around, outside);
       if (channel !== null) assert.deepEqual(transparent, [channel, channel, channel, 255]);
-      else assert.ok(transparent[2] > transparent[0], 'visible sky through the clean PNG');
+      else if (id === 'sky') assert.ok(transparent[2] > transparent[0], 'visible sky through the clean PNG');
+      else {
+        assert.ok(transparent[1] > transparent[2], 'visible foliage through the clean PNG');
+        assert.notDeepEqual(transparent, [37, 52, 42, 255], 'forest JPEG loaded');
+      }
     }
   }
   await page.selectOption('#referencePhotoSelect', 'cabinet_top');
@@ -214,8 +231,40 @@ try {
     await analyze();
     await checkExport(key);
   }
+  const forestKey = '2711_clean_' + forest;
+  await pilot.evaluate(hash => { location.hash = hash; }, new URL(runs.get(forestKey)).hash);
+  await pilot.waitForFunction(() => document.querySelector('[name=background]').value === 'forest_40_let_pobedy_v1');
+  await analyze();
+  await checkExport(forestKey);
+  await pilot.close();
+  await page.bringToFront();
+
+  await page.selectOption('#referencePhotoSelect', 'cabinet_img_2751_archive_v4');
+  await page.selectOption('#referenceVariant', 'clean');
+  await ready();
+  await selector.selectOption(forest);
+  // Measure the distance between the rendered source points using the DOM image rectangle.
+  const renderedSegment = () => page.locator('#referenceDisplay').evaluate(img => {
+    const { width, height } = img.getBoundingClientRect();
+    const state = referenceTab.snapshot();
+    return { width, height, mm: Math.hypot(487 * width / 930, 3 * height / 175) * 0.25,
+      calibration: state.calibration_id, scale: state.scale_percent };
+  });
+  for (const target of [100, 127, 10]) {
+    await page.fill('#referenceTarget', String(target));
+    await page.click('#referenceApplyTarget');
+    const preview = await renderedSegment();
+    assert.ok(Math.abs(preview.mm - 325 * 4.34 / target) < 0.01);
+    await run(forest, false);
+    assert.deepEqual(await renderedSegment(), preview);
+  }
+  const beforeReject = await renderedSegment();
+  await page.fill('#referenceTarget', '5');
+  await page.click('#referenceApplyTarget');
+  assert.match(await page.textContent('#referenceTargetStatus'), /не помещается/);
+  assert.deepEqual(await renderedSegment(), beforeReject);
   assert.deepEqual(errors, []);
-  console.log('24 paired shows, rendered backgrounds, frozen conditions and pilot JSON/CSV: OK');
+  console.log('Paired shows, forest round trip, rendered A–B, frozen conditions and pilot JSON/CSV: OK');
 } finally {
   await browser.close();
 }

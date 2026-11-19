@@ -377,10 +377,12 @@
   });
   // Archive-grid stimuli have their own IDs. Model and motor labels come from the v2 reference.
   const grayBackground = 'neutral_gray_808080_v1';
+  const forestBackground = 'forest_40_let_pobedy_v1';
   const pairedBackgrounds = {
     neutral: { background_hex: '#FFFFFF' },
     [grayBackground]: { background_hex: '#808080' },
-    sky: { background_hex: null, background_asset: 'reference_assets/sky.svg' }
+    sky: { background_hex: null, background_asset: 'reference_assets/sky.svg' },
+    [forestBackground]: { background_hex: null, background_asset: 'reference_assets/forest_40_let_pobedy_v1.jpg' }
   };
   const cabinetPairs = [
     { number: 2751, crop: [250, 915, 1180, 1090], bounds: [270, 933, 1161, 1066],
@@ -524,8 +526,13 @@
       <p><label>Желаемая эквивалентная дальность, м <input id="referenceTarget" type="text" inputmode="decimal" placeholder="100,00"></label><button id="referenceApplyTarget">Рассчитать масштаб</button><span id="referenceTargetStatus" role="status"></span></p>
       <p><label>Камера Xiaomi 17 Pro <select id="referenceCamera"><option value="5">Физическая телекамера 5× — план опыта</option><option value="1">1× — сравнение</option></select></label></p>
       <p>1×/5× — обозначение условий опыта. Дальность не умножается на 5; камера меняет размер объекта в кадре YOLO. Использование физического телевика проверяется на телефоне.</p>
-      <p><label>Фон <select id="referenceBackground"><option value="neutral">Белый</option><option value="neutral_gray_808080_v1" hidden>Серый</option><option value="sky">Небо</option></select></label><button id="referenceTrial">Режим испытания</button></p>
+      <p><label>Фон <select id="referenceBackground"><option value="neutral">Белый</option><option value="neutral_gray_808080_v1" hidden>Серый</option><option value="sky">Небо</option><option value="${forestBackground}" hidden>Лес — ул. 40 лет Победы</option></select></label><button id="referenceTrial">Режим испытания</button></p>
       <p id="referenceBackgroundNote"></p>
+      <p id="referenceForestCredit" class="hidden">Фото
+        <a href="https://commons.wikimedia.org/wiki/File:40_лет_Победы.jpg" target="_blank" rel="noopener">Yan.gorev</a> ·
+        <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a> ·
+        кадрировано до 768 × 432 px.
+      </p>
       <p id="referencePilotRun" class="hidden"><a id="referencePilotLink" target="_blank" rel="noopener">Открыть пилот с сохранёнными условиями</a> <span id="referencePilotLabel"></span></p>
       <p id="referenceReadout" aria-live="polite"></p>
       <details id="referenceSegmentReview" class="hidden"><summary id="referenceSegmentTitle">Разметка A–B</summary><label><input id="referenceSegmentToggle" type="checkbox"> Показать отрезок A–B</label><p id="referenceSegmentReadout"></p></details><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
@@ -610,11 +617,14 @@
       $('referenceVariantNote').textContent = p.pending ? 'Чистый фон недоступен. ' + p.pending : '';
       const displayedBackground = paired ? pairedBackground : background;
       $('referenceBackground').querySelector(`option[value="${grayBackground}"]`).hidden = !paired;
+      $('referenceBackground').querySelector(`option[value="${forestBackground}"]`).hidden = !paired;
       $('referenceBackground').value = displayedBackground;
       $('referenceBackground').disabled = paired && trialPhase !== 'idle';
       $('referenceCamera').value = camera;
       viewport.classList.toggle('reference-gray', displayedBackground === grayBackground);
       viewport.classList.toggle('reference-sky', displayedBackground === 'sky');
+      viewport.classList.toggle('reference-forest', displayedBackground === forestBackground);
+      $('referenceForestCredit').classList.toggle('hidden', displayedBackground !== forestBackground);
       $('referenceBackgroundNote').textContent = paired ? (variant === 'original'
         ? 'Оригинал сохраняет фон фотографии. Выбранная подложка видна только за её краями.'
         : 'Выбранная подложка видна в прозрачных областях и вокруг изображения.') : background === 'sky' && !p.transparent ? 'Локальный рисунок неба. Исходное фото непрозрачное: его собственный фон остаётся прямоугольником; корректное наложение дрона на небо не имитируется.' : background === 'sky' ? 'Локальный рисунок неба; используется прозрачный исходник.' : 'Нейтральный однотонный фон. Собственный фон фотографии сохраняется.';
