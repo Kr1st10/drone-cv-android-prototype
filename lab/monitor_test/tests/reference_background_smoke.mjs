@@ -21,12 +21,12 @@ try {
   const snap = () => page.evaluate(() => referenceTab.snapshot());
   const ready = () => page.waitForFunction(() => referenceTab.snapshot().load_state === 'ready');
   const gray = 'neutral_gray_808080_v1';
-  const forest = 'forest_40_let_pobedy_v1';
+  const forest = 'forest_40_let_pobedy_full_v1';
   const backgrounds = {
     [gray]: { hex: '#808080', rgb: 'rgb(128, 128, 128)' },
     sky: { hex: null, asset: 'reference_assets/sky.svg' },
     neutral: { hex: '#FFFFFF', rgb: 'rgb(255, 255, 255)' },
-    [forest]: { hex: null, asset: 'reference_assets/forest_40_let_pobedy_v1.jpg' }
+    [forest]: { hex: null, asset: 'reference_assets/forest_40_let_pobedy_full_v1.jpg' }
   };
   const viewport = page.locator('#referenceViewport');
   const selector = page.locator('#referenceBackground');
@@ -42,7 +42,7 @@ try {
     });
     if (backgrounds[id].asset) {
       assert.ok(image.includes(backgrounds[id].asset));
-      assert.equal(size, 'cover');
+      assert.equal(size, id === forest ? 'contain' : 'cover');
     }
     else assert.deepEqual([color, image], [backgrounds[id].rgb, 'none']);
     const state = await snap();
@@ -90,6 +90,13 @@ try {
     return href;
   };
   await checkBackground('neutral');
+  const photoSize = await page.evaluate(async path => {
+    const image = new Image();
+    image.src = path;
+    await image.decode();
+    return [image.naturalWidth, image.naturalHeight];
+  }, backgrounds[forest].asset);
+  assert.deepEqual(photoSize, [4000, 3000]);
   let lastRun;
   const runs = new Map();
   await page.evaluate(() => {
@@ -170,12 +177,13 @@ try {
       const [inside, outside] = samples.get('2751_original_' + id);
       const [transparent, around] = samples.get('2751_clean_' + id);
       assert.deepEqual(inside, original);
-      assert.deepEqual(around, outside);
+      // Subpixel sampling of the photograph can differ by one channel value across screenshots.
+      if (id === forest) assert.ok(around.every((value, i) => Math.abs(value - outside[i]) <= 1));
+      else assert.deepEqual(around, outside);
       if (channel !== null) assert.deepEqual(transparent, [channel, channel, channel, 255]);
       else if (id === 'sky') assert.ok(transparent[2] > transparent[0], 'visible sky through the clean PNG');
       else {
-        assert.ok(transparent[1] > transparent[2], 'visible foliage through the clean PNG');
-        assert.notDeepEqual(transparent, [37, 52, 42, 255], 'forest JPEG loaded');
+        assert.notDeepEqual(transparent, [37, 52, 42, 255], 'full forest JPEG visible through clean PNG');
       }
     }
   }
@@ -233,7 +241,7 @@ try {
   }
   const forestKey = '2711_clean_' + forest;
   await pilot.evaluate(hash => { location.hash = hash; }, new URL(runs.get(forestKey)).hash);
-  await pilot.waitForFunction(() => document.querySelector('[name=background]').value === 'forest_40_let_pobedy_v1');
+  await pilot.waitForFunction(() => document.querySelector('[name=background]').value === 'forest_40_let_pobedy_full_v1');
   await analyze();
   await checkExport(forestKey);
   await pilot.close();

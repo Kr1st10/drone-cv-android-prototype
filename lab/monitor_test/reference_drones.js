@@ -377,12 +377,12 @@
   });
   // Archive-grid stimuli have their own IDs. Model and motor labels come from the v2 reference.
   const grayBackground = 'neutral_gray_808080_v1';
-  const forestBackground = 'forest_40_let_pobedy_v1';
+  const forestBackground = 'forest_40_let_pobedy_full_v1';
   const pairedBackgrounds = {
     neutral: { background_hex: '#FFFFFF' },
     [grayBackground]: { background_hex: '#808080' },
     sky: { background_hex: null, background_asset: 'reference_assets/sky.svg' },
-    [forestBackground]: { background_hex: null, background_asset: 'reference_assets/forest_40_let_pobedy_v1.jpg' }
+    [forestBackground]: { background_hex: null, background_asset: 'reference_assets/forest_40_let_pobedy_full_v1.jpg' }
   };
   const cabinetPairs = [
     { number: 2751, crop: [250, 915, 1180, 1090], bounds: [270, 933, 1161, 1066],
@@ -531,7 +531,7 @@
       <p id="referenceForestCredit" class="hidden">Фото
         <a href="https://commons.wikimedia.org/wiki/File:40_лет_Победы.jpg" target="_blank" rel="noopener">Yan.gorev</a> ·
         <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a> ·
-        кадрировано до 768 × 432 px.
+        полный кадр, 4000 × 3000 px.
       </p>
       <p id="referencePilotRun" class="hidden"><a id="referencePilotLink" target="_blank" rel="noopener">Открыть пилот с сохранёнными условиями</a> <span id="referencePilotLabel"></span></p>
       <p id="referenceReadout" aria-live="polite"></p>

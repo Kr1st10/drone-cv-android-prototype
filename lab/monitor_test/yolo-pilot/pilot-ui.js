@@ -35,7 +35,9 @@ function readCapturedStimulus(json) {
       (stimulus?.background === 'sky' && stimulus.background_hex === null &&
         stimulus.background_asset === 'reference_assets/sky.svg') ||
       (stimulus?.background === 'forest_40_let_pobedy_v1' && stimulus.background_hex === null &&
-        stimulus.background_asset === 'reference_assets/forest_40_let_pobedy_v1.jpg');
+        stimulus.background_asset === 'reference_assets/forest_40_let_pobedy_v1.jpg') ||
+      (stimulus?.background === 'forest_40_let_pobedy_full_v1' && stimulus.background_hex === null &&
+        stimulus.background_asset === 'reference_assets/forest_40_let_pobedy_full_v1.jpg');
     if (!['original', 'clean'].includes(stimulus?.stimulus_variant) ||
         !/^IMG_\d{4}$/.test(stimulus.source_photo_id) ||
         ![stimulus.source_sha256, stimulus.asset_sha256].every(value => /^[a-f0-9]{64}$/.test(value)) ||

@@ -55,8 +55,9 @@ node --test lab/monitor_test/tests/yolo_pilot_test.mjs lab/monitor_test/tests/yo
 как `background=neutral` с `background_hex=#FFFFFF`, серая — как
 `background=neutral_gray_808080_v1` с `background_hex=#808080`.
 Для неба сохраняются `background=sky` и `background_asset=reference_assets/sky.svg`.
-Для леса сохраняются `background=forest_40_let_pobedy_v1` и
-`background_asset=reference_assets/forest_40_let_pobedy_v1.jpg`.
+Для леса сохраняются `background=forest_40_let_pobedy_full_v1` и
+`background_asset=reference_assets/forest_40_let_pobedy_full_v1.jpg`.
+Пилот также открывает прежние ссылки на вырезку с ID `forest_40_let_pobedy_v1`.
 У фонов с изображением `background_hex` равен `null` в JSON и пустой ячейке в CSV.
 Точки A–B записываются в исходном растре. Экспорт также содержит длину отрезка
 на экране в мм, физическую длину, модельную проекцию, масштаб, ID и коэффициент
