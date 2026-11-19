@@ -187,6 +187,48 @@ try {
       }
     }
   }
+  await selector.selectOption(forest);
+  await page.click('#referenceTrial');
+  await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'active');
+  const centeredLink = await currentRun();
+  const centeredPosition = await position();
+  const centered = await snap();
+  for (let press = 0; press < 20; press++) await page.keyboard.press('Shift+ArrowRight');
+  const edged = await snap();
+  assert.equal(edged.fullscreen_fits, true);
+  assert.equal(edged.preview_visible, true);
+  assert.ok(edged.position_offset_x_css_px > 64);
+  await page.keyboard.press('Shift+ArrowRight');
+  assert.equal((await snap()).position_offset_x_css_px, edged.position_offset_x_css_px);
+  await page.keyboard.press('Home');
+  assert.deepEqual(await position(), centeredPosition);
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowUp');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowDown');
+  const moved = await snap();
+  assert.deepEqual(await position(), [centeredPosition[0] + 48, centeredPosition[1] - 48]);
+  assert.equal(moved.review_segment_display_mm, centered.review_segment_display_mm);
+  assert.equal(moved.equivalent_distance_m, centered.equivalent_distance_m);
+  assert.equal(moved.calibration_id, centered.calibration_id);
+  lastRun = await currentRun();
+  assert.equal(captured(centeredLink).position_offset_x_css_px, 0);
+  assert.equal(captured(lastRun).position_offset_x_css_px, 48);
+  assert.equal(captured(lastRun).position_offset_y_css_px, -48);
+  runs.set('2711_clean_' + forest, lastRun);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'idle');
+  await selector.selectOption('neutral');
+  assert.equal(await currentRun(), lastRun);
+  lastRun = await run('neutral', false);
+  assert.equal(captured(lastRun).position_offset_x_css_px, 48);
+  assert.equal(captured(lastRun).position_offset_y_css_px, -48);
+  runs.set('2711_clean_neutral_moved', lastRun);
+  await page.click('#referenceCenter');
+  assert.equal((await snap()).position_offset_x_css_px, 0);
+  assert.equal((await snap()).position_offset_y_css_px, 0);
+  assert.equal(captured(lastRun).position_offset_x_css_px, 48);
+
   await page.selectOption('#referencePhotoSelect', 'cabinet_top');
   await checkBackground('neutral');
   assert.equal(await currentRun(), lastRun);
@@ -229,7 +271,7 @@ try {
   };
   await analyze();
   await checkExport('2751_clean_' + gray);
-  for (const key of ['2704_clean_neutral', '2755_original_sky', '2755_clean_neutral', '2711_original_neutral', '2711_clean_sky']) {
+  for (const key of ['2704_clean_neutral', '2755_original_sky', '2755_clean_neutral', '2711_original_neutral', '2711_clean_sky', '2711_clean_neutral_moved']) {
     const link = runs.get(key);
     const expected = captured(link);
     await pilot.evaluate(hash => { location.hash = hash; }, new URL(link).hash);

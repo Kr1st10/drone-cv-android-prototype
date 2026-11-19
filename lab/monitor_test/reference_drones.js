@@ -509,6 +509,9 @@
     let camera = saved?.camera === '1' ? '1' : '5';
     let variant = saved?.variant === 'clean' ? 'clean' : 'original';
     let pilotCaptured = false;
+    const savedPosition = saved?.paired_position_css_px;
+    let pairedPosition = Array.isArray(savedPosition) && savedPosition.length === 2 && savedPosition.every(Number.isFinite)
+      ? savedPosition : [0, 0];
     let mode = saved?.range_mode === 'strict' ? 'strict' : 'approximate';
     element.innerHTML = `
       <h3>Эксперимент с эталонными БПЛА</h3>
@@ -527,6 +530,9 @@
       <p><label>Камера Xiaomi 17 Pro <select id="referenceCamera"><option value="5">Физическая телекамера 5× — план опыта</option><option value="1">1× — сравнение</option></select></label></p>
       <p>1×/5× — обозначение условий опыта. Дальность не умножается на 5; камера меняет размер объекта в кадре YOLO. Использование физического телевика проверяется на телефоне.</p>
       <p><label>Фон <select id="referenceBackground"><option value="neutral">Белый</option><option value="neutral_gray_808080_v1" hidden>Серый</option><option value="sky">Небо</option><option value="${forestBackground}" hidden>Лес — ул. 40 лет Победы</option></select></label><button id="referenceTrial">Режим испытания</button></p>
+      <p id="referencePositionControls" class="hidden">В полноэкранном режиме перемещайте коптер стрелками. Shift ускоряет перемещение, Home возвращает в центр.
+        <button type="button" id="referenceCenter">Вернуть в центр</button>
+      </p>
       <p id="referenceBackgroundNote"></p>
       <p id="referenceForestCredit" class="hidden">Фото
         <a href="https://commons.wikimedia.org/wiki/File:40_лет_Победы.jpg" target="_blank" rel="noopener">Yan.gorev</a> ·
@@ -550,7 +556,7 @@
     const savedPhotoId = saved?.photo_id ?? (saved?.model_id === 'cabinet_reference' ? 'cabinet_front' : null);
     let photo = selected.photos.find(p => p.id === savedPhotoId) || selected.photos[0];
     for (const p of profiles) select.add(new Option(p.model, p.id));
-    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, paired_background: pairedBackground, camera, ...(photo.variants ? { variant } : {}) }); }
+    function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, paired_background: pairedBackground, paired_position_css_px: pairedPosition, camera, ...(photo.variants ? { variant } : {}) }); }
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
     function choosePhoto() {
       photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
@@ -602,6 +608,15 @@
       choosePhoto();
     }
     function rangeMode() { return selected.measurements_mm ? 'approximate' : mode; }
+    function placementBounds(p, imageScale, width, height) {
+      const [left, top, right, bottom] = p.bounds_px;
+      return {
+        minX: (p.width / 2 - left) * imageScale - width / 2,
+        minY: (p.height / 2 - top) * imageScale - height / 2,
+        maxX: (p.width / 2 - right) * imageScale + width / 2,
+        maxY: (p.height / 2 - bottom) * imageScale + height / 2,
+      };
+    }
     function update() {
       const p = photo, cal = getCalibration();
       const activeMode = rangeMode();
@@ -609,6 +624,10 @@
       $('referenceRangeMode').value = activeMode;
       $('referenceTrial').disabled = trialPhase !== 'idle';
       const paired = !!p.variants;
+      const trial = document.fullscreenElement === viewport;
+      const [offsetX, offsetY] = paired ? pairedPosition : [0, 0];
+      $('referencePositionControls').classList.toggle('hidden', !paired);
+      $('referenceCenter').disabled = trialPhase !== 'idle' || (offsetX === 0 && offsetY === 0);
       const visibleAsset = loaded ? p.variants?.[variant] : null;
       $('referenceVariantLabel').classList.toggle('hidden', !paired);
       $('referenceVariant').value = variant;
@@ -631,11 +650,12 @@
       $('referenceScale').value = scale;
       if (document.activeElement !== $('referenceScaleNumber')) $('referenceScaleNumber').value = scale;
       image.style.width = p.width * scale / 100 + 'px';
+      image.style.left = trial && offsetX ? `calc(50% + ${offsetX}px)` : '';
+      image.style.top = trial && offsetY ? `calc(50% + ${offsetY}px)` : '';
       image.classList.toggle('hidden', !loaded);
       $('referenceMissing').classList.toggle('hidden', loaded);
       $('referenceMissing').textContent = loadState === 'loading' ? 'Загрузка выбранной фотографии…' : loadState === 'error' ? 'Ошибка загрузки или неверные размеры фотографии.' : 'Фотография недоступна.';
       const r = image.getBoundingClientRect(), v = viewport.getBoundingClientRect(), b = p.bounds_px;
-      const trial = document.fullscreenElement === viewport;
       const panel = trial ? viewport : element.closest('.panel'), clip = panel.getBoundingClientRect();
       const left = Math.max(v.left, 0, clip.left + panel.clientLeft), top = Math.max(v.top, 0, clip.top + panel.clientTop);
       const right = Math.min(v.right, innerWidth, clip.left + panel.clientLeft + panel.clientWidth);
@@ -647,11 +667,12 @@
         getDistance(), cal?.mm_per_css_px, geometry);
       const capacityWidth = trial ? Math.min(v.width, innerWidth) : screen.width;
       const capacityHeight = trial ? Math.min(v.height, innerHeight) : screen.height;
-      const fullscreenFits = loaded && !!b && positive(actualScale) &&
-        capacityWidth / 2 + (b[0] - p.width / 2) * actualScale >= -0.1 &&
-        capacityHeight / 2 + (b[1] - p.height / 2) * actualScale >= -0.1 &&
-        capacityWidth / 2 + (b[2] - p.width / 2) * actualScale <= capacityWidth + 0.1 &&
-        capacityHeight / 2 + (b[3] - p.height / 2) * actualScale <= capacityHeight + 0.1;
+      let fullscreenFits = false;
+      if (loaded && b && positive(actualScale)) {
+        const { minX, minY, maxX, maxY } = placementBounds(p, actualScale, capacityWidth, capacityHeight);
+        fullscreenFits = offsetX >= minX - 0.1 && offsetX <= maxX + 0.1 &&
+          offsetY >= minY - 0.1 && offsetY <= maxY + 0.1;
+      }
       const fmt = n => n == null ? 'нет данных' : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
       const candidate = p.review_segment, overlay = $('referenceSegmentOverlay');
       const segmentMm = reviewSegmentLength(p, { width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible: loaded }, cal?.mm_per_css_px);
@@ -715,6 +736,7 @@
           mask_revision: visibleAsset?.maskRevision ?? null, source_size_px: p.original_size_px, crop_ltrb_px: p.crop_px,
           segment_a_source_px: p.source_points_px[0], segment_b_source_px: p.source_points_px[1],
           css_px_per_asset_px: actualScale, mm_per_css_px: cal?.mm_per_css_px ?? null,
+          position_offset_x_css_px: offsetX, position_offset_y_css_px: offsetY,
           ...pairedBackgrounds[displayedBackground] } : {}),
         camera_label: camera + '×', background: displayedBackground, range_mode: activeMode, geometry_status: m.geometry_status ?? null, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
@@ -763,13 +785,13 @@
         mask_revision, geometry_revision, geometry_status, projection_confirmed, source_size_px, crop_ltrb_px,
         segment_a_source_px, segment_b_source_px, physical_segment_mm, projected_segment_mm,
         review_segment_display_mm, scale_percent, css_px_per_asset_px, calibration_id, mm_per_css_px,
-        background, background_hex, background_asset } = state;
+        position_offset_x_css_px, position_offset_y_css_px, background, background_hex, background_asset } = state;
       const conditions = { reference: source_photo_id, view: state.view, equivalent_range_m: state.equivalent_distance_m,
         monitor_distance_cm: state.screen_distance_cm, camera: state.camera_label, photo_id, source_photo_id,
         source_sha256, asset_id, asset_sha256, asset_revision, stimulus_variant, mask_revision, geometry_revision,
         geometry_status, projection_confirmed, source_size_px, crop_ltrb_px, segment_a_source_px, segment_b_source_px,
         physical_segment_mm, projected_segment_mm, review_segment_display_mm, scale_percent, css_px_per_asset_px,
-        calibration_id, mm_per_css_px, background, background_hex, background_asset };
+        calibration_id, mm_per_css_px, position_offset_x_css_px, position_offset_y_css_px, background, background_hex, background_asset };
       const url = new URL('yolo-pilot/index.html', document.baseURI);
       url.hash = new URLSearchParams({ stimulus: JSON.stringify(conditions) }).toString();
       $('referencePilotLink').href = url.href;
@@ -885,11 +907,43 @@
       targetError = 'Браузер не разрешил полноэкранный режим. Проверьте разрешения и активность окна, затем повторите. Измерения сохранены.';
       beginSettling('exiting'); update();
     });
+    $('referenceCenter').onclick = () => {
+      pairedPosition = [0, 0];
+      persist();
+      update();
+    };
+    function repositionTrial(x, y) {
+      const state = update();
+      if (!state.fullscreen_fits) return;
+      const size = viewport.getBoundingClientRect();
+      const { minX, minY, maxX, maxY } = placementBounds(photo, state.css_px_per_asset_px,
+        Math.min(size.width, innerWidth), Math.min(size.height, innerHeight));
+      const clampedX = Math.min(maxX, Math.max(minX, x));
+      const clampedY = Math.min(maxY, Math.max(minY, y));
+      if (clampedX === pairedPosition[0] && clampedY === pairedPosition[1]) return;
+      pairedPosition = [clampedX, clampedY];
+      persist();
+      // The new link describes this placement. Previously opened links retain their original conditions.
+      pilotCaptured = false;
+      capturePilotConditions(update());
+    }
+    const trialDirections = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     // No legacy gallery shortcuts; explicit Esc also works when a browser doesn't consume it natively.
     document.addEventListener('keydown', e => {
       if (document.fullscreenElement === viewport) {
         e.stopImmediatePropagation();
         if (e.key === 'Escape') stopTrial();
+        if (trialPhase === 'active' && photo.variants) {
+          const direction = trialDirections[e.key];
+          if (direction) {
+            e.preventDefault();
+            const step = e.shiftKey ? 64 : 16;
+            repositionTrial(pairedPosition[0] + direction[0] * step, pairedPosition[1] + direction[1] * step);
+          } else if (e.key === 'Home') {
+            e.preventDefault();
+            repositionTrial(0, 0);
+          }
+        }
       }
     }, true);
     select.value = selected.id; chooseModel(photo.id);
