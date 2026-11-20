@@ -246,7 +246,7 @@ try {
   const firstSavedForest = await savePoint();
   await page.keyboard.press('+');
   const larger = await snap();
-  assert.equal(larger.scale_percent, moved.scale_percent + 0.5);
+  assert.equal(larger.scale_percent, moved.scale_percent + 0.1);
   await checkPanelDistance(larger);
   assert.ok(larger.review_segment_display_mm > moved.review_segment_display_mm);
   assert.ok(larger.equivalent_distance_m < moved.equivalent_distance_m);
@@ -275,7 +275,7 @@ try {
   await togglePanel();
   await page.click('#referenceTrialSmaller');
   const smaller = await snap();
-  assert.equal(smaller.scale_percent, larger.scale_percent - 0.5);
+  assert.equal(smaller.scale_percent, larger.scale_percent - 0.1);
   await checkPanelDistance(smaller);
   assert.equal(smaller.review_segment_display_mm, moved.review_segment_display_mm);
   await page.click('#referenceTrialLarger');
@@ -395,7 +395,7 @@ try {
       await page.keyboard.press('+');
       const adjusted = await renderedSegment();
       const state = await snap();
-      assert.equal(adjusted.scale, initial.scale + count * 0.5);
+      assert.equal(adjusted.scale, initial.scale + count / 10);
       assert.equal(adjusted.calibration, initial.calibration);
       assert.ok(Math.abs(adjusted.mm - initial.mm * (adjusted.scale / initial.scale)) < 0.01);
       assert.ok(Math.abs(state.equivalent_distance_m - 325 * 4.34 / adjusted.mm) < 0.001);
@@ -412,7 +412,7 @@ try {
     await checkSummary({ ...(await snap()), review_segment_display_mm: initial.mm });
     assert.deepEqual(await renderedSegment(), initial);
   }
-  await page.fill('#referenceScaleNumber', '0.51');
+  await page.fill('#referenceScaleNumber', '0.11');
   await page.click('#referenceTrial');
   await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'active');
   await page.keyboard.press('-');
@@ -422,7 +422,7 @@ try {
   assert.match(await page.textContent('#referenceTrialScaleStatus'), /предел масштаба/);
   assert.ok(Math.abs((await snap()).scale_percent - 0.01) < 1e-10);
   await page.keyboard.press('+');
-  assert.equal((await snap()).scale_percent, 0.51);
+  assert.equal((await snap()).scale_percent, 0.11);
   await page.click('#referenceTrialDone');
   await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'idle');
   await page.reload();
@@ -435,6 +435,97 @@ try {
   assert.match(await savedLinks.nth(0).textContent(), /IMG_2711.*Белый.*A–B/);
   assert.match(await savedLinks.nth(1).textContent(), /IMG_2711.*Лес.*A–B/);
   assert.equal(captured(firstSavedForest).scale_percent, moved.scale_percent);
+
+  // Start the series from a setup outside the sequence, then visit every matching presentation.
+  await page.click('#screenCalibBtn');
+  await page.fill('#screenLineCm', '10');
+  await page.click('#applyScreenCalib');
+  await page.keyboard.press('Escape');
+  await page.fill('#distance', '434');
+  await page.selectOption('#referencePhotoSelect', 'cabinet_img_2751_archive_v4');
+  await page.selectOption('#referenceVariant', 'clean');
+  await selector.selectOption(gray);
+  await ready();
+  await page.fill('#referenceTarget', '100');
+  await page.click('#referenceApplyTarget');
+  assert.ok(Math.abs((await snap()).equivalent_distance_m - 100) < 0.1);
+  await page.click('#referenceTrial');
+  await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'active');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowUp');
+  const sequenceBaseline = await snap();
+  await togglePanel();
+  const previous = page.locator('#referenceTrialPrevious');
+  const next = page.locator('#referenceTrialNext');
+  assert.equal(await previous.isDisabled(), true);
+  const script = [['original', 'neutral'], ['clean', 'neutral'], ['clean', forest]]
+    .flatMap(([variant, background]) => [2751, 2704, 2755, 2711].map(number => [`IMG_${number}`, variant, background]));
+  const checkSequenceStep = async index => {
+    const [reference, variant, background] = script[index];
+    await page.waitForFunction(([reference, variant, background]) => {
+      const state = referenceTab.snapshot();
+      return state.source_photo_id === reference && state.stimulus_variant === variant && state.background === background;
+    }, script[index]);
+    const scene = await snap();
+    assert.equal(scene.trial_phase, 'active');
+    assert.equal(scene.calibration_id, sequenceBaseline.calibration_id);
+    assert.equal(scene.position_offset_x_css_px, sequenceBaseline.position_offset_x_css_px);
+    assert.equal(scene.position_offset_y_css_px, sequenceBaseline.position_offset_y_css_px);
+    assert.ok(Math.abs(scene.equivalent_distance_m - sequenceBaseline.equivalent_distance_m) < 0.1);
+    const [ax, ay] = scene.segment_a_source_px;
+    const [bx, by] = scene.segment_b_source_px;
+    const [left, top, right, bottom] = scene.crop_ltrb_px;
+    const rect = await page.locator('#referenceDisplay').evaluate(img => {
+      const { width, height } = img.getBoundingClientRect();
+      return { width, height };
+    });
+    const actual = Math.hypot((bx - ax) * rect.width / (right - left),
+      (by - ay) * rect.height / (bottom - top)) * 0.25;
+    const expected = scene.projected_segment_mm * 4.34 / sequenceBaseline.equivalent_distance_m;
+    assert.ok(Math.abs(actual - expected) < 0.01, `${reference} ${background} A–B: ${actual} vs ${expected}`);
+    assert.equal(captured(await currentRun()).asset_id, scene.asset_id);
+    assert.match(await page.textContent('#referenceTrialSequence'), new RegExp(`^${index + 1}/12`));
+    await checkPanelDistance(scene);
+    await checkBackground(background);
+  };
+  await next.click();
+  await checkSequenceStep(0);
+  const beforeDecodeFailure = await snap();
+  const beforeDecodeLink = await currentRun();
+  await page.evaluate(() => {
+    const decode = HTMLImageElement.prototype.decode;
+    HTMLImageElement.prototype.decode = function () {
+      HTMLImageElement.prototype.decode = decode;
+      return Promise.reject(new Error('Synthetic image decode failure'));
+    };
+  });
+  await next.click();
+  await page.waitForFunction(() => document.querySelector('#referenceTrialScaleStatus').textContent.includes('Не удалось загрузить'));
+  assert.deepEqual(await snap(), beforeDecodeFailure);
+  assert.equal(await currentRun(), beforeDecodeLink);
+  for (let i = 1; i < script.length; i++) {
+    if (await panel.isHidden()) await togglePanel();
+    await next.click();
+    await checkSequenceStep(i);
+  }
+  assert.equal(await next.isDisabled(), true);
+  for (let i = script.length - 2; i >= 0; i--) {
+    if (await panel.isHidden()) await togglePanel();
+    await previous.click();
+    await checkSequenceStep(i);
+  }
+  assert.equal(await previous.isDisabled(), true);
+  for (let i = 0; i < 20; i++) await page.keyboard.press('Shift+ArrowDown');
+  const beforeBlockedSwitch = await snap();
+  const beforeBlockedLink = await currentRun();
+  if (await panel.isHidden()) await togglePanel();
+  await next.click();
+  await page.waitForFunction(() => document.querySelector('#referenceTrialScaleStatus').textContent.includes('не помещается'));
+  assert.deepEqual(await snap(), beforeBlockedSwitch);
+  assert.equal(await currentRun(), beforeBlockedLink);
+  await page.click('#referenceTrialDone');
+  await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'idle');
+  await checkSummary(beforeBlockedSwitch);
   assert.deepEqual(errors, []);
   console.log('Paired shows, rendered A–B, saved points and pilot JSON/CSV: OK');
 } finally {

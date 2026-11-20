@@ -425,6 +425,10 @@
     };
     cabinetPhotos.push(photo);
   }
+  const trialSequence = [
+    ['original', 'neutral'], ['clean', 'neutral'], ['clean', forestBackground]
+  ].flatMap(([variant, background]) => cabinetPhotos.filter(p => p.variants?.[variant])
+    .map(photo => ({ photo, variant, background })));
   const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
 
   /**
@@ -510,7 +514,8 @@
     let variant = saved?.variant === 'clean' ? 'clean' : 'original';
     let latestTrial = null, panelTimer;
     let trialStartScale = scale, trialScaleSteps = 0;
-    const trialScaleStep = 0.5;
+    let trialTargetRange = null, trialPhotoRequest = null;
+    const trialScaleStep = 0.1;
     const savedPosition = saved?.paired_position_css_px;
     let pairedPosition = Array.isArray(savedPosition) && savedPosition.length === 2 && savedPosition.every(Number.isFinite)
       ? savedPosition : [0, 0];
@@ -532,6 +537,11 @@
             <button type="button" id="referenceTrialLarger" aria-label="Увеличить масштаб">+</button>
             <button type="button" id="referenceTrialSave">Сохранить</button>
             <button type="button" id="referenceTrialDone">Готово</button>
+          </div>
+          <div class="reference-trial-actions reference-trial-navigation">
+            <button type="button" id="referenceTrialPrevious">Назад</button>
+            <span id="referenceTrialSequence" aria-live="polite"></span>
+            <button type="button" id="referenceTrialNext">Вперёд</button>
           </div>
           <span id="referenceTrialScaleStatus" role="status"></span>
         </div>
@@ -583,6 +593,8 @@
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
     const readable = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
     const variantLabel = variant => variant === 'clean' ? 'Чистый фон' : 'Оригинал';
+    const backgrounds = Array.from($('referenceBackground').options);
+    const backgroundLabel = id => backgrounds.find(option => option.value === id)?.textContent ?? id;
     const trialsKey = 'reference_saved_trials';
     function getSavedTrials() {
       const records = load(trialsKey, []);
@@ -596,22 +608,15 @@
     function renderSavedTrials(records) {
       savedTrials.hidden = !records.length;
       savedTrials.querySelector('summary').textContent = `Сохранённые замеры (${records.length})`;
-      const backgrounds = Array.from($('referenceBackground').options);
       const entries = records.map(({ saved_at, conditions }) => {
         const time = new Date(saved_at).toLocaleString('ru-RU');
-        const backgroundLabel = backgrounds.find(option => option.value === conditions.background)?.textContent ?? conditions.background;
         const item = document.createElement('li');
-        link(item, pilotUrl(conditions), `${time} · ${conditions.source_photo_id} · ${variantLabel(conditions.stimulus_variant)} · ${backgroundLabel} · ≈ ${readable(conditions.equivalent_range_m)} м · A–B ${readable(conditions.review_segment_display_mm)} мм`);
+        link(item, pilotUrl(conditions), `${time} · ${conditions.source_photo_id} · ${variantLabel(conditions.stimulus_variant)} · ${backgroundLabel(conditions.background)} · ≈ ${readable(conditions.equivalent_range_m)} м · A–B ${readable(conditions.review_segment_display_mm)} мм`);
         return item;
       });
       savedTrials.querySelector('ul').replaceChildren(...entries);
     }
-    function choosePhoto() {
-      photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
-      const p = photo, generation = ++loadGeneration;
-      if (!p.variants?.[variant]) variant = 'original';
-      const file = p.variants?.[variant].file ?? p.file;
-      loaded = false; loadState = file ? 'loading' : 'missing'; targetError = '';
+    function describePhoto(p) {
       const propellers = selected.measurements_mm
         ? `радиус пропеллера ${selected.measurements_mm.propeller_radius} мм`
         : `пропеллеры ${selected.propeller_in}″`;
@@ -620,16 +625,30 @@
       link($('referenceSpecSource'), selected.source, 'Источник характеристик');
       link($('referencePhotoSource'), p.source, p.original_size_px ? 'Полный кадр' : 'Страница источника фотографии');
       $('referenceView').textContent = p.label;
+    }
+    function displayPhoto(next, p, url) {
+      next.id = 'referenceDisplay';
+      next.alt = selected.model + ' — ' + p.label;
+      decodedImages.set(url, next);
+      if (image !== next) image.replaceWith(next);
+      image = next;
+    }
+    function choosePhoto() {
+      photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
+      const p = photo, generation = ++loadGeneration;
+      if (!p.variants?.[variant]) variant = 'original';
+      const file = p.variants?.[variant].file ?? p.file;
+      loaded = false; loadState = file ? 'loading' : 'missing'; targetError = '';
+      describePhoto(p);
       // Decode a separate request-owned image. Old events can never publish into the new selection.
       const expected = file && new URL(file, document.baseURI).href;
       const cached = decodedImages.get(expected);
-      const next = cached || new Image(); next.id = 'referenceDisplay';
-      next.alt = selected.model + ' — ' + p.label;
+      const next = cached || new Image();
       next.onload = () => {
         if (generation !== loadGeneration || next.currentSrc !== expected) return;
         loaded = next.naturalWidth === p.width && next.naturalHeight === p.height;
         loadState = loaded ? 'ready' : 'error';
-        if (loaded) { decodedImages.set(expected, next); if (image !== next) image.replaceWith(next); image = next; }
+        if (loaded) displayPhoto(next, p, expected);
         update();
       };
       next.onerror = () => { if (generation === loadGeneration) { loaded = false; loadState = 'error'; update(); } };
@@ -831,6 +850,7 @@
       else scaleStatus.textContent = '';
     }
     function beginSettling(phase) {
+      trialPhotoRequest = null;
       showScalePanel(false);
       trialPhase = phase; settleStarted = stableSince = performance.now(); lastLayout = '';
       if (settleFrame != null) cancelAnimationFrame(settleFrame);
@@ -838,6 +858,7 @@
     }
     function capturePilotConditions(state) {
       if (!state.asset_id || !state.fullscreen_fits || !positive(state.equivalent_distance_m)) return;
+      updateTrialNavigation();
       trialSummary.textContent = `Итог показа · ≈ ${readable(state.equivalent_distance_m)} м · масштаб ${readable(state.scale_percent)} % · A–B ${readable(state.review_segment_display_mm)} мм`;
       $('referenceTrialDistance').textContent = `≈ ${state.equivalent_distance_m.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} м`;
       const { photo_id, source_photo_id, source_sha256, asset_id, asset_sha256, asset_revision, stimulus_variant,
@@ -914,6 +935,13 @@
       persist();
       update();
     };
+    function scaleForDistance(p, target, mmPerCssPx) {
+      // Probe at unit scale so both controls can use the existing model for the requested photo.
+      const unit = (rangeMode() === 'strict' ? measure : estimate)(selected,
+        { photo_id: p.id, width: p.width, height: p.height, scale: 1, visible: true },
+        getDistance(), mmPerCssPx, geometry);
+      return unit.equivalent_distance_m / target * 100;
+    }
     $('referenceApplyTarget').onclick = () => {
       targetError = '';
       const target = Number($('referenceTarget').value.trim().replace(',', '.'));
@@ -923,11 +951,7 @@
       else if (!cal) targetError = 'Нужна актуальная калибровка экрана.';
       else if (!loaded || !positive(getDistance())) targetError = 'Нужны загруженное изображение и расстояние до монитора.';
       else {
-        // Probe at unit scale: independent of current clipping; never use rounded readout values.
-        const unit = (rangeMode() === 'strict' ? measure : estimate)(selected,
-          { photo_id: photo.id, width: image.naturalWidth, height: image.naturalHeight, scale: 1, visible: true },
-          getDistance(), cal.mm_per_css_px, geometry);
-        const needed = unit.equivalent_distance_m / target * 100;
+        const needed = scaleForDistance(photo, target, cal.mm_per_css_px);
         if (!positive(needed)) targetError = 'У этого ракурса нет расчётного отрезка для выбранного режима.';
         else if (needed < 0.01 || needed > 1000) targetError = 'Заданная дальность требует масштаба вне диапазона 0,01–1000 %.';
         else {
@@ -951,6 +975,7 @@
       if (!state.fullscreen_fits) { targetError = 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб.'; update(); return; }
       if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим. Измерения сохранены.'; update(); return; }
       latestTrial = null;
+      trialTargetRange = null;
       trialStartScale = scale;
       trialScaleSteps = 0;
       // The exemption starts before requestFullscreen: resize may precede fullscreenchange/promise resolution.
@@ -1000,14 +1025,7 @@
         showScalePanel(true);
         return;
       }
-      // Read the candidate CSS width before committing scale or triggering the fullscreen clipping guard.
-      const previousWidth = image.style.width;
-      image.style.width = photo.width * nextScale / 100 + 'px';
-      const imageScale = image.getBoundingClientRect().width / photo.width;
-      const area = viewport.getBoundingClientRect();
-      if (!fitsPlacement(photo, imageScale, Math.min(area.width, innerWidth),
-        Math.min(area.height, innerHeight), ...pairedPosition)) {
-        image.style.width = previousWidth;
+      if (!fitsTrialScale(photo, nextScale)) {
         scaleStatus.textContent = 'В этой позиции коптер не помещается. Масштаб сохранён.';
         showScalePanel(true);
         return;
@@ -1015,6 +1033,87 @@
       scaleStatus.textContent = '';
       if (!scalePanel.hidden) showScalePanel(true);
       trialScaleSteps = nextStep;
+      trialTargetRange = null;
+      capturePilotConditions(setScale(nextScale));
+    }
+    function fitsTrialScale(p, nextScale) {
+      // Probe the CSS width before publishing a new frame or triggering the clipping guard.
+      const previousWidth = image.style.width;
+      image.style.width = p.width * nextScale / 100 + 'px';
+      const imageScale = image.getBoundingClientRect().width / p.width;
+      image.style.width = previousWidth;
+      const area = viewport.getBoundingClientRect();
+      return fitsPlacement(p, imageScale, Math.min(area.width, innerWidth),
+        Math.min(area.height, innerHeight), ...pairedPosition);
+    }
+    function trialSequenceIndex() {
+      return trialSequence.findIndex(entry => entry.photo === photo &&
+        entry.variant === variant && entry.background === pairedBackground);
+    }
+    function updateTrialNavigation() {
+      const index = trialSequenceIndex();
+      const waiting = !!trialPhotoRequest;
+      $('referenceTrialPrevious').disabled = waiting || index <= 0;
+      $('referenceTrialNext').disabled = waiting || index >= trialSequence.length - 1;
+      for (const id of ['referenceTrialSmaller', 'referenceTrialLarger', 'referenceTrialSave']) $(id).disabled = waiting;
+      $('referenceTrialSequence').textContent = index < 0 ? 'Начало серии по кнопке «Вперёд»'
+        : `${index + 1}/${trialSequence.length} · ${photo.source_photo_id} · ${variantLabel(variant)} · ${backgroundLabel(pairedBackground)}`;
+    }
+    async function decodeTrialImage(url, p) {
+      const cached = decodedImages.get(url);
+      if (cached) return cached;
+      const next = new Image();
+      next.src = url;
+      await next.decode();
+      if (p && (next.naturalWidth !== p.width || next.naturalHeight !== p.height)) throw new Error('Unexpected image dimensions');
+      decodedImages.set(url, next);
+      return next;
+    }
+    async function stepTrialPhoto(direction) {
+      if (trialPhase !== 'active' || document.fullscreenElement !== viewport || !photo.variants || trialPhotoRequest) return;
+      const entry = trialSequence[trialSequenceIndex() + direction];
+      if (!entry) return;
+      const request = {};
+      trialPhotoRequest = request;
+      updateTrialNavigation();
+      scaleStatus.textContent = 'Загрузка фотографии…';
+      showScalePanel(true);
+      const p = entry.photo;
+      const url = new URL(p.variants[entry.variant].file, document.baseURI).href;
+      let next;
+      let error = '';
+      try {
+        [next] = await Promise.all([decodeTrialImage(url, p), entry.background === forestBackground
+          ? decodeTrialImage(new URL(pairedBackgrounds[forestBackground].background_asset, document.baseURI).href) : null]);
+      } catch {
+        error = 'Не удалось загрузить фотографию или фон.';
+      }
+      if (trialPhotoRequest !== request || document.fullscreenElement !== viewport) return;
+      trialPhotoRequest = null;
+      const state = update();
+      if (trialPhase !== 'active') return;
+      const target = trialTargetRange ?? state.equivalent_distance_m;
+      const nextScale = scaleForDistance(p, target, state.mm_per_css_px);
+      if (!error && (!positive(nextScale) || nextScale < 0.01 || nextScale > 1000)) error = 'Дальность недоступна для этого ракурса.';
+      if (!error && !fitsTrialScale(p, nextScale)) error = 'Кадр не помещается при текущей дальности и позиции.';
+      if (error) {
+        updateTrialNavigation();
+        scaleStatus.textContent = error;
+        showScalePanel(true);
+        return;
+      }
+      trialTargetRange = target;
+      trialStartScale = nextScale;
+      trialScaleSteps = 0;
+      ++loadGeneration;
+      photo = p;
+      photoSelect.value = p.id;
+      variant = entry.variant;
+      pairedBackground = entry.background;
+      displayPhoto(next, p, url);
+      describePhoto(p);
+      scaleStatus.textContent = '';
+      if (!scalePanel.hidden) showScalePanel(true);
       capturePilotConditions(setScale(nextScale));
     }
     viewport.addEventListener('click', e => {
@@ -1024,6 +1123,8 @@
     });
     $('referenceTrialSmaller').onclick = () => stepTrialScale(-1);
     $('referenceTrialLarger').onclick = () => stepTrialScale(1);
+    $('referenceTrialPrevious').onclick = () => stepTrialPhoto(-1);
+    $('referenceTrialNext').onclick = () => stepTrialPhoto(1);
     $('referenceTrialSave').onclick = () => {
       if (trialPhase !== 'active' || document.fullscreenElement !== viewport) return;
       const conditions = capturePilotConditions(update());
@@ -1041,7 +1142,7 @@
       if (document.fullscreenElement === viewport) {
         e.stopImmediatePropagation();
         if (e.key === 'Escape') stopTrial();
-        if (trialPhase === 'active' && photo.variants) {
+        if (trialPhase === 'active' && photo.variants && !trialPhotoRequest) {
           const direction = trialDirections[e.key];
           if (direction) {
             e.preventDefault();
