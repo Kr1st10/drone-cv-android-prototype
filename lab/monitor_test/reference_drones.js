@@ -497,7 +497,8 @@
         !positive(render.scale) || !positive(mmPerCssPx) ||
         ![a.from, a.to].every(v => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite) &&
           v[0] >= 0 && v[0] <= photo.width && v[1] >= 0 && v[1] <= photo.height)) return null;
-    const length = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) * render.scale * mmPerCssPx;
+    const length = Math.hypot((a.to[0] - a.from[0]) * render.scale,
+      (a.to[1] - a.from[1]) * (render.scaleY ?? render.scale)) * mmPerCssPx;
     return positive(length) ? length : null;
   }
 
@@ -744,20 +745,23 @@
       const actualScale = loaded && p.width ? r.width / p.width : null;
       const previewVisible = loaded && !!b && r.left + b[0] * actualScale >= left - 0.1 && r.top + b[1] * actualScale >= top - 0.1 &&
         r.left + b[2] * actualScale <= right + 0.1 && r.top + b[3] * actualScale <= bottom + 0.1;
-      const m = (activeMode === 'strict' ? measure : estimate)(selected, { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible: loaded },
-        getDistance(), cal?.mm_per_css_px, geometry);
+      // The two CSS dimensions can round independently, especially for a small diagonal A–B.
+      const render = { photo_id: p.id, width: image.naturalWidth, height: image.naturalHeight, scale: actualScale,
+        scaleY: paired && loaded ? r.height / p.height : actualScale, visible: loaded };
+      const m = (activeMode === 'strict' ? measure : estimate)(selected, render, getDistance(), cal?.mm_per_css_px, geometry);
       const capacityWidth = trial ? Math.min(v.width, innerWidth) : screen.width;
       const capacityHeight = trial ? Math.min(v.height, innerHeight) : screen.height;
       const fullscreenFits = loaded && fitsPlacement(p, actualScale, capacityWidth, capacityHeight, offsetX, offsetY);
       const fmt = n => n == null ? 'нет данных' : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
       const candidate = p.review_segment, overlay = $('referenceSegmentOverlay');
-      const segmentMm = reviewSegmentLength(p, { width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible: loaded }, cal?.mm_per_css_px);
+      const segmentMm = reviewSegmentLength(p, render, cal?.mm_per_css_px);
       $('referenceSegmentReview').classList.toggle('hidden', !candidate);
       overlay.replaceChildren();
       overlay.classList.toggle('hidden', !candidate || !loaded || !$('referenceSegmentToggle').checked);
       if (candidate) {
         $('referenceSegmentTitle').textContent = candidate.status === 'unconfirmed' ? 'Проверяемая моторная диагональ — не подтверждена' : 'Разметка расчётного отрезка A–B';
         overlay.setAttribute('viewBox', `0 0 ${p.width} ${p.height}`);
+        overlay.setAttribute('preserveAspectRatio', paired ? 'none' : 'xMidYMid meet');
         overlay.style.width = r.width + 'px'; overlay.style.height = r.height + 'px';
         const svg = (tag, attrs) => {
           const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -1041,7 +1045,6 @@
       scaleStatus.textContent = '';
       if (!scalePanel.hidden) showScalePanel(true);
       trialScaleSteps = nextStep;
-      trialTargetRange = null;
       capturePilotConditions(setScale(nextScale));
     }
     function fitsTrialScale(p, nextScale) {
@@ -1101,7 +1104,9 @@
       trialPhotoRequest = null;
       const state = update();
       if (trialPhase !== 'active') return;
-      const target = trialTargetRange ?? state.equivalent_distance_m;
+      // Keep the series distance if the scale controls returned to their starting point.
+      // Reusing every frame's rounded CSS measurement would accumulate error at each switch.
+      const target = trialScaleSteps === 0 && trialTargetRange !== null ? trialTargetRange : state.equivalent_distance_m;
       const nextScale = scaleForDistance(p, target, state.mm_per_css_px);
       if (!error && (!positive(nextScale) || nextScale < 0.01 || nextScale > 1000)) error = 'Дальность недоступна для этого ракурса.';
       if (!error && !fitsTrialScale(p, nextScale)) error = 'Кадр не помещается при текущей дальности и позиции.';

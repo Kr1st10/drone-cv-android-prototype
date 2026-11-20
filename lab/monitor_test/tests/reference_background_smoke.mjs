@@ -470,7 +470,7 @@ try {
   assert.equal(await previous.isDisabled(), true);
   const script = [['original', 'neutral'], ['clean', 'neutral'], ['clean', forest]]
     .flatMap(([variant, background]) => [2751, 2704, 2755, 2711].map(number => [`IMG_${number}`, variant, background]));
-  const checkSequenceStep = async index => {
+  const checkSequenceStep = async (index, baseline = sequenceBaseline) => {
     const [reference, variant, background] = script[index];
     await page.waitForFunction(([reference, variant, background]) => {
       const state = referenceTab.snapshot();
@@ -478,10 +478,10 @@ try {
     }, script[index]);
     const scene = await snap();
     assert.equal(scene.trial_phase, 'active');
-    assert.equal(scene.calibration_id, sequenceBaseline.calibration_id);
-    assert.equal(scene.position_offset_x_css_px, sequenceBaseline.position_offset_x_css_px);
-    assert.equal(scene.position_offset_y_css_px, sequenceBaseline.position_offset_y_css_px);
-    assert.ok(Math.abs(scene.equivalent_distance_m - sequenceBaseline.equivalent_distance_m) < 0.1);
+    assert.equal(scene.calibration_id, baseline.calibration_id);
+    assert.equal(scene.position_offset_x_css_px, baseline.position_offset_x_css_px);
+    assert.equal(scene.position_offset_y_css_px, baseline.position_offset_y_css_px);
+    assert.ok(Math.abs(scene.equivalent_distance_m - baseline.equivalent_distance_m) < 0.1);
     const [ax, ay] = scene.segment_a_source_px;
     const [bx, by] = scene.segment_b_source_px;
     const [left, top, right, bottom] = scene.crop_ltrb_px;
@@ -491,12 +491,15 @@ try {
     });
     const actual = Math.hypot((bx - ax) * rect.width / (right - left),
       (by - ay) * rect.height / (bottom - top)) * 0.25;
-    const expected = scene.projected_segment_mm * 4.34 / sequenceBaseline.equivalent_distance_m;
+    const expected = scene.projected_segment_mm * 4.34 / baseline.equivalent_distance_m;
     assert.ok(Math.abs(actual - expected) < 0.01, `${reference} ${background} A–B: ${actual} vs ${expected}`);
+    assert.ok(Math.abs(scene.review_segment_display_mm - actual) < 1e-10);
+    assert.ok(Math.abs(scene.equivalent_distance_m - scene.projected_segment_mm * 4.34 / actual) < 1e-10);
     assert.equal(captured(await currentRun()).asset_id, scene.asset_id);
     assert.match(await page.textContent('#referenceTrialSequence'), new RegExp(`^${index + 1}/12`));
     await checkPanelDistance(scene);
     await checkBackground(background);
+    return scene;
   };
   await next.click();
   await checkSequenceStep(0);
@@ -513,18 +516,31 @@ try {
   await page.waitForFunction(() => document.querySelector('#referenceTrialScaleStatus').textContent.includes('Не удалось загрузить'));
   assert.deepEqual(await snap(), beforeDecodeFailure);
   assert.equal(await currentRun(), beforeDecodeLink);
+  const seriesScales = [beforeDecodeFailure.scale_percent];
   for (let i = 1; i < script.length; i++) {
     if (await panel.isHidden()) await togglePanel();
     await next.click();
-    await checkSequenceStep(i);
+    const scene = await checkSequenceStep(i);
+    seriesScales.push(scene.scale_percent);
+    await page.click('#referenceTrialLarger');
+    await page.click('#referenceTrialSmaller');
+    assert.equal((await snap()).scale_percent, scene.scale_percent);
   }
   assert.equal(await next.isDisabled(), true);
   for (let i = script.length - 2; i >= 0; i--) {
     if (await panel.isHidden()) await togglePanel();
     await previous.click();
-    await checkSequenceStep(i);
+    assert.equal((await checkSequenceStep(i)).scale_percent, seriesScales[i]);
   }
   assert.equal(await previous.isDisabled(), true);
+  if (await panel.isHidden()) await togglePanel();
+  await page.click('#referenceTrialLarger');
+  const changedTarget = await snap();
+  assert.ok(changedTarget.equivalent_distance_m < sequenceBaseline.equivalent_distance_m - 0.5);
+  await next.click();
+  await checkSequenceStep(1, changedTarget);
+  await previous.click();
+  await checkSequenceStep(0, changedTarget);
   for (let i = 0; i < 20; i++) await page.keyboard.press('Shift+ArrowDown');
   const beforeBlockedSwitch = await snap();
   const beforeBlockedLink = await currentRun();
