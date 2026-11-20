@@ -11,13 +11,24 @@
   const clone=value=>structuredClone(value), finite=Number.isFinite;
   const canonical=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
   const known=value=>value!==null&&value!==undefined&&value!==''&&(typeof value!=='number'||finite(value));
-  function compareKnown(a,b){
+  function compareKnown(a,b,path=''){
+    if(path==='plan.base.marker'&&a===null&&b===null)return 'equal';
     if(!known(a)||!known(b))return 'unknown';
     if(typeof a==='object'&&typeof b==='object'){
-      const keys=new Set([...Object.keys(a),...Object.keys(b)]),states=[...keys].map(k=>compareKnown(a[k],b[k]));
+      const keys=new Set([...Object.keys(a),...Object.keys(b)]),states=[...keys].map(k=>compareKnown(a[k],b[k],path+'.'+k));
       return states.includes('different')?'different':!states.length||states.includes('unknown')?'unknown':'equal';
     }
     return canonical(a)===canonical(b)?'equal':'different';
+  }
+  function motionFactorKey(factor){
+    return factor==='speed'?'max_speed_px_s':factor==='acceleration'?'acceleration_px_s2':null;
+  }
+  function motionFactorFields(factor){
+    const key=motionFactorKey(factor);
+    return new Set(key?[key,'movement_ms','disappearance_start_ms','route_time_scale']:[]);
+  }
+  function isModeDerivedField(factor,key){
+    return factor==='mode'&&['lk','yolo_period_ns','confirmation_ttl_ns','retry_ns'].includes(key);
   }
   function profile(value){
     if(typeof value==='string'&&value.trim().startsWith('{')){try{value=JSON.parse(value);}catch{throw Error('Профиль должен быть корректным JSON-объектом.');}}
@@ -101,23 +112,23 @@
   }
   function conditions(series,A,B,analysisA,analysisB){
     const issues=[],unknown=[],checks=[];
-    const check=(label,a,b)=>{
-      const state=compareKnown(a,b);checks.push({label,state,A:a??null,B:b??null});
+    const check=(label,a,b,compare=compareKnown)=>{
+      const state=compare(a,b);checks.push({label,state,A:a??null,B:b??null});
       if(state==='unknown')unknown.push('Не подтверждено: '+label);if(state==='different')issues.push('Различается '+label);
     };
     for(const [key,label] of [['sha256','фотография (SHA-256)'],['bbox','разметка объекта'],['width','ширина фотографии'],['height','высота фотографии']])check(label,A.photo?.[key],B.photo?.[key]);
     for(const key of ['setup_id','zoom','orientation','camera_config','distance_cm','viewport'])check('установка камеры / '+key,A.conditions?.[key],B.conditions?.[key]);
-    const excluded=new Set(series.factor==='speed'?['max_speed_px_s','movement_ms','disappearance_start_ms','route_time_scale']:series.factor==='acceleration'?['acceleration_px_s2','movement_ms','disappearance_start_ms','route_time_scale']:[]);
+    const excluded=motionFactorFields(series.factor);
     const keys=new Set([...Object.keys(A.scenario||{}),...Object.keys(B.scenario||{})]);
     if(!keys.size)unknown.push('Не подтверждён план движения.');
     for(const key of keys)if(!excluded.has(key))check('параметр движения '+key,A.scenario?.[key],B.scenario?.[key]);
     check('период sync-кода',A.sync_period_ms,B.sync_period_ms);
     const va=A.settings_snapshot?.values,vb=B.settings_snapshot?.values;
     if(va&&vb){
-      const chosen=series.factor==='speed'?'max_speed_px_s':series.factor==='acceleration'?'acceleration_px_s2':null;
+      const chosen=motionFactorKey(series.factor);
       for(const key of new Set([...Object.keys(va),...Object.keys(vb)]))if(key!==chosen&&key!=='m')check('снимок настроек '+key,va[key],vb[key]);
     }
-    if(['mode','build'].includes(series.factor)&&A.settings_snapshot?.plan&&B.settings_snapshot?.plan)check('сохранённый план движения',A.settings_snapshot.plan,B.settings_snapshot.plan);
+    if(['mode','build'].includes(series.factor)&&A.settings_snapshot?.plan&&B.settings_snapshot?.plan)check('сохранённый план движения',A.settings_snapshot.plan,B.settings_snapshot.plan,(a,b)=>compareKnown(a,b,'plan'));
     const fields=a=>a?.result?.provenance?.android?.fields||a?.provenance?.android?.fields||{};
     const af=fields(analysisA),bf=fields(analysisB);
     const profiles=series.factor==='build'?{A:profile(series.variants.A.value),B:profile(series.variants.B.value)}:null;
@@ -128,7 +139,7 @@
     for(const key of ['git_sha','git_dirty','app_version','version_code','build_type'])if(!comparesBuilds&&!selectedFields.has(key))check('сборка приложения / '+key,af[key],bf[key]);
     if(af.git_dirty!==false||bf.git_dirty!==false)unknown.push('Идентичность сборки не подтверждена: неизвестное или изменённое рабочее дерево, одного git_sha недостаточно.');
     const optionalFields=['nms_max_detections','intra_op_threads','inter_op_threads','execution_mode','execution_provider','lk','yolo_period_ns','confirmation_ttl_ns','retry_ns','coordinate_timeout_ns'];
-    for(const key of optionalFields)if(!selectedFields.has(key)&&!(series.factor==='mode'&&['lk','yolo_period_ns','confirmation_ttl_ns','retry_ns'].includes(key))&&(known(af[key])||known(bf[key])))check('телефон: '+key,af[key],bf[key]);
+    for(const key of optionalFields)if(!selectedFields.has(key)&&!isModeDerivedField(series.factor,key)&&(known(af[key])||known(bf[key])))check('телефон: '+key,af[key],bf[key]);
     for(const key of ['logical_id','confirmed_zoom','latest_capture_zoom'])check('камера: '+key,af.camera_context?.[key],bf.camera_context?.[key]);
     for(const key of ['requested_physical_id','latest_active_physical_id'])if(known(af.camera_context?.[key])||known(bf.camera_context?.[key]))check('камера: '+key,af.camera_context?.[key],bf.camera_context?.[key]);
     check('геометрия кадра телефона',analysisA?.result?.provenance?.geometry,analysisB?.result?.provenance?.geometry);
@@ -243,5 +254,5 @@
       for(const row of p.rows)lines.push([p.pair_index,p.state,p.run_ids.A,p.run_ids.B,row.key,row.unit,canonical(row.A),canonical(row.B),canonical(row.delta),p.reasons.join('; ')]);}
     return lines.map(line=>line.map(quote).join(',')).join('\r\n');
   }
-  return {VERSION,FORMAT,create,schedule,begin,select,canonical,compareKnown,delta,latencies,metrics,conditions,compare,summarize,sha256,sourceRunIds,registerSource,bind,recordAnalysis,exportBundle,importBundle,csv};
+  return {VERSION,FORMAT,create,schedule,begin,select,canonical,compareKnown,motionFactorKey,motionFactorFields,isModeDerivedField,delta,latencies,metrics,conditions,compare,summarize,sha256,sourceRunIds,registerSource,bind,recordAnalysis,exportBundle,importBundle,csv};
 });

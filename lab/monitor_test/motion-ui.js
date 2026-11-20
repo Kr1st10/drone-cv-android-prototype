@@ -22,6 +22,15 @@
   }
   function status(message) { $('motionStatus').textContent = message; }
   function rememberLocalRun(run){runs.push(run);lastLocalRun=run;$('motionHistoryStatus').textContent='Последний локальный запуск: '+run.run_id;}
+  function includeImported(imported) {
+    const known = new Set(runs.map(run => run.run_id));
+    for (const run of imported) {
+      if (known.has(run.run_id)) continue;
+      runs.push(run);
+      known.add(run.run_id);
+    }
+    update();
+  }
   function persist() {
     if(!MotionGallery.save('motion_settings', { photo_id: selectedId, ...Object.fromEntries(parameters.map(key => [key, $(key).value])) })) status('Не удалось сохранить настройки. Освободите место и повторите.');
     const m=Number($('motionSyncSize').value);$('syncSizeStatus').textContent=Number.isInteger(m)&&m>=2?`Код с белым полем: ${12*m} × ${10*m} px canvas; чёрная подложка: ${14*m} × ${12*m} px canvas. Читаемость камерой ещё не подтверждена. Размер в кадре камеры отличается.`:'Введите целую сторону ячейки не меньше 2 px canvas.';
@@ -198,7 +207,7 @@
       operation='storage';
       const scenario={values:structuredClone(v),viewport:structuredClone(vp),plan:structuredClone(plan)};
       if(ab)Object.assign(run,{series_id:ab.series_id,pair_index:ab.pair_index,variant:ab.slot,slot:ab.planned_order.indexOf(ab.slot)+1,order:ab.planned_order,attempt:ab.attempt,planned_order:ab.planned_order,actual_order:ab.actual_order,settings_snapshot:structuredClone(scenario)});
-      const key=ab?await MotionABUI.write(()=>MotionStore.begin(run,scenario,MotionABUI.started(ab,run))):await MotionStore.begin(run,scenario);
+      const key=ab?await MotionABUI.write(()=>MotionABUI.begin(run,scenario)):await MotionStore.begin(run,scenario);
       if(ab)ab.committed=true;
       lastScenario=scenario;
       if(pending.cancelled){
@@ -260,7 +269,7 @@
   document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement !== stage) finish('выход из полного экрана'); });
   window.addEventListener('resize', () => { if (active && !same(viewport(), active.viewport)) finish('размер окна изменён'); });
   window.addEventListener('beforeunload', e => { if (active || finishing || saveFailure) { e.preventDefault(); e.returnValue = ''; } });
-  window.MotionUI = { refresh, values, startAB:ab=>start(false,ab), startBlockReason, freshRunId, busy:()=>!!attempt||!!active||!!finishing, runs:()=>runs };
+  window.MotionUI = { refresh, values, startAB:ab=>start(false,ab), startBlockReason, freshRunId, includeImported, busy:()=>!!attempt||!!active||!!finishing, runs:()=>runs };
   status('Настройте движение и нажмите «Старт».');
   MotionStore.history().then(history=>{runs=history.runs;lastLocalRun=history.last_local_run;lastScenario=history.last_scenario;ready=true;update();$('motionHistoryStatus').textContent=lastLocalRun?'Последний локальный запуск: '+lastLocalRun.run_id+(lastScenario?'':'. Связанный снимок повторения отсутствует. Начните новый сценарий.'):history.chronology_unknown?'Порядок прежних записей неизвестен. Экспортируйте все записи кнопкой «Экспорт серии»; последний запуск не выбран произвольно.':'Локальных запусков ещё нет. Импорт эталонов не назначает последний запуск.';}).catch(e=>{status('Хранилище эталонов недоступно: '+e.message);});
   refresh();

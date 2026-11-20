@@ -115,14 +115,16 @@ try{
   const stored=(await state(p)).series[0].attempts.length;
   await p.evaluate(()=>{window.realAB=MotionStore.ab;MotionStore.ab=function(...args){return args.length?Promise.reject(Error('synthetic quota')):realAB();};});
   await p.click('#abNext');await p.waitForFunction(()=>document.querySelector('#abStatus').textContent.includes('synthetic quota'),null,{polling:50});assert.equal((await state(p)).series[0].attempts.length,stored);
-  assert.ok(JSON.parse(await download(p,'#abExport')).series.attempts.length>stored);
+  assert.equal(JSON.parse(await download(p,'#abExport')).series.attempts.length,stored);
+  assert.equal(await p.evaluate(()=>document.fullscreenElement),null);
   // Full bundle import in a clean browser profile restores sources and selected attempts.
   const other=await browser.newContext({viewport:{width:1280,height:800}}),q=await pageIn(other);await q.selectOption('#motionTestMode','ab');
-  const reloaded=q.waitForEvent('load');await q.setInputFiles('#abImport',{name:'ab.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(bundle))});await reloaded;
+  await q.setInputFiles('#abImport',{name:'ab.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(bundle))});
+  await q.waitForFunction(()=>document.querySelector('#abStatus').textContent.includes('Серия восстановлена'),null,{polling:50});
   await until(async()=>(await state(q))?.series.length===1);
   const restored=(await state(q)).series[0];assert.deepEqual(restored.selections,bundle.series.selections);assert.equal(restored.journals.length,2);
   // Retrospective pairing needs saved references, not a currently selected photo.
-  await q.click('[data-section=motion]');await q.selectOption('#motionTestMode','ab');await q.locator('#abPanel details summary').click();
+  await q.click('[data-section=motion]');await q.selectOption('#motionTestMode','ab');await q.getByText('Ретроспективная пара из прежних прогонов', { exact: true }).click();
   await q.fill('#abRetroA',first.run_id);await q.fill('#abRetroB',second.run_id);await q.click('#abRetro');
   await until(async()=>(await state(q)).series.length===2);
   const noJpeg={...ja,calibration_image:null};
