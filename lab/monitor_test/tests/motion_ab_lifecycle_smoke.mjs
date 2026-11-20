@@ -30,10 +30,35 @@ async function open(){
   await page.waitForFunction(()=>!document.querySelector('#abNext').disabled);
   return {context,page,errors};
 }
-async function start(p){await p.click('#abNext');await p.waitForFunction(()=>document.fullscreenElement&&document.querySelector('#settings').classList.contains('hidden'));await p.evaluate(()=>lifecycleTick(0));}
+async function start(p,button='#abNext'){await p.click(button);await p.waitForFunction(()=>document.fullscreenElement&&document.querySelector('#settings').classList.contains('hidden'));await p.evaluate(()=>lifecycleTick(0));}
 async function finishDisplay(p){await p.evaluate(()=>{for(let i=0;i<200&&!MotionUI.runs().some(r=>r.variant==='B');i++)lifecycleTick(1000);});}
 async function idle(p){await p.waitForFunction(()=>!MotionUI.busy()&&!document.fullscreenElement);}
 async function downloaded(p){const [d]=await Promise.all([p.waitForEvent('download'),p.click('#abExport')]);return JSON.parse(fs.readFileSync(await d.path(),'utf8'));}
+async function importFixture(p,{id,count,size,manual}){
+  const payload=await p.evaluate(async({seed,id,count,size,manual})=>{
+    const series=MotionAB.create({id,factor:'mode',pair_count:1,variants:{A:{value:'yolo'},B:{value:'yolo_lk'}}});
+    const runs=Array.from({length:count},(_,index)=>{
+      const run_id=(0xabcdef00+index).toString(16);
+      const attempt=MotionAB.begin(series,{run_id,pair_index:1,slot:'A'});
+      attempt.complete=true;
+      return {...seed,run_id,series_id:series.id,attempt:attempt.attempt,actual_order:attempt.actual_order,
+        samples:Array.from({length:size},(_,step)=>({elapsed_ms:step}))};
+    });
+    return JSON.stringify(await (manual?MotionManualTransfer:MotionAB).exportBundle(series,runs));
+  },{seed,id,count,size,manual});
+  await p.evaluate(()=>{window.liveImportSentinel=true;});
+  await p.setInputFiles('#abImport',{name:id+'.json',mimeType:'application/json',buffer:Buffer.from(payload)});
+  await p.waitForFunction(()=>document.querySelector('#abStatus').textContent.includes('Серия восстановлена.'));
+  assert.equal(await p.evaluate(()=>window.liveImportSentinel),true);
+  return await p.evaluate(id=>MotionStore.list().then(runs=>runs.filter(run=>run.series_id===id).map(run=>run.run_id)),id);
+}
+async function storedSeries(p,id){
+  return p.evaluate(id=>MotionStore.ab().then(state=>state.series.find(series=>series.id===id)),id);
+}
+async function downloadMotion(p,button='#motionExport'){
+  const [file]=await Promise.all([p.waitForEvent('download'),p.click(button)]);
+  return JSON.parse(fs.readFileSync(await file.path(),'utf8'));
+}
 // Read raw stores independently of the production convenience readers.
 async function disk(p){return p.evaluate(()=>new Promise((resolve,reject)=>{
   const request=indexedDB.open('dronecv-motion',1);request.onerror=()=>reject(request.error);request.onsuccess=()=>{
@@ -141,6 +166,72 @@ try{
       assert.equal(bundle.series.attempts.length,before.workspace.series[0].attempts.length);assert.equal(await p.evaluate(()=>fullscreenCalls),0);
       assert.deepEqual(after.runs,before.runs);assert.deepEqual(after.chunks,before.chunks);assert.deepEqual(after.workspace.series[0].journals,before.workspace.series[0].journals);
       assert.deepEqual(buttons,{next:true,retry:true});assert.match(message,limit==='runs'?/20/:/120[ \u00a0]?000/);assert.match(message,/экспорт|выгруз/i);assert.match(message,/профил/i);
+      assert.deepEqual(errors,[]);
+    }finally{await context.close();}
+  });
+  for(const {id,count,size,manual,label} of [
+    {id:'live-ab-run-limit',count:20,size:1,manual:false,label:'20 runs'},
+    {id:'live-manual-sample-limit',count:3,size:40000,manual:true,label:'120000 samples'},
+  ])await check('file import without reload enforces '+label,async()=>{
+    const {context,page:p,errors}=await open();
+    try{
+      const runIds=await importFixture(p,{id,count,size,manual});
+      assert.equal(runIds.length,count);
+      const before=await storedSeries(p,id);
+      assert.equal(before.attempts.length,count);
+      assert.equal(before.attempts.every(attempt=>attempt.slot==='A'&&attempt.complete),true);
+      assert.match(await p.textContent('#abInstruction'),label==='20 runs'?/предел 20/:/предел 120[ \u00a0]?000/);
+      assert.equal(await p.isDisabled('#abNext'),true);
+      assert.equal(await p.isDisabled('#abRetry'),true);
+      assert.equal(await p.isDisabled('#motionExport'),false);
+      const exported=await downloadMotion(p);
+      assert.deepEqual(exported.runs.map(run=>run.run_id).sort(),runIds.sort());
+      assert.equal(exported.runs.reduce((total,run)=>total+run.samples.length,0),count*size);
+      const fullscreenCalls=await p.evaluate(async()=>{
+        let calls=0;
+        document.querySelector('#motionStage').requestFullscreen=()=>{calls++;return Promise.reject(Error('test unexpected fullscreen'));};
+        await document.querySelector('#abNext').onclick();
+        await document.querySelector('#abRetry').onclick();
+        return calls;
+      });
+      assert.equal(fullscreenCalls,0);
+      assert.deepEqual(await storedSeries(p,id),before);
+      assert.deepEqual(errors,[]);
+    }finally{await context.close();}
+  });
+  await check('file import keeps the memory-only portion of the last local run and its repeat plan',async()=>{
+    const {context,page:p,errors}=await open();
+    try{
+      await p.evaluate(()=>{
+        const append=MotionStore.append;
+        window.restoreAppend=()=>{MotionStore.append=append;};
+        MotionStore.append=()=>Promise.reject(Error('synthetic append failure'));
+      });
+      await start(p);
+      await p.evaluate(()=>lifecycleTick(1000));
+      await p.click('#motionStop');
+      await idle(p);
+      const local=await p.evaluate(()=>MotionUI.runs().at(-1));
+      assert.ok(local.samples.length>0);
+      const persisted=await p.evaluate(id=>MotionStore.list().then(runs=>runs.find(run=>run.run_id===id)),local.run_id);
+      assert.equal(persisted.samples.length,0);
+      await p.evaluate(()=>restoreAppend());
+
+      const imported=await importFixture(p,{id:'live-import-with-memory',count:1,size:1,manual:true});
+      const exported=await downloadMotion(p);
+      assert.equal(exported.runs.length,2);
+      assert.deepEqual(exported.runs.find(run=>run.run_id===local.run_id),local);
+      assert.ok(exported.runs.some(run=>run.run_id===imported[0]));
+      assert.deepEqual(await downloadMotion(p,'#motionExportLast'),local);
+      await p.selectOption('#motionTestMode','single');
+      await p.fill('#motionWidth',String(local.scenario.target_width_px+10));
+      assert.equal(await p.isDisabled('#motionRepeat'),false);
+      await start(p,'#motionRepeat');
+      await p.click('#motionStop');
+      await idle(p);
+      const repeated=await p.evaluate(()=>MotionUI.runs().at(-1));
+      assert.notEqual(repeated.run_id,local.run_id);
+      assert.deepEqual(repeated.scenario,local.scenario);
       assert.deepEqual(errors,[]);
     }finally{await context.close();}
   });

@@ -2,6 +2,17 @@
   'use strict';
   const $=id=>document.getElementById(id),clone=v=>structuredClone(v);
   let workspace={schema:'dronecv-motion-ab-workspace-1',series:[],selected:null},ready=false,busy=false,writes=Promise.resolve(),revision=0,references=[];
+  let manualSelection=null, committed=clone(workspace);
+  const manualDrafts=new Map();
+  const observation=(series,id)=>series?.manual_observations?.find(item=>item.run_id===id);
+  const draftKey=(series,id)=>JSON.stringify([series,id]);
+  function adopt(saved,sent){
+    const merged=MotionStore.mergeAB(sent,workspace,saved,[],true);
+    committed=clone(saved);
+    MotionStore.reconcileAB(workspace,merged);
+    $('motionTestMode').value=workspace.mode||'single';
+  }
+  const mergeWrite=(sent,stored)=>MotionStore.mergeAB(committed,sent,stored??committed);
   const current=()=>workspace.series.find(s=>s.id===workspace.selected);
   const enabled=()=>$('motionTestMode').value==='ab';
   const notice=s=>{$('abStatus').textContent=s;};
@@ -13,10 +24,75 @@
   }
   function updateReferences(rows){references=rows;render();}
   function persist(){
-    // Snapshot after earlier transactions settle, so a queued background save
-    // cannot restore pre-commit attempt state over a successful finalization.
-    return write(()=>MotionStore.ab(clone(workspace))).catch(e=>{notice('Ошибка хранения A/B: '+e.message+'. Данные остаются в памяти; выгрузите JSON до закрытия страницы.');throw e;});
+    return write(async()=>{
+      const sent=clone(workspace);
+      adopt(await MotionStore.ab(stored=>mergeWrite(sent,stored)),sent);
+    }).catch(e=>{notice('Ошибка хранения A/B: '+e.message+'. Данные остаются в памяти; выгрузите JSON до закрытия страницы.');throw e;});
   }
+  async function saveManual(seriesId, runId, patch, baseline){
+    const series=workspace.series.find(item=>item.id===seriesId);
+    const runs=mergeRuns(references).filter(run=>run.run_id===runId);
+    if(!series||runs.length!==1)throw Error('Нужен однозначный эталон выбранной попытки.');
+    const run=runs[0];
+    const local=clone(series);
+    local.manual_observations??=[];
+    MotionManual.save(local.manual_observations,local,run,patch);
+    const key=draftKey(seriesId,runId);
+    const draft={seriesId,runId,record:observation(local,runId)};
+    manualDrafts.set(key,draft);
+    try{
+      await write(async()=>{
+        const sent=committed;
+        const saved=await MotionStore.ab(stored=>{
+          const latest=stored?.series.find(item=>item.id===seriesId);
+          const target=latest?.attempts.find(item=>item.run_id===runId);
+          if(!target||MotionAB.canonical(target)!==MotionAB.canonical(baseline.attempt)||
+              MotionAB.canonical(observation(latest,runId))!==MotionAB.canonical(baseline.answer)){
+            throw Error('Попытка или её оценка изменилась в другой вкладке. Исходные данные сохранены.');
+          }
+          latest.manual_observations??=[];
+          MotionManual.save(latest.manual_observations,latest,run,patch);
+          latest.metadata_provenance??={};
+          latest.metadata_provenance.manual_observations='operator';
+          return stored;
+        });
+        adopt(saved,sent);
+      });
+      if(manualDrafts.get(key)===draft)manualDrafts.delete(key);
+      render();
+    }catch(e){
+      const error=Error('Оценка осталась в памяти. Выгрузите ручной JSON. '+e.message);
+      error.manualDraft=true;
+      throw error;
+    }
+  }
+  function manualExportSeries(series){
+    const result=clone(series);
+    for(const draft of manualDrafts.values()){
+      if(draft.seriesId!==result.id)continue;
+      result.manual_observations??=[];
+      result.manual_observations=result.manual_observations.filter(item=>item.run_id!==draft.runId);
+      result.manual_observations.push(clone(draft.record));
+      result.metadata_provenance??={};
+      result.metadata_provenance.manual_observations='operator';
+    }
+    return result;
+  }
+  function renderManual(series,runs){
+    const {pair,slot,runId}=series&&manualSelection?.series===series.id?manualSelection:{};
+    const id=runId??series?.selections[pair+':'+slot];
+    const attempt=series?.attempts.find(a=>a.run_id===id&&a.pair_index===pair&&a.slot===slot);
+    const refs=id?runs.filter(run=>run.run_id===id):[];
+    window.MotionManualUI?.show(series,attempt&&refs.length===1?refs[0]:null,attempt,saveManual);
+  }
+  function showDraft(seriesId,runId){
+    const series=current(),attempt=series?.attempts.find(row=>row.run_id===runId);
+    if(series?.id!==seriesId||!attempt)return;
+    manualSelection={series:seriesId,pair:attempt.pair_index,slot:attempt.slot,runId};
+    renderManual(series,mergeRuns(references));
+    $('manualEditor').querySelector('button[type=submit]')?.focus();
+  }
+  const warnManualExport=()=>MotionManualUI.warnUnsaved(current()?.id,showDraft);
   function options(retro=false){return {factor:$('abFactor').value,pair_count:Number($('abPairs').value),base_values:retro?{}:MotionUI.values(),variants:Object.fromEntries(['A','B'].map(slot=>[slot,{value:$('abValue'+slot).value.trim(),description:$('abDescription'+slot).value.trim(),provenance:'operator'}]))};}
   function next(s){return MotionAB.schedule(s).find(item=>!s.attempts.some(a=>a.pair_index===item.pair_index&&a.slot===item.slot&&a.complete));}
   function text(e){
@@ -39,13 +115,17 @@
     const select=$('abSeriesSelect');select.replaceChildren();
     for(const item of workspace.series){const o=node('option',item.id+' / '+item.factor+(item.retrospective?' / ретроспектива':''),select);o.value=item.id;}select.value=workspace.selected||'';
     const n=s&&!s.retrospective?next(s):null;
-    $('abInstruction').textContent=n?`Пара ${n.pair_index} из ${s.pair_count}. Вариант ${n.slot}. Подготовьте телефон и начните запись`:
+    const nextSetup=setupTarget(s,n),retrySetup=setupTarget(s,retryTarget());
+    window.MotionManualUI?.targets(nextSetup,retrySetup);
+    $('abInstruction').textContent=n?`Пара ${n.pair_index} из ${s.pair_count}. Вариант ${n.slot}, попытка ${nextSetup.attempt}. Подготовьте телефон и начните запись`:
       s?s.retrospective?'Ретроспективная серия: заранее запланированного порядка нет.':'Все запланированные варианты выполнены. Импортируйте журналы и выберите попытки.':'Создайте серию из настроек движения ниже.';
     if(s&&!s.retrospective&&!locked&&blocked)$('abInstruction').textContent=blocked;
-    $('abRetryInstruction').textContent=s?`Повтор: пара ${$('abRetryPair').value} из ${s.pair_count}. Вариант ${$('abRetrySlot').value}. Подготовьте телефон и начните запись перед нажатием «Повторить выбранный вариант».`:'';
-    const root=$('abResults');root.replaceChildren();if(!s)return;
+    $('abRetryInstruction').textContent=retrySetup
+      ? `Повтор: пара ${retrySetup.pair_index} из ${s.pair_count}, вариант ${retrySetup.slot}, попытка ${retrySetup.attempt}.`
+      : '';
+    const root=$('abResults');root.replaceChildren();
+    const runs=s?mergeRuns(references):[];renderManual(s,runs);if(!s)return;
     node('p',`Фактор: ${s.factor}; A: ${s.variants.A.value} (${s.variants.A.description}); B: ${s.variants.B.value} (${s.variants.B.description}). Описания: ввод оператора.`,root);
-    const runs=mergeRuns(references);
     const summary=MotionAB.summarize(s,runs);
     node('p',`Запланировано пар: ${summary.planned}; выполнено: ${summary.performed}; пригодно: ${summary.usable}.`,root);
     node('p',summary.aggregation_rule||'Разности рассчитываются внутри пар. Сводка: медиана и диапазон разностей по пригодным парам; кадры не являются повторными экспериментами.',root);
@@ -59,6 +139,11 @@
           node('option',`№${a.attempt} / ${a.run_id} / ${a.complete?'завершена':a.abort_reason||'прервана'} / факт ${a.actual_order??'неизвестен'}`,sel).value=a.run_id;
         }
         sel.value=s.selections[`${i}:${slot}`]||'';sel.disabled=locked;
+        if(window.MotionManualUI){
+          const edit=node('button','Ручная оценка '+slot,root);
+          edit.type='button';edit.disabled=locked||!sel.value||runs.filter(run=>run.run_id===sel.value).length!==1;
+          edit.onclick=()=>{manualSelection={series:s.id,pair:i,slot};renderManual(s,runs);$('manualEditor').querySelector('[name=capture]')?.focus();};
+        }
         sel.onchange=()=>{if(sel.value)MotionAB.select(s,i,slot,sel.value);else delete s.selections[`${i}:${slot}`];persist().catch(()=>{});render();};
       }
       const table=document.createElement('table');root.append(table);const head=document.createElement('tr');table.append(head);
@@ -82,26 +167,57 @@
     }
     workspace.series.push(s);workspace.selected=s.id;++revision;await persist();render();notice('Серия сохранена. Выбор попыток для сравнения выполняется вручную.');
   }
-  async function launch(item){
+  function setupTarget(series,item){
+    if(!series||!item||series.retrospective||!MotionAB.schedule(series).some(row=>row.pair_index===item.pair_index&&row.slot===item.slot))return null;
+    const {pair_index,slot}=item;
+    const attempt=series.attempts.filter(row=>row.pair_index===pair_index&&row.slot===slot).length+1;
+    return {series_id:series.id,pair_index,slot,attempt};
+  }
+  const retryTarget=()=>({pair_index:Number($('abRetryPair').value),slot:$('abRetrySlot').value});
+  const queueKey=series=>MotionAB.canonical(series.attempts.map(({run_id,pair_index,slot,attempt,actual_order,complete})=>
+    [run_id,pair_index,slot,attempt,actual_order,complete]));
+  async function launch(retry=false){
     if(busy||MotionUI.busy())return;
     const blocked=MotionUI.startBlockReason();if(blocked)throw Error(blocked);
-    const s=current();if(!s||!item)throw Error('Нет следующего запуска.');
+    const series=current(), item=series&&(retry?retryTarget():next(series)), expected=setupTarget(series,item);
+    if(!expected)throw Error('Нет доступной попытки для запуска.');
+    const expectedQueue=queueKey(series);
+    const manualSetup=window.MotionManualUI?.confirmation(expected);
     busy=true;render();
     try{
-      const {pair_index,slot}=item;if(!Number.isInteger(pair_index)||pair_index<1||pair_index>s.pair_count)throw Error('Неверный номер пары.');
-      const attempt=s.attempts.filter(a=>a.pair_index===pair_index&&a.slot===slot).length+1;
-      const planned=MotionAB.schedule(s).find(x=>x.pair_index===pair_index&&x.slot===slot);
-      let run_id;do{run_id=MotionUI.freshRunId();}while(workspace.series.some(s=>s.attempts.some(a=>a.run_id===run_id)));
-      const a={run_id,pair_index,slot,attempt,planned_order:planned.planned_order,actual_order:s.attempts.length+1,complete:false,abort_reason:'старт не подтверждён',started_at:new Date().toISOString()};
-      s.attempts.push(a);await persist();
-      let v=clone(s.snapshots[slot]?.values||s.base_values);
-      if(s.factor==='speed')v.max_speed_px_s=Number(s.variants[slot].value);
-      if(s.factor==='acceleration')v.acceleration_px_s2=Number(s.variants[slot].value);
-      await MotionUI.startAB({...a,values:v,series_id:s.id});
+      const launch=await write(async()=>{
+        let reserved;
+        const sent=committed;
+        const saved=await MotionStore.ab(stored=>{
+          const latest=stored?.series.find(row=>row.id===expected.series_id);
+          const target=latest&&setupTarget(latest,retry?item:next(latest));
+          if(!target||queueKey(latest)!==expectedQueue||MotionAB.canonical(target)!==MotionAB.canonical(expected))return;
+          let run_id;
+          do{run_id=MotionUI.freshRunId();}while(stored.series.some(row=>row.attempts.some(a=>a.run_id===run_id)));
+          const {pair_index,slot}=target;
+          const attempt=MotionAB.begin(latest,{run_id,pair_index,slot,started_at:new Date().toISOString()});
+          attempt.abort_reason='старт не подтверждён';
+          if(manualSetup)attempt.manual_setup=manualSetup;
+          const values=clone(latest.snapshots[slot]?.values||latest.base_values);
+          if(latest.factor==='speed')values.max_speed_px_s=Number(latest.variants[slot].value);
+          if(latest.factor==='acceleration')values.acceleration_px_s2=Number(latest.variants[slot].value);
+          reserved={...attempt,values,series_id:latest.id};
+          return stored;
+        });
+        if(saved)adopt(saved,sent);
+        return reserved;
+      });
+      window.MotionManualUI?.resetConfirmation();
+      if(!launch){
+        if(workspace.series.some(row=>row.id===expected.series_id))workspace.selected=expected.series_id;
+        notice('Очередь серии изменилась в другой вкладке. Проверьте обновлённую цель и подтвердите условия перед запуском.');
+        return;
+      }
+      await MotionUI.startAB(launch);
     }finally{busy=false;render();}
   }
   function plan(ab,v,vp,generated){
-    const s=current();if(!s||s.id!==ab.series_id)throw Error('Серия изменилась во время запуска.');
+    const s=workspace.series.find(series=>series.id===ab.series_id);if(!s)throw Error('Серия изменилась во время запуска.');
     const common=Object.values(s.snapshots).find(x=>x.plan),retained=s.snapshots[ab.slot]?.plan?s.snapshots[ab.slot]:['mode','build'].includes(s.factor)?common:null;
     if(common&&JSON.stringify(common.viewport)!==JSON.stringify(vp))throw Error('Изменилась рабочая область / установка экрана. Продолжите на прежнем экране.');
     const p=clone(retained?.plan||generated);
@@ -110,22 +226,27 @@
     if(['mode','build'].includes(s.factor)){s.snapshots.A=clone(s.snapshots[ab.slot]);s.snapshots.B=clone(s.snapshots[ab.slot]);}
     return p;
   }
-  function started(ab){const a=current().attempts.find(a=>a.run_id===ab.run_id);a.abort_reason='не завершён';a.state='started';return clone(workspace);}
+  async function begin(run,scenario){
+    const a=attemptFor(workspace,run);
+    a.abort_reason='не завершён';a.state='started';
+    const sent=clone(workspace);
+    const result=await MotionStore.begin(run,scenario,stored=>mergeWrite(sent,stored));
+    adopt(result.workspace,sent);
+    return result.key;
+  }
   function attemptFor(state,run){return state.series.find(s=>s.id===run.series_id)?.attempts.find(a=>a.run_id===run.run_id);}
   async function end(key,run){
     return write(async()=>{
-      const snapshot=clone(workspace),a=attemptFor(snapshot,run);
+      const sent=clone(workspace),snapshot=clone(sent),a=attemptFor(snapshot,run);
       if(!a)throw Error('Попытка завершения отсутствует в серии.');
       const completion={complete:run.complete,abort_reason:run.abort_reason,ended_at:new Date().toISOString(),end_ms:run.end_ms};
       Object.assign(a,completion);
-      // The shared workspace remains incomplete until the transaction containing
-      // both the run and this private completion snapshot commits.
-      await MotionStore.end(key,run,snapshot);
-      Object.assign(attemptFor(workspace,run),completion);
+      const saved=await MotionStore.end(key,run,stored=>mergeWrite(snapshot,stored));
+      adopt(saved,sent);
     });
   }
   function failed(run){const a=attemptFor(workspace,run);if(a)Object.assign(a,{complete:false,abort_reason:run.abort_reason,end_ms:run.end_ms});render();}
-  async function settled(ab){const a=current()?.attempts.find(a=>a.run_id===ab.run_id);if(!ab.committed){if(a){a.abort_reason='отмена или отказ до начала движения';a.state='preflight_failed';}await persist();}render();}
+  async function settled(ab){const a=attemptFor(workspace,ab);if(!ab.committed){if(a){a.abort_reason='отмена или отказ до начала движения';a.state='preflight_failed';}await persist();}render();}
   async function retainSource(s,j,valid){
     const candidate={attempts:s.attempts,journals:s.journals.slice()},registration=await MotionAB.registerSource(candidate,{name:j.name,raw:j.raw,data:j.data});
     if(!valid())return null;
@@ -170,19 +291,54 @@
   $('abRetryPair').oninput=$('abRetrySlot').onchange=render;
   $('abSeriesSelect').onchange=action(async()=>{workspace.selected=$('abSeriesSelect').value;++revision;await persist();});
   $('abCreate').onclick=action(()=>create(),true);$('abRetro').onclick=action(()=>create(true),true);
-  $('abNext').onclick=action(()=>launch(next(current())));
-  $('abRetry').onclick=action(()=>launch({pair_index:Number($('abRetryPair').value),slot:$('abRetrySlot').value}));
+  $('abNext').onclick=action(()=>launch());
+  $('abRetry').onclick=action(()=>launch(true));
   async function availableRuns(){references=await MotionStore.list().catch(()=>references);return mergeRuns(references);}
-  $('abExport').onclick=action(async()=>{const s=clone(current()),runs=await availableRuns(),bundle=await MotionAB.exportBundle(s,runs);MotionGallery.download('motion-ab-'+s.id+'.json',JSON.stringify(bundle),'application/json');});
-  $('abCSV').onclick=action(async()=>{const s=clone(current());MotionGallery.download('motion-ab.csv',MotionAB.csv(s,await availableRuns()),'text/csv;charset=utf-8');});
+  $('abExport').onclick=action(async()=>{if(warnManualExport())return;const s=manualExportSeries(current()),runs=await availableRuns(),bundle=await MotionAB.exportBundle(s,runs);MotionGallery.download('motion-ab-'+s.id+'.json',JSON.stringify(bundle),'application/json');});
+  $('abCSV').onclick=action(async()=>{if(warnManualExport())return;const s=clone(current());MotionGallery.download('motion-ab.csv',MotionAB.csv(s,await availableRuns()),'text/csv;charset=utf-8');});
+  $('manualExport').onclick=action(async()=>{
+    if(warnManualExport())return;
+    const s=manualExportSeries(current()),runs=await availableRuns();
+    const bundle=await MotionManualTransfer.exportBundle(s,runs);
+    MotionGallery.download('motion-manual-'+s.id+'.json',JSON.stringify(bundle),'application/json');
+  });
+  $('manualCSV').onclick=action(async()=>{
+    if(warnManualExport())return;
+    const s=manualExportSeries(current());
+    MotionGallery.download('motion-manual.csv',MotionManualTransfer.csv(s,await availableRuns()),'text/csv;charset=utf-8');
+  });
   $('abImport').onchange=action(async()=>{
-    const f=$('abImport').files[0];if(!f||f.size>256*1024*1024)throw Error('Экспорт отсутствует или больше 256 МиБ.');
-    const bundle=await MotionAB.importBundle(JSON.parse(await f.text()));
-    if(workspace.series.length>=8||workspace.series.reduce((n,s)=>n+s.journals.reduce((m,j)=>m+j.raw.length*2,0),0)+bundle.series.journals.reduce((n,j)=>n+j.raw.length*2,0)>64*1024*1024||workspace.series.reduce((n,s)=>n+s.analyses.length,0)+bundle.series.analyses.length>64)throw Error('Комплект превышает лимит 8 серий / 64 анализов / 64 МиБ исходников UTF-16.');
-    if(workspace.series.some(s=>s.id===bundle.series.id))throw Error('Серия с таким ID уже существует. Повторный импорт не создаёт независимых повторений.');
-    for(const r of bundle.runs)await MotionStore.save(r);
-    workspace.series.push(bundle.series);workspace.selected=bundle.series.id;++revision;await persist();location.reload();
+    const input=$('abImport'),f=input.files[0];
+    input.value='';
+    if(!f||f.size>256*1024*1024)throw Error('Экспорт отсутствует или больше 256 МиБ.');
+    const data=JSON.parse(await f.text());
+    const bundle=await MotionManualTransfer.importBundle(data);
+    ++revision;
+    await write(async()=>{
+      const sent=committed;
+      const saved=await MotionStore.importAB(stored=>{
+        const latest=stored??committed;
+        if(latest.series.some(s=>s.id===bundle.series.id))throw Error('Серия с таким ID уже существует. Исходные данные сохранены.');
+        const all=[...latest.series,bundle.series];
+        const sourceBytes=all.reduce((n,s)=>n+s.journals.reduce((m,j)=>m+j.raw.length*2,0),0);
+        if(all.length>8||all.reduce((n,s)=>n+s.analyses.length,0)>64||sourceBytes>64*1024*1024){
+          throw Error('Комплект превышает лимит 8 серий / 64 анализов / 64 МиБ исходников UTF-16.');
+        }
+        if(!bundle.series.retrospective&&bundle.series.attempts.some(a=>latest.series.some(s=>!s.retrospective&&s.attempts.some(old=>old.run_id===a.run_id)))){
+          throw Error('Попытка с таким run_id уже принадлежит другой серии. Исходные данные сохранены.');
+        }
+        const memory=MotionUI.runs();
+        for(const run of bundle.runs)if(memory.some(saved=>saved.run_id===run.run_id&&MotionAB.canonical(saved)!==MotionAB.canonical(run))){
+          throw Error('Конфликт эталона run_id '+run.run_id+'. Исходные данные сохранены.');
+        }
+        return {...latest,mode:'ab',series:all,selected:bundle.series.id};
+      },bundle.series,bundle.runs);
+      adopt(saved,sent);
+      references=await MotionStore.list().catch(()=>mergeRuns([...references,...bundle.runs]));
+      MotionUI.includeImported(bundle.runs);
+    });
+    notice('Серия восстановлена.');
   },true);
-  window.MotionABUI={enabled,notice,plan,started,end,failed,settled,capture,render,write,ingest,analysisError,references:updateReferences};
-  MotionStore.ab().then(data=>{if(data?.schema==='dronecv-motion-ab-workspace-1')workspace=data;$('motionTestMode').value=workspace.mode||'single';ready=true;render();}).catch(e=>notice('Хранилище A/B недоступно: '+e.message));
+  window.MotionABUI={enabled,notice,plan,begin,end,failed,settled,capture,render,write,ingest,analysisError,references:updateReferences};
+  MotionStore.ab().then(data=>{if(data?.schema==='dronecv-motion-ab-workspace-1')workspace=data;committed=clone(workspace);$('motionTestMode').value=workspace.mode||'single';ready=true;render();}).catch(e=>notice('Хранилище A/B недоступно: '+e.message));
 })();
