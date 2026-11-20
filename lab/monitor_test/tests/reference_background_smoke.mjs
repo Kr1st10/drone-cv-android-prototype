@@ -71,6 +71,7 @@ try {
   const captured = url => JSON.parse(new URLSearchParams(new URL(url).hash.slice(1)).get('stimulus'));
   const currentRun = () => page.locator('#referencePilotLink').getAttribute('href');
   const panel = page.locator('#referenceTrialScalePanel');
+  const moveButton = direction => panel.locator(`[data-trial-direction="${direction}"]`);
   const savedTrials = page.locator('#referenceSavedTrials');
   const togglePanel = () => viewport.click({ position: { x: 10, y: 10 } });
   const checkPanelDistance = async state => {
@@ -228,10 +229,19 @@ try {
   assert.match(await page.textContent('#referenceTrialScaleStatus'), /не помещается/);
   assert.deepEqual(await snap(), edged);
   assert.equal(await currentRun(), edgedLink);
+  await moveButton('ArrowRight').click();
+  assert.deepEqual(await snap(), edged);
   await togglePanel();
   assert.equal(await panel.isHidden(), true);
   await page.keyboard.press('Home');
   assert.deepEqual(await position(), centeredPosition);
+  await togglePanel();
+  for (const [direction, dx, dy] of [['ArrowRight', 16, 0], ['ArrowUp', 16, -16],
+    ['ArrowLeft', 0, -16], ['ArrowDown', 0, 0]]) {
+    await moveButton(direction).click();
+    assert.deepEqual(await position(), [centeredPosition[0] + dx, centeredPosition[1] + dy]);
+  }
+  await togglePanel();
   await page.keyboard.press('Shift+ArrowRight');
   await page.keyboard.press('Shift+ArrowUp');
   await page.keyboard.press('ArrowLeft');

@@ -538,6 +538,12 @@
             <button type="button" id="referenceTrialSave">Сохранить</button>
             <button type="button" id="referenceTrialDone">Готово</button>
           </div>
+          <div class="reference-trial-actions reference-trial-navigation" role="group" aria-label="Перемещение коптера">
+            <button type="button" data-trial-direction="ArrowUp" aria-label="Сдвинуть вверх">↑</button>
+            <button type="button" data-trial-direction="ArrowDown" aria-label="Сдвинуть вниз">↓</button>
+            <button type="button" data-trial-direction="ArrowLeft" aria-label="Сдвинуть влево">←</button>
+            <button type="button" data-trial-direction="ArrowRight" aria-label="Сдвинуть вправо">→</button>
+          </div>
           <div class="reference-trial-actions reference-trial-navigation">
             <button type="button" id="referenceTrialPrevious">Назад</button>
             <span id="referenceTrialSequence" aria-live="polite"></span>
@@ -553,7 +559,7 @@
       <p><label>Камера Xiaomi 17 Pro <select id="referenceCamera"><option value="5">Физическая телекамера 5× — план опыта</option><option value="1">1× — сравнение</option></select></label></p>
       <p>1×/5× — обозначение условий опыта. Дальность не умножается на 5; камера меняет размер объекта в кадре YOLO. Использование физического телевика проверяется на телефоне.</p>
       <p><label>Фон <select id="referenceBackground"><option value="neutral">Белый</option><option value="neutral_gray_808080_v1" hidden>Серый</option><option value="sky">Небо</option><option value="${forestBackground}" hidden>Лес — ул. 40 лет Победы</option></select></label><button id="referenceTrial">Режим испытания</button></p>
-      <p id="referencePositionControls" class="hidden">В полноэкранном режиме перемещайте коптер стрелками. Shift ускоряет перемещение, Home возвращает в центр.
+      <p id="referencePositionControls" class="hidden">В полноэкранном режиме перемещайте коптер стрелками на панели или клавиатуре. На клавиатуре Shift ускоряет перемещение, Home возвращает в центр.
         <button type="button" id="referenceCenter">Вернуть в центр</button>
       </p>
       <p id="referenceTrialScaleHelp" class="hidden">В полноэкранном показе + и − меняют масштаб на ${trialScaleStep.toLocaleString('ru-RU')} процентного пункта. Щелчок открывает управление. Нажмите «Сохранить», когда YOLO увидит коптер.</p>
@@ -581,6 +587,7 @@
     const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), viewport = $('referenceViewport');
     let image = $('referenceDisplay');
     const scalePanel = $('referenceTrialScalePanel');
+    const movementButtons = scalePanel.querySelectorAll('[data-trial-direction]');
     const scaleStatus = $('referenceTrialScaleStatus');
     const trialSummary = $('referenceTrialSummary');
     const savedTrials = $('referenceSavedTrials');
@@ -1011,6 +1018,7 @@
       const clampedY = Math.min(maxY, Math.max(minY, y));
       if (clampedX === pairedPosition[0] && clampedY === pairedPosition[1]) return;
       pairedPosition = [clampedX, clampedY];
+      scaleStatus.textContent = '';
       persist();
       // The new link describes this placement. Previously opened links retain their original conditions.
       capturePilotConditions(update());
@@ -1056,6 +1064,7 @@
       $('referenceTrialPrevious').disabled = waiting || index <= 0;
       $('referenceTrialNext').disabled = waiting || index >= trialSequence.length - 1;
       for (const id of ['referenceTrialSmaller', 'referenceTrialLarger', 'referenceTrialSave']) $(id).disabled = waiting;
+      for (const button of movementButtons) button.disabled = waiting;
       $('referenceTrialSequence').textContent = index < 0 ? 'Начало серии по кнопке «Вперёд»'
         : `${index + 1}/${trialSequence.length} · ${photo.source_photo_id} · ${variantLabel(variant)} · ${backgroundLabel(pairedBackground)}`;
     }
@@ -1137,17 +1146,23 @@
     };
     $('referenceTrialDone').onclick = () => stopTrial();
     const trialDirections = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    function nudgeTrial(direction, fast) {
+      if (trialPhase !== 'active' || document.fullscreenElement !== viewport || !photo.variants || trialPhotoRequest) return;
+      const [dx, dy] = trialDirections[direction];
+      const step = fast ? 64 : 16;
+      if (!scalePanel.hidden) showScalePanel(true);
+      repositionTrial(pairedPosition[0] + dx * step, pairedPosition[1] + dy * step);
+    }
+    for (const button of movementButtons) button.onclick = () => nudgeTrial(button.dataset.trialDirection, false);
     // No legacy gallery shortcuts; explicit Esc also works when a browser doesn't consume it natively.
     document.addEventListener('keydown', e => {
       if (document.fullscreenElement === viewport) {
         e.stopImmediatePropagation();
         if (e.key === 'Escape') stopTrial();
         if (trialPhase === 'active' && photo.variants && !trialPhotoRequest) {
-          const direction = trialDirections[e.key];
-          if (direction) {
+          if (Object.hasOwn(trialDirections, e.key)) {
             e.preventDefault();
-            const step = e.shiftKey ? 64 : 16;
-            repositionTrial(pairedPosition[0] + direction[0] * step, pairedPosition[1] + direction[1] * step);
+            nudgeTrial(e.key, e.shiftKey);
           } else if (!e.ctrlKey && !e.metaKey && !e.altKey && ['+', '=', '-', '−'].includes(e.key)) {
             e.preventDefault();
             stepTrialScale(e.key === '+' || e.key === '=' ? 1 : -1);
