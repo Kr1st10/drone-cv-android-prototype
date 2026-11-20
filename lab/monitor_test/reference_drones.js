@@ -509,6 +509,8 @@
     let camera = saved?.camera === '1' ? '1' : '5';
     let variant = saved?.variant === 'clean' ? 'clean' : 'original';
     let pilotCaptured = false;
+    let latestTrial = null, panelTimer;
+    let trialStartScale = scale, trialScaleSteps = 0;
     const savedPosition = saved?.paired_position_css_px;
     let pairedPosition = Array.isArray(savedPosition) && savedPosition.length === 2 && savedPosition.every(Number.isFinite)
       ? savedPosition : [0, 0];
@@ -522,7 +524,14 @@
       <label id="referenceRangeModeLabel">Расчёт <select id="referenceRangeMode"><option value="approximate">Приближённая оценка</option><option value="strict">Строгий: подтверждённая ось</option></select></label>
       <p><span id="referenceDimensions"></span> · <span id="referenceSpecSource"></span></p>
       <p id="referenceView"></p>
-      <div id="referenceViewport"><img id="referenceDisplay" alt=""><svg id="referenceSegmentOverlay" aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none"></svg><p id="referenceMissing" class="hidden">Фотография недоступна.</p></div>
+      <div id="referenceViewport"><img id="referenceDisplay" alt=""><svg id="referenceSegmentOverlay" aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none"></svg><p id="referenceMissing" class="hidden">Фотография недоступна.</p>
+        <div id="referenceTrialScalePanel" role="group" aria-label="Масштаб показа" hidden>
+          <button type="button" id="referenceTrialSmaller" aria-label="Уменьшить масштаб на 0,1 процентного пункта">−</button>
+          <button type="button" id="referenceTrialLarger" aria-label="Увеличить масштаб на 0,1 процентного пункта">+</button>
+          <button type="button" id="referenceTrialDone">Готово</button>
+          <span id="referenceTrialScaleStatus" role="status"></span>
+        </div>
+      </div>
       <p><label>Масштаб <input id="referenceScale" type="range" min="0.1" max="1000" step="0.1"></label>
       <label><input id="referenceScaleNumber" type="number" min="0.01" max="1000" step="any" aria-label="Масштаб фотографии, %"> %</label>
       <button id="referenceHalf">Уменьшить вдвое</button><button id="referenceDouble">Увеличить вдвое</button></p>
@@ -533,6 +542,7 @@
       <p id="referencePositionControls" class="hidden">В полноэкранном режиме перемещайте коптер стрелками. Shift ускоряет перемещение, Home возвращает в центр.
         <button type="button" id="referenceCenter">Вернуть в центр</button>
       </p>
+      <p id="referenceTrialScaleHelp" class="hidden">В полноэкранном показе + и − меняют масштаб на 0,1 процентного пункта. Щелчок открывает кнопки.</p>
       <p id="referenceBackgroundNote"></p>
       <p id="referenceForestCredit" class="hidden">Фото
         <a href="https://commons.wikimedia.org/wiki/File:40_лет_Победы.jpg" target="_blank" rel="noopener">Yan.gorev</a> ·
@@ -541,6 +551,7 @@
       </p>
       <p id="referencePilotRun" class="hidden"><a id="referencePilotLink" target="_blank" rel="noopener">Открыть пилот с сохранёнными условиями</a> <span id="referencePilotLabel"></span></p>
       <p id="referenceReadout" aria-live="polite"></p>
+      <p id="referenceTrialSummary" role="status" hidden></p>
       <details id="referenceSegmentReview" class="hidden"><summary id="referenceSegmentTitle">Разметка A–B</summary><label><input id="referenceSegmentToggle" type="checkbox"> Показать отрезок A–B</label><p id="referenceSegmentReadout"></p></details><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
       <p class="muted">Лабораторная эквивалентная дальность по угловому размеру. Не измерение дальности обнаружения в полёте.</p>
       <details><summary>Дополнительно: источник фотографии и геометрия</summary>
@@ -551,6 +562,9 @@
     const $ = id => element.querySelector('#' + id);
     const select = $('referenceDrone'), photoSelect = $('referencePhotoSelect'), viewport = $('referenceViewport');
     let image = $('referenceDisplay');
+    const scalePanel = $('referenceTrialScalePanel');
+    const scaleStatus = $('referenceTrialScaleStatus');
+    const trialSummary = $('referenceTrialSummary');
     const decodedImages = new Map();
     // Older saved cabinet settings without a photo ID selected IMG_2707.
     const savedPhotoId = saved?.photo_id ?? (saved?.model_id === 'cabinet_reference' ? 'cabinet_front' : null);
@@ -617,6 +631,11 @@
         maxY: (p.height / 2 - bottom) * imageScale + height / 2,
       };
     }
+    function fitsPlacement(p, imageScale, width, height, x, y) {
+      if (!positive(imageScale) || !p.bounds_px) return false;
+      const { minX, minY, maxX, maxY } = placementBounds(p, imageScale, width, height);
+      return x >= minX - 0.1 && x <= maxX + 0.1 && y >= minY - 0.1 && y <= maxY + 0.1;
+    }
     function update() {
       const p = photo, cal = getCalibration();
       const activeMode = rangeMode();
@@ -627,6 +646,8 @@
       const trial = document.fullscreenElement === viewport;
       const [offsetX, offsetY] = paired ? pairedPosition : [0, 0];
       $('referencePositionControls').classList.toggle('hidden', !paired);
+      $('referenceTrialScaleHelp').classList.toggle('hidden', !paired);
+      trialSummary.hidden = trialPhase !== 'idle' || !latestTrial;
       $('referenceCenter').disabled = trialPhase !== 'idle' || (offsetX === 0 && offsetY === 0);
       const visibleAsset = loaded ? p.variants?.[variant] : null;
       $('referenceVariantLabel').classList.toggle('hidden', !paired);
@@ -667,12 +688,7 @@
         getDistance(), cal?.mm_per_css_px, geometry);
       const capacityWidth = trial ? Math.min(v.width, innerWidth) : screen.width;
       const capacityHeight = trial ? Math.min(v.height, innerHeight) : screen.height;
-      let fullscreenFits = false;
-      if (loaded && b && positive(actualScale)) {
-        const { minX, minY, maxX, maxY } = placementBounds(p, actualScale, capacityWidth, capacityHeight);
-        fullscreenFits = offsetX >= minX - 0.1 && offsetX <= maxX + 0.1 &&
-          offsetY >= minY - 0.1 && offsetY <= maxY + 0.1;
-      }
+      const fullscreenFits = loaded && fitsPlacement(p, actualScale, capacityWidth, capacityHeight, offsetX, offsetY);
       const fmt = n => n == null ? 'нет данных' : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
       const candidate = p.review_segment, overlay = $('referenceSegmentOverlay');
       const segmentMm = reviewSegmentLength(p, { width: image.naturalWidth, height: image.naturalHeight, scale: actualScale, visible: loaded }, cal?.mm_per_css_px);
@@ -744,7 +760,7 @@
     function setScale(value) {
       const n = Number(value);
       if (!positive(n) || n < 0.01 || n > 1000) { $('referenceScaleNumber').setCustomValidity('Введите масштаб от 0,01 до 1000 %.'); update(); return; }
-      $('referenceScaleNumber').setCustomValidity(''); scale = n; persist(); update();
+      $('referenceScaleNumber').setCustomValidity(''); scale = n; persist(); return update();
     }
     $('referenceSegmentToggle').onchange = update;
     $('referenceRangeMode').onchange = e => { mode = e.target.value === 'strict' ? 'strict' : 'approximate'; persist(); update(); };
@@ -773,7 +789,14 @@
         r.x, r.y, r.width, r.height, i.width, i.height, window.screenX, window.screenY,
         screen.availWidth, screen.availHeight, devicePixelRatio, screen.width, screen.height, window.visualViewport?.scale ?? 1]);
     }
+    function showScalePanel(visible) {
+      clearTimeout(panelTimer);
+      scalePanel.hidden = !visible;
+      viewport.classList.toggle('reference-controls-open', visible);
+      if (visible) panelTimer = setTimeout(() => showScalePanel(false), 2000);
+    }
     function beginSettling(phase) {
+      showScalePanel(false);
       trialPhase = phase; settleStarted = stableSince = performance.now(); lastLayout = '';
       if (settleFrame != null) cancelAnimationFrame(settleFrame);
       settleFrame = requestAnimationFrame(settleTrial);
@@ -781,6 +804,9 @@
     function capturePilotConditions(state) {
       if (pilotCaptured || !state.asset_id || !state.fullscreen_fits || !positive(state.equivalent_distance_m)) return;
       pilotCaptured = true;
+      latestTrial = state;
+      const readable = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+      trialSummary.textContent = `Итог показа · ≈ ${readable(state.equivalent_distance_m)} м · масштаб ${readable(state.scale_percent)} % · A–B ${readable(state.review_segment_display_mm)} мм`;
       const { photo_id, source_photo_id, source_sha256, asset_id, asset_sha256, asset_revision, stimulus_variant,
         mask_revision, geometry_revision, geometry_status, projection_confirmed, source_size_px, crop_ltrb_px,
         segment_a_source_px, segment_b_source_px, physical_segment_mm, projected_segment_mm,
@@ -830,7 +856,10 @@
       settleFrame = null; trialPhase = 'manual-exit'; exitRequested = false; update();
     }
     function stopTrial(message) {
-      if (message) targetError = message;
+      if (message) {
+        targetError = message;
+        latestTrial = null;
+      }
       if (exitRequested) return;
       exitRequested = true; beginSettling('exiting');
       if (document.fullscreenElement === viewport) {
@@ -889,6 +918,10 @@
       if (!state.fullscreen_fits) { targetError = 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб.'; update(); return; }
       if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим. Измерения сохранены.'; update(); return; }
       pilotCaptured = false;
+      latestTrial = null;
+      trialStartScale = scale;
+      trialScaleSteps = 0;
+      scaleStatus.textContent = '';
       // The exemption starts before requestFullscreen: resize may precede fullscreenchange/promise resolution.
       beginSettling('entering');
       try { await viewport.requestFullscreen(); }
@@ -927,6 +960,42 @@
       pilotCaptured = false;
       capturePilotConditions(update());
     }
+    function stepTrialScale(direction) {
+      if (trialPhase !== 'active' || document.fullscreenElement !== viewport || !photo.variants) return;
+      const nextStep = trialScaleSteps + direction;
+      const requestedScale = trialStartScale + nextStep / 10;
+      const nextScale = Math.min(1000, Math.max(0.01, requestedScale));
+      if (Math.abs(nextScale - requestedScale) > 1e-10) {
+        scaleStatus.textContent = 'Достигнут предел масштаба.';
+        showScalePanel(true);
+        return;
+      }
+      // Read the candidate CSS width before committing scale or triggering the fullscreen clipping guard.
+      const previousWidth = image.style.width;
+      image.style.width = photo.width * nextScale / 100 + 'px';
+      const imageScale = image.getBoundingClientRect().width / photo.width;
+      const area = viewport.getBoundingClientRect();
+      if (!fitsPlacement(photo, imageScale, Math.min(area.width, innerWidth),
+        Math.min(area.height, innerHeight), ...pairedPosition)) {
+        image.style.width = previousWidth;
+        scaleStatus.textContent = 'В этой позиции коптер не помещается. Масштаб сохранён.';
+        showScalePanel(true);
+        return;
+      }
+      scaleStatus.textContent = '';
+      if (!scalePanel.hidden) showScalePanel(true);
+      trialScaleSteps = nextStep;
+      pilotCaptured = false;
+      capturePilotConditions(setScale(nextScale));
+    }
+    viewport.addEventListener('click', e => {
+      if (trialPhase === 'active' && document.fullscreenElement === viewport && photo.variants && !scalePanel.contains(e.target)) {
+        showScalePanel(scalePanel.hidden);
+      }
+    });
+    $('referenceTrialSmaller').onclick = () => stepTrialScale(-1);
+    $('referenceTrialLarger').onclick = () => stepTrialScale(1);
+    $('referenceTrialDone').onclick = () => stopTrial();
     const trialDirections = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     // No legacy gallery shortcuts; explicit Esc also works when a browser doesn't consume it natively.
     document.addEventListener('keydown', e => {
@@ -939,6 +1008,9 @@
             e.preventDefault();
             const step = e.shiftKey ? 64 : 16;
             repositionTrial(pairedPosition[0] + direction[0] * step, pairedPosition[1] + direction[1] * step);
+          } else if (!e.ctrlKey && !e.metaKey && !e.altKey && ['+', '=', '-', '−'].includes(e.key)) {
+            e.preventDefault();
+            stepTrialScale(e.key === '+' || e.key === '=' ? 1 : -1);
           } else if (e.key === 'Home') {
             e.preventDefault();
             repositionTrial(0, 0);

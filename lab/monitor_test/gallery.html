@@ -27,7 +27,10 @@
   #referenceViewport:fullscreen { width: 100vw; height: 100vh; margin: 0; padding: 0; border: 0; background-color: #fff; cursor: none; }
   #referenceViewport.reference-gray { background: #808080; }
   #referenceViewport.reference-forest { background: #25342a url('reference_assets/forest_40_let_pobedy_full_v1.jpg') center / contain no-repeat; }
-  #referenceViewport:fullscreen > :not(#referenceDisplay) { display: none !important; }
+  #referenceViewport:fullscreen > :not(#referenceDisplay, #referenceTrialScalePanel) { display: none !important; }
+  #referenceViewport:fullscreen.reference-controls-open { cursor: default; }
+  #referenceTrialScalePanel { position: absolute; z-index: 1; bottom: 1rem; left: 50%; transform: translateX(-50%); padding: .5rem; background: #202124; color: #fff; border-radius: .5rem; text-align: center; }
+  #referenceTrialScaleStatus:not(:empty) { display: block; margin-top: .25rem; }
   #referenceDisplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: none; }
   #referenceMissing { padding: 24px; }
   #referenceSection input[type=range] { width: min(240px, 40vw); vertical-align: middle; }
