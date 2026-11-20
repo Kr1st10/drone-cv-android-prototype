@@ -148,7 +148,7 @@ assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 30) < 0.004);
 await page.click('#screenCalibBtn'); await page.fill('#screenLineCm', '10'); await page.click('#applyScreenCalib'); await page.keyboard.press('Escape');
 assert.ok(Math.abs((await snapshot()).equivalent_distance_m - 60) < 0.008);
 // A target clipped by the scroll panel is not fully displayed even if its own viewport is inside the window.
-await page.locator('#referenceSection details:not(#referenceSegmentReview)').evaluate(e => e.open = true);
+await page.locator('#referenceGeometryDetails').evaluate(e => e.open = true);
 const clipped = await page.evaluate(() => {
   const panel = document.getElementById('settings'), image = document.getElementById('referenceDisplay');
   panel.style.maxHeight = '500px'; // ensure enough scroll range without invalidating the calibrated window
@@ -159,7 +159,7 @@ const clipped = await page.evaluate(() => {
 assert.ok(clipped); assert.ok((await snapshot()).equivalent_distance_m > 0);
 assert.equal((await snapshot()).preview_visible, false);
 await page.locator('#settings').evaluate(e => { e.style.maxHeight = ''; e.scrollTop = 0; });
-await page.locator('#referenceSection details:not(#referenceSegmentReview)').evaluate(e => e.open = false);
+await page.locator('#referenceGeometryDetails').evaluate(e => e.open = false);
 assert.ok((await snapshot()).equivalent_distance_m > 0);
 await page.fill('#distance', ''); assert.equal((await snapshot()).equivalent_distance_m, null);
 await page.fill('#distance', '150');
