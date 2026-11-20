@@ -231,6 +231,11 @@ try {
   assert.equal(await currentRun(), edgedLink);
   await moveButton('ArrowRight').click();
   assert.deepEqual(await snap(), edged);
+  await page.click('#referenceTrialCenter');
+  assert.deepEqual(await snap(), centered);
+  assert.deepEqual(await position(), centeredPosition);
+  assert.equal(await currentRun(), centeredLink);
+  await moveButton('ArrowRight').click();
   await togglePanel();
   assert.equal(await panel.isHidden(), true);
   await page.keyboard.press('Home');

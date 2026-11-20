@@ -544,6 +544,7 @@
             <button type="button" data-trial-direction="ArrowDown" aria-label="Сдвинуть вниз">↓</button>
             <button type="button" data-trial-direction="ArrowLeft" aria-label="Сдвинуть влево">←</button>
             <button type="button" data-trial-direction="ArrowRight" aria-label="Сдвинуть вправо">→</button>
+            <button type="button" id="referenceTrialCenter" aria-label="Вернуть коптер в центр">В центр</button>
           </div>
           <div class="reference-trial-actions reference-trial-navigation">
             <button type="button" id="referenceTrialPrevious">Назад</button>
@@ -1068,6 +1069,7 @@
       $('referenceTrialNext').disabled = waiting || index >= trialSequence.length - 1;
       for (const id of ['referenceTrialSmaller', 'referenceTrialLarger', 'referenceTrialSave']) $(id).disabled = waiting;
       for (const button of movementButtons) button.disabled = waiting;
+      $('referenceTrialCenter').disabled = waiting;
       $('referenceTrialSequence').textContent = index < 0 ? 'Начало серии по кнопке «Вперёд»'
         : `${index + 1}/${trialSequence.length} · ${photo.source_photo_id} · ${variantLabel(variant)} · ${backgroundLabel(pairedBackground)}`;
     }
@@ -1159,6 +1161,12 @@
       repositionTrial(pairedPosition[0] + dx * step, pairedPosition[1] + dy * step);
     }
     for (const button of movementButtons) button.onclick = () => nudgeTrial(button.dataset.trialDirection, false);
+    function centerTrial() {
+      if (trialPhase !== 'active' || document.fullscreenElement !== viewport || !photo.variants || trialPhotoRequest) return;
+      if (!scalePanel.hidden) showScalePanel(true);
+      repositionTrial(0, 0);
+    }
+    $('referenceTrialCenter').onclick = centerTrial;
     // No legacy gallery shortcuts; explicit Esc also works when a browser doesn't consume it natively.
     document.addEventListener('keydown', e => {
       if (document.fullscreenElement === viewport) {
@@ -1173,7 +1181,7 @@
             stepTrialScale(e.key === '+' || e.key === '=' ? 1 : -1);
           } else if (e.key === 'Home') {
             e.preventDefault();
-            repositionTrial(0, 0);
+            centerTrial();
           }
         }
       }
