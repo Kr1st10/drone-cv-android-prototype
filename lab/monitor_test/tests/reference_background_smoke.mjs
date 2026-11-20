@@ -71,7 +71,18 @@ try {
   const captured = url => JSON.parse(new URLSearchParams(new URL(url).hash.slice(1)).get('stimulus'));
   const currentRun = () => page.locator('#referencePilotLink').getAttribute('href');
   const panel = page.locator('#referenceTrialScalePanel');
+  const savedTrials = page.locator('#referenceSavedTrials');
   const togglePanel = () => viewport.click({ position: { x: 10, y: 10 } });
+  const checkPanelDistance = async state => {
+    const distance = state.equivalent_distance_m.toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+    assert.equal(await panel.locator('#referenceTrialDistance').textContent(), `≈ ${distance} м`);
+  };
+  const savePoint = async () => {
+    await page.click('#referenceTrialSave');
+    assert.equal(await page.textContent('#referenceTrialScaleStatus'), 'Сохранено');
+    assert.equal((await snap()).trial_phase, 'active');
+    return currentRun();
+  };
   const checkSummary = async state => {
     const summary = page.locator('#referenceTrialSummary');
     await summary.waitFor({ state: 'visible' });
@@ -196,6 +207,7 @@ try {
     }
   }
   await selector.selectOption(forest);
+  assert.equal(await savedTrials.isHidden(), true);
   await page.click('#referenceTrial');
   await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'active');
   const centeredLink = await currentRun();
@@ -229,15 +241,19 @@ try {
   assert.equal(moved.review_segment_display_mm, centered.review_segment_display_mm);
   assert.equal(moved.equivalent_distance_m, centered.equivalent_distance_m);
   assert.equal(moved.calibration_id, centered.calibration_id);
+  await togglePanel();
+  await checkPanelDistance(moved);
+  const firstSavedForest = await savePoint();
   await page.keyboard.press('+');
   const larger = await snap();
-  assert.equal(larger.scale_percent, moved.scale_percent + 0.1);
+  assert.equal(larger.scale_percent, moved.scale_percent + 0.5);
+  await checkPanelDistance(larger);
   assert.ok(larger.review_segment_display_mm > moved.review_segment_display_mm);
   assert.ok(larger.equivalent_distance_m < moved.equivalent_distance_m);
   assert.equal(larger.calibration_id, moved.calibration_id);
   assert.equal(larger.position_offset_x_css_px, moved.position_offset_x_css_px);
   assert.equal(larger.position_offset_y_css_px, moved.position_offset_y_css_px);
-  lastRun = await currentRun();
+  lastRun = await savePoint();
   assert.equal(captured(centeredLink).position_offset_x_css_px, 0);
   assert.equal(captured(centeredLink).scale_percent, centered.scale_percent);
   assert.equal(captured(lastRun).scale_percent, larger.scale_percent);
@@ -259,13 +275,14 @@ try {
   await togglePanel();
   await page.click('#referenceTrialSmaller');
   const smaller = await snap();
-  assert.equal(smaller.scale_percent, larger.scale_percent - 0.1);
+  assert.equal(smaller.scale_percent, larger.scale_percent - 0.5);
+  await checkPanelDistance(smaller);
   assert.equal(smaller.review_segment_display_mm, moved.review_segment_display_mm);
   await page.click('#referenceTrialLarger');
   const white = await snap();
   assert.equal(white.scale_percent, larger.scale_percent);
   assert.equal(white.review_segment_display_mm, larger.review_segment_display_mm);
-  lastRun = await currentRun();
+  lastRun = await savePoint();
   await page.click('#referenceTrialDone');
   await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'idle');
   await checkSummary(white);
@@ -378,7 +395,7 @@ try {
       await page.keyboard.press('+');
       const adjusted = await renderedSegment();
       const state = await snap();
-      assert.equal(adjusted.scale, initial.scale + count / 10);
+      assert.equal(adjusted.scale, initial.scale + count * 0.5);
       assert.equal(adjusted.calibration, initial.calibration);
       assert.ok(Math.abs(adjusted.mm - initial.mm * (adjusted.scale / initial.scale)) < 0.01);
       assert.ok(Math.abs(state.equivalent_distance_m - 325 * 4.34 / adjusted.mm) < 0.001);
@@ -395,21 +412,31 @@ try {
     await checkSummary({ ...(await snap()), review_segment_display_mm: initial.mm });
     assert.deepEqual(await renderedSegment(), initial);
   }
-  await page.fill('#referenceScaleNumber', '0.11');
+  await page.fill('#referenceScaleNumber', '0.51');
   await page.click('#referenceTrial');
   await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'active');
   await page.keyboard.press('-');
-  assert.equal((await snap()).scale_percent, 0.01);
+  assert.ok(Math.abs((await snap()).scale_percent - 0.01) < 1e-10);
   await page.keyboard.press('-');
   await panel.waitFor({ state: 'visible' });
   assert.match(await page.textContent('#referenceTrialScaleStatus'), /предел масштаба/);
-  assert.equal((await snap()).scale_percent, 0.01);
+  assert.ok(Math.abs((await snap()).scale_percent - 0.01) < 1e-10);
   await page.keyboard.press('+');
-  assert.equal((await snap()).scale_percent, 0.11);
+  assert.equal((await snap()).scale_percent, 0.51);
   await page.click('#referenceTrialDone');
   await page.waitForFunction(() => referenceTab.snapshot().trial_phase === 'idle');
+  await page.reload();
+  await page.click('[data-section=reference]');
+  await savedTrials.locator('summary').click();
+  const savedLinks = savedTrials.locator('li a');
+  assert.deepEqual(await savedLinks.evaluateAll(links => links.map(link => link.href)), [
+    runs.get('2711_clean_neutral_moved'), runs.get(forestKey), firstSavedForest
+  ]);
+  assert.match(await savedLinks.nth(0).textContent(), /IMG_2711.*Белый.*A–B/);
+  assert.match(await savedLinks.nth(1).textContent(), /IMG_2711.*Лес.*A–B/);
+  assert.equal(captured(firstSavedForest).scale_percent, moved.scale_percent);
   assert.deepEqual(errors, []);
-  console.log('Paired shows, forest round trip, rendered A–B, frozen conditions and pilot JSON/CSV: OK');
+  console.log('Paired shows, rendered A–B, saved points and pilot JSON/CSV: OK');
 } finally {
   await browser.close();
 }

@@ -508,9 +508,9 @@
     let pairedBackground = Object.hasOwn(pairedBackgrounds, saved?.paired_background) ? saved.paired_background : grayBackground;
     let camera = saved?.camera === '1' ? '1' : '5';
     let variant = saved?.variant === 'clean' ? 'clean' : 'original';
-    let pilotCaptured = false;
     let latestTrial = null, panelTimer;
     let trialStartScale = scale, trialScaleSteps = 0;
+    const trialScaleStep = 0.5;
     const savedPosition = saved?.paired_position_css_px;
     let pairedPosition = Array.isArray(savedPosition) && savedPosition.length === 2 && savedPosition.every(Number.isFinite)
       ? savedPosition : [0, 0];
@@ -525,10 +525,14 @@
       <p><span id="referenceDimensions"></span> · <span id="referenceSpecSource"></span></p>
       <p id="referenceView"></p>
       <div id="referenceViewport"><img id="referenceDisplay" alt=""><svg id="referenceSegmentOverlay" aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none"></svg><p id="referenceMissing" class="hidden">Фотография недоступна.</p>
-        <div id="referenceTrialScalePanel" role="group" aria-label="Масштаб показа" hidden>
-          <button type="button" id="referenceTrialSmaller" aria-label="Уменьшить масштаб на 0,1 процентного пункта">−</button>
-          <button type="button" id="referenceTrialLarger" aria-label="Увеличить масштаб на 0,1 процентного пункта">+</button>
-          <button type="button" id="referenceTrialDone">Готово</button>
+        <div id="referenceTrialScalePanel" role="group" aria-label="Управление показом" hidden>
+          <div class="reference-trial-actions">
+            <button type="button" id="referenceTrialSmaller" aria-label="Уменьшить масштаб">−</button>
+            <output id="referenceTrialDistance" aria-label="Модельная дальность"></output>
+            <button type="button" id="referenceTrialLarger" aria-label="Увеличить масштаб">+</button>
+            <button type="button" id="referenceTrialSave">Сохранить</button>
+            <button type="button" id="referenceTrialDone">Готово</button>
+          </div>
           <span id="referenceTrialScaleStatus" role="status"></span>
         </div>
       </div>
@@ -542,7 +546,7 @@
       <p id="referencePositionControls" class="hidden">В полноэкранном режиме перемещайте коптер стрелками. Shift ускоряет перемещение, Home возвращает в центр.
         <button type="button" id="referenceCenter">Вернуть в центр</button>
       </p>
-      <p id="referenceTrialScaleHelp" class="hidden">В полноэкранном показе + и − меняют масштаб на 0,1 процентного пункта. Щелчок открывает кнопки.</p>
+      <p id="referenceTrialScaleHelp" class="hidden">В полноэкранном показе + и − меняют масштаб на ${trialScaleStep.toLocaleString('ru-RU')} процентного пункта. Щелчок открывает управление. Нажмите «Сохранить», когда YOLO увидит коптер.</p>
       <p id="referenceBackgroundNote"></p>
       <p id="referenceForestCredit" class="hidden">Фото
         <a href="https://commons.wikimedia.org/wiki/File:40_лет_Победы.jpg" target="_blank" rel="noopener">Yan.gorev</a> ·
@@ -552,9 +556,13 @@
       <p id="referencePilotRun" class="hidden"><a id="referencePilotLink" target="_blank" rel="noopener">Открыть пилот с сохранёнными условиями</a> <span id="referencePilotLabel"></span></p>
       <p id="referenceReadout" aria-live="polite"></p>
       <p id="referenceTrialSummary" role="status" hidden></p>
+      <details id="referenceSavedTrials" hidden>
+        <summary>Сохранённые замеры</summary>
+        <ul></ul>
+      </details>
       <details id="referenceSegmentReview" class="hidden"><summary id="referenceSegmentTitle">Разметка A–B</summary><label><input id="referenceSegmentToggle" type="checkbox"> Показать отрезок A–B</label><p id="referenceSegmentReadout"></p></details><p id="referenceAssumption" class="warn"></p><p id="referenceIssue" class="warn"></p>
       <p class="muted">Лабораторная эквивалентная дальность по угловому размеру. Не измерение дальности обнаружения в полёте.</p>
-      <details><summary>Дополнительно: источник фотографии и геометрия</summary>
+      <details id="referenceGeometryDetails"><summary>Дополнительно: источник фотографии и геометрия</summary>
         <p>100 % = один пиксель показываемого файла на один CSS px. Белые поля не входят в измерение объекта. Предпросмотр может обрезать изображение, не меняя расчёт. Полноэкранный режим отдельно проверяет, помещается ли объект на экране. Обрезанный силуэт не приравнивается полному габариту. Для него нужен отдельный достоверный отрезок.</p>
         <p id="referenceDimensionNote"></p><p id="referenceDiagnostics"></p><p id="referencePhotoSource"></p>
         <p>Разрешение авторов на использование и публикацию фотографий подтверждено пользователем 2026-11-06. Это не подтверждение проекции.</p>
@@ -565,6 +573,7 @@
     const scalePanel = $('referenceTrialScalePanel');
     const scaleStatus = $('referenceTrialScaleStatus');
     const trialSummary = $('referenceTrialSummary');
+    const savedTrials = $('referenceSavedTrials');
     const decodedImages = new Map();
     // Older saved cabinet settings without a photo ID selected IMG_2707.
     const savedPhotoId = saved?.photo_id ?? (saved?.model_id === 'cabinet_reference' ? 'cabinet_front' : null);
@@ -572,6 +581,31 @@
     for (const p of profiles) select.add(new Option(p.model, p.id));
     function persist() { save('reference_tab', { model_id: selected.id, photo_id: photo.id, view: photo.view, scale_percent: scale, range_mode: mode, background, paired_background: pairedBackground, paired_position_css_px: pairedPosition, camera, ...(photo.variants ? { variant } : {}) }); }
     function link(node, url, label) { const a = document.createElement('a'); a.href = url; a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.replaceChildren(a); }
+    const readable = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+    const variantLabel = variant => variant === 'clean' ? 'Чистый фон' : 'Оригинал';
+    const trialsKey = 'reference_saved_trials';
+    function getSavedTrials() {
+      const records = load(trialsKey, []);
+      return Array.isArray(records) ? records : [];
+    }
+    function pilotUrl(conditions) {
+      const url = new URL('yolo-pilot/index.html', document.baseURI);
+      url.hash = new URLSearchParams({ stimulus: JSON.stringify(conditions) }).toString();
+      return url.href;
+    }
+    function renderSavedTrials(records) {
+      savedTrials.hidden = !records.length;
+      savedTrials.querySelector('summary').textContent = `Сохранённые замеры (${records.length})`;
+      const backgrounds = Array.from($('referenceBackground').options);
+      const entries = records.map(({ saved_at, conditions }) => {
+        const time = new Date(saved_at).toLocaleString('ru-RU');
+        const backgroundLabel = backgrounds.find(option => option.value === conditions.background)?.textContent ?? conditions.background;
+        const item = document.createElement('li');
+        link(item, pilotUrl(conditions), `${time} · ${conditions.source_photo_id} · ${variantLabel(conditions.stimulus_variant)} · ${backgroundLabel} · ≈ ${readable(conditions.equivalent_range_m)} м · A–B ${readable(conditions.review_segment_display_mm)} мм`);
+        return item;
+      });
+      savedTrials.querySelector('ul').replaceChildren(...entries);
+    }
     function choosePhoto() {
       photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
       const p = photo, generation = ++loadGeneration;
@@ -794,6 +828,7 @@
       scalePanel.hidden = !visible;
       viewport.classList.toggle('reference-controls-open', visible);
       if (visible) panelTimer = setTimeout(() => showScalePanel(false), 2000);
+      else scaleStatus.textContent = '';
     }
     function beginSettling(phase) {
       showScalePanel(false);
@@ -802,11 +837,9 @@
       settleFrame = requestAnimationFrame(settleTrial);
     }
     function capturePilotConditions(state) {
-      if (pilotCaptured || !state.asset_id || !state.fullscreen_fits || !positive(state.equivalent_distance_m)) return;
-      pilotCaptured = true;
-      latestTrial = state;
-      const readable = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+      if (!state.asset_id || !state.fullscreen_fits || !positive(state.equivalent_distance_m)) return;
       trialSummary.textContent = `Итог показа · ≈ ${readable(state.equivalent_distance_m)} м · масштаб ${readable(state.scale_percent)} % · A–B ${readable(state.review_segment_display_mm)} мм`;
+      $('referenceTrialDistance').textContent = `≈ ${state.equivalent_distance_m.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} м`;
       const { photo_id, source_photo_id, source_sha256, asset_id, asset_sha256, asset_revision, stimulus_variant,
         mask_revision, geometry_revision, geometry_status, projection_confirmed, source_size_px, crop_ltrb_px,
         segment_a_source_px, segment_b_source_px, physical_segment_mm, projected_segment_mm,
@@ -818,11 +851,11 @@
         geometry_status, projection_confirmed, source_size_px, crop_ltrb_px, segment_a_source_px, segment_b_source_px,
         physical_segment_mm, projected_segment_mm, review_segment_display_mm, scale_percent, css_px_per_asset_px,
         calibration_id, mm_per_css_px, position_offset_x_css_px, position_offset_y_css_px, background, background_hex, background_asset };
-      const url = new URL('yolo-pilot/index.html', document.baseURI);
-      url.hash = new URLSearchParams({ stimulus: JSON.stringify(conditions) }).toString();
-      $('referencePilotLink').href = url.href;
-      $('referencePilotLabel').textContent = `· ${source_photo_id} · ${stimulus_variant === 'clean' ? 'Чистый фон' : 'Оригинал'}`;
+      latestTrial = conditions;
+      $('referencePilotLink').href = pilotUrl(conditions);
+      $('referencePilotLabel').textContent = `· ${source_photo_id} · ${variantLabel(stimulus_variant)}`;
       $('referencePilotRun').classList.remove('hidden');
+      return conditions;
     }
     function settleTrial(now) {
       settleFrame = null;
@@ -917,11 +950,9 @@
       if (!positive(state.equivalent_distance_m)) { targetError = 'Сначала получите корректную геометрию изображения: проверьте калибровку, ракурс, расстояние и исходные данные.'; update(); return; }
       if (!state.fullscreen_fits) { targetError = 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб.'; update(); return; }
       if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим. Измерения сохранены.'; update(); return; }
-      pilotCaptured = false;
       latestTrial = null;
       trialStartScale = scale;
       trialScaleSteps = 0;
-      scaleStatus.textContent = '';
       // The exemption starts before requestFullscreen: resize may precede fullscreenchange/promise resolution.
       beginSettling('entering');
       try { await viewport.requestFullscreen(); }
@@ -957,13 +988,12 @@
       pairedPosition = [clampedX, clampedY];
       persist();
       // The new link describes this placement. Previously opened links retain their original conditions.
-      pilotCaptured = false;
       capturePilotConditions(update());
     }
     function stepTrialScale(direction) {
       if (trialPhase !== 'active' || document.fullscreenElement !== viewport || !photo.variants) return;
       const nextStep = trialScaleSteps + direction;
-      const requestedScale = trialStartScale + nextStep / 10;
+      const requestedScale = trialStartScale + nextStep * trialScaleStep;
       const nextScale = Math.min(1000, Math.max(0.01, requestedScale));
       if (Math.abs(nextScale - requestedScale) > 1e-10) {
         scaleStatus.textContent = 'Достигнут предел масштаба.';
@@ -985,7 +1015,6 @@
       scaleStatus.textContent = '';
       if (!scalePanel.hidden) showScalePanel(true);
       trialScaleSteps = nextStep;
-      pilotCaptured = false;
       capturePilotConditions(setScale(nextScale));
     }
     viewport.addEventListener('click', e => {
@@ -995,6 +1024,16 @@
     });
     $('referenceTrialSmaller').onclick = () => stepTrialScale(-1);
     $('referenceTrialLarger').onclick = () => stepTrialScale(1);
+    $('referenceTrialSave').onclick = () => {
+      if (trialPhase !== 'active' || document.fullscreenElement !== viewport) return;
+      const conditions = capturePilotConditions(update());
+      if (!conditions) return;
+      const records = [{ saved_at: new Date().toISOString(), conditions }, ...getSavedTrials()];
+      const stored = save(trialsKey, records);
+      if (stored) renderSavedTrials(records);
+      scaleStatus.textContent = stored ? 'Сохранено' : 'Не удалось сохранить замер в браузере.';
+      showScalePanel(true);
+    };
     $('referenceTrialDone').onclick = () => stopTrial();
     const trialDirections = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     // No legacy gallery shortcuts; explicit Esc also works when a browser doesn't consume it natively.
@@ -1018,6 +1057,7 @@
         }
       }
     }, true);
+    renderSavedTrials(getSavedTrials());
     select.value = selected.id; chooseModel(photo.id);
     return { update, snapshot: update, calibrationEnvironmentMatches, environmentChanged };
   }
