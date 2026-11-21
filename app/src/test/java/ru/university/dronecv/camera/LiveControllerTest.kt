@@ -69,6 +69,39 @@ class LiveControllerTest {
         override fun close() { closes.incrementAndGet() }
     }
 
+    @Test fun cameraPilotPublishesHtpOnlyAfterWarmupAndKeepsProofWhenOverlayExpires() {
+        val worker = Worker()
+        val frames = ru.university.dronecv.diagnostics.DiagnosticFrames()
+        val delegate = Backend().apply { result = result.copy(htpProfileNodeEvents = 1) }
+        val backend = object : LiveBackend<Frame> by delegate {
+            var warming = true
+            override fun warmUp(frame: Frame, confidence: Float) = warming.also { warming = false }
+        }
+        val controller = LiveController(backend, worker, frames, eventTime = { 10L }, experimentalYolo = true)
+        controller.setTrackingEnabled(false)
+        controller.configure(true, .5f)
+        val warmup = Frame()
+        controller.analyze(warmup)
+        assertEquals(1, warmup.closes.get())
+        assertEquals(LivePhase.STARTING, controller.state.value.phase)
+        assertEquals(0L, controller.state.value.completedFrames)
+        assertTrue(controller.exportMetadata().contains("\"execution_provider\":null"))
+        assertTrue(delegate.events.isEmpty())
+
+        controller.analyze(Frame())
+        assertEquals(1L, controller.state.value.completedFrames)
+        controller.expire(controller.state.value.revision)
+        var token = 0L
+        controller.startDiagnostics { token = frames.start(1) }
+        val saved = frames.stop(token, 20, false, null)!!
+        assertTrue(saved.sessionMetadata!!.contains("\"execution_provider\":\"QNNExecutionProvider\""))
+        assertTrue(saved.sessionMetadata.contains("\"cpu_ep_fallback_disabled\":true"))
+        controller.configure(false, .5f)
+        worker.drain()
+        assertTrue(controller.exportMetadata().contains("\"execution_provider\":null"))
+        assertTrue(delegate.events.contains("close"))
+    }
+
     private class Worker : Executor {
         private val tasks = ArrayDeque<Runnable>()
         override fun execute(command: Runnable) { tasks.addLast(command) }

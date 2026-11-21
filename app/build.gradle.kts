@@ -31,17 +31,23 @@ val buildGitStatusInfo = runCatching {
 val (buildGitStatus, buildGitStatusKnown) = buildGitStatusInfo
 
 
+val qnnPilot = providers.gradleProperty("snapdragonQnn").orNull == "true"
+
 android {
     namespace = "ru.university.dronecv"
     compileSdk = 35
 
     defaultConfig {
         applicationId = "ru.university.dronecv"
-        minSdk = 26
+        minSdk = if (qnnPilot) 27 else 26
         targetSdk = 35
         versionCode = 7
         versionName = "0.5.2"
 
+        buildConfigField("boolean", "QNN_PILOT", "false")
+        buildConfigField("boolean", "QNN_CAMERA", "false")
+        buildConfigField("String", "QNN_PLUGIN_VERSION", "\"${libs.versions.qnnPlugin.get()}\"")
+        buildConfigField("String", "QNN_RUNTIME_VERSION", "\"${libs.versions.qnnRuntime.get()}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BUILD_GIT_SHA", "\"$buildGitSha\"")
         buildConfigField("boolean", "BUILD_GIT_DIRTY", buildGitStatus.isNotBlank().toString())
@@ -51,11 +57,32 @@ android {
 
         ndk {
             // Целевое устройство — arm64; x86_64 — для эмулятора. armeabi-v7a/x86 исключены ради размера APK.
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += if (qnnPilot) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64")
         }
     }
 
+    if (qnnPilot) {
+        // The official QNN Android example extracts the EP, HTP and DSP libraries on installation.
+        packaging.jniLibs.useLegacyPackaging = true
+        testBuildType = "qnn"
+    }
+
     buildTypes {
+        if (qnnPilot) create("qnn") {
+            initWith(getByName("debug"))
+            matchingFallbacks += "debug"
+            applicationIdSuffix = ".qnn"
+            versionNameSuffix = "-qnn-r5"
+            buildConfigField("boolean", "QNN_PILOT", "true")
+        }
+        if (qnnPilot) create("qnnCamera") {
+            initWith(getByName("debug"))
+            matchingFallbacks += "debug"
+            applicationIdSuffix = ".qnn.camera"
+            versionNameSuffix = "-qnn-camera"
+            buildConfigField("boolean", "QNN_PILOT", "true")
+            buildConfigField("boolean", "QNN_CAMERA", "true")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -64,6 +91,8 @@ android {
             )
         }
     }
+
+    if (qnnPilot) sourceSets.getByName("qnnCamera").manifest.srcFile("src/qnn/AndroidManifest.xml")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -149,6 +178,12 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.onnxruntime.android)
+    if (qnnPilot) {
+        add("qnnImplementation", libs.onnxruntime.qnn.get())
+        add("qnnImplementation", libs.qualcomm.qnn.runtime.get())
+        add("qnnCameraImplementation", libs.onnxruntime.qnn.get())
+        add("qnnCameraImplementation", libs.qualcomm.qnn.runtime.get())
+    }
     implementation(libs.opencv)
     implementation(libs.kotlinx.coroutines.android)
 

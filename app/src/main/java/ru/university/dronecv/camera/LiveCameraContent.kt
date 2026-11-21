@@ -45,10 +45,13 @@ import ru.university.dronecv.tracking.ClassConfirmation
 import ru.university.dronecv.tracking.VisualPhase
 import ru.university.dronecv.diagnostics.DiagnosticViewModel
 import ru.university.dronecv.diagnostics.DiagnosticPanel
+import ru.university.dronecv.qnn.BenchmarkProvider
+import ru.university.dronecv.qnn.QnnCameraBackend
 
 @Composable
 internal fun LiveCameraContent(
     controller: LiveController<CameraFrameSnapshot>,
+    pilot: QnnCameraBackend? = null,
     threadState: ThreadConfiguration,
     probe: CameraProbeState,
     diagnostics: DiagnosticViewModel,
@@ -89,7 +92,7 @@ internal fun LiveCameraContent(
         }
         val controls: @Composable (Modifier) -> Unit = { modifier ->
             LiveControls(state, running, confidence, onRunningChange, onConfidenceChange,
-                recoverableIssue, diagnostics, motionModel, onOpenJournals, threadState, controller::requestThreads, probe, controller, modifier)
+                recoverableIssue, diagnostics, motionModel, onOpenJournals, threadState, controller::requestThreads, probe, controller, pilot, modifier)
         }
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
@@ -110,7 +113,8 @@ private fun LiveControls(
     state: LiveState, running: Boolean, confidence: Float,
     onRunningChange: (Boolean) -> Unit, onConfidenceChange: (Float) -> Unit,
     issue: String?, diagnostics: DiagnosticViewModel, motionModel: MotionViewModel, onOpenJournals: () -> Unit, threadState: ThreadConfiguration,
-    onThreadsChange: (Int) -> Boolean, probe: CameraProbeState, controller: LiveController<CameraFrameSnapshot>, modifier: Modifier,
+    onThreadsChange: (Int) -> Boolean, probe: CameraProbeState, controller: LiveController<CameraFrameSnapshot>,
+    pilot: QnnCameraBackend?, modifier: Modifier,
 ) {
     val diagnosticUi by diagnostics.ui.collectAsStateWithLifecycle()
     val motion = checkNotNull(controller.motion)
@@ -188,12 +192,33 @@ private fun LiveControls(
         Text("Стенд движения", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("yolo" to "A: YOLO", "yolo_lk" to "B: YOLO + LK").forEach { (mode, label) ->
-                Button(onClick = { if (controller.setTrackingEnabled(mode == "yolo_lk")) motion.mode(mode) },
+                Button(onClick = {
+                    if (controller.setTrackingEnabled(mode == "yolo_lk")) {
+                        pilot?.select(if (mode == "yolo") BenchmarkProvider.CPU else null)
+                        motion.mode(mode)
+                    }
+                },
                     enabled = !running && !motionUi.recording && mode != motionUi.mode,
                     modifier = Modifier.weight(1f)) { Text(label) }
             }
         }
         Text("Режим: ${if (motionUi.mode == "yolo") "A: YOLO" else "B: YOLO + LK"}", style = MaterialTheme.typography.bodySmall)
+        if (pilot != null && motionUi.mode == "yolo") {
+            val provider by pilot.selection.collectAsStateWithLifecycle()
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                BenchmarkProvider.entries.forEach { option ->
+                    Button(onClick = { pilot.select(option) },
+                        enabled = !running && !motionUi.recording && !diagnosticUi.recording &&
+                            !threadState.switching && option != provider,
+                        modifier = Modifier.weight(1f).testTag("live-backend-${option.name.lowercase()}")) {
+                        Text(option.title)
+                    }
+                }
+            }
+            val htpConfirmed = state.htpProfileNodeEvents != null
+            Text("Бэкенд A: ${provider?.title ?: "CPU"}" + if (htpConfirmed) " · HTP подтверждён" else "",
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("live-backend-status"))
+        }
         if (motionUi.recording) Button(onClick = { motion.stop() }, modifier = Modifier.fillMaxWidth()) { Text("Завершить запись стенда") }
         else {
             Button(onClick = { motionModel.start { diagnostics.stop(true, "Motion recording started"); controller.startRecording(cameraContext(probe)) } }, enabled = running && state.phase == LivePhase.RUNNING && !motionStarting,

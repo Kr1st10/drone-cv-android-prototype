@@ -51,6 +51,7 @@ class YoloOnnxEngine private constructor(
     private val session: OrtSession,
     val spec: YoloModelSpec,
     private val options: YoloEngineOptions,
+    val sessionCreationMs: Double,
 ) : AutoCloseable {
 
     private val lock = Any()
@@ -133,13 +134,25 @@ class YoloOnnxEngine private constructor(
         }
     }
 
+    internal fun endProfiling(): String = synchronized(lock) {
+        check(!closed)
+        session.endProfiling()
+    }
+
     val isClosed: Boolean get() = synchronized(lock) { closed }
 
     companion object {
         /** Создаёт движок из файла ONNX (ONNX Runtime отображает файл в память). */
-        fun fromFile(file: File, options: YoloEngineOptions = YoloEngineOptions()): YoloOnnxEngine {
+        fun fromFile(file: File, options: YoloEngineOptions = YoloEngineOptions()): YoloOnnxEngine =
+            fromFile(file, options) { _, _ -> }
+
+        internal fun fromFile(
+            file: File,
+            options: YoloEngineOptions,
+            configureSession: (OrtEnvironment, OrtSession.SessionOptions) -> Unit,
+        ): YoloOnnxEngine {
             if (!file.isFile) throw ModelNotFoundException("ONNX model not found: ${file.absolutePath}")
-            return create(options) { env, so -> env.createSession(file.absolutePath, so) }
+            return create(options, configureSession) { env, so -> env.createSession(file.absolutePath, so) }
         }
 
         /** Создаёт движок из байтов ONNX. */
@@ -148,10 +161,11 @@ class YoloOnnxEngine private constructor(
 
         private fun create(
             options: YoloEngineOptions,
+            configureSession: (OrtEnvironment, OrtSession.SessionOptions) -> Unit = { _, _ -> },
             open: (OrtEnvironment, OrtSession.SessionOptions) -> OrtSession,
         ): YoloOnnxEngine {
             val env = OrtEnvironment.getEnvironment()
-            val session = try {
+            val (session, creationMs) = try {
                 OrtSession.SessionOptions().use { so ->
                     so.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                     if (options.intraOpThreads > 0) so.setIntraOpNumThreads(options.intraOpThreads)
@@ -159,13 +173,16 @@ class YoloOnnxEngine private constructor(
                     so.setExecutionMode(OrtSession.SessionOptions.ExecutionMode.SEQUENTIAL)
                     so.addConfigEntry("session.intra_op.allow_spinning", "0")
                     so.addConfigEntry("session.inter_op.allow_spinning", "0")
-                    open(env, so)
+                    configureSession(env, so)
+                    val start = System.nanoTime()
+                    val opened = open(env, so)
+                    opened to ms(System.nanoTime() - start)
                 }
             } catch (e: OrtException) {
                 throw InferenceException("Failed to create ONNX Runtime session: ${e.message}", e)
             }
             try {
-                return YoloOnnxEngine(env, session, inspect(session), options)
+                return YoloOnnxEngine(env, session, inspect(session), options, creationMs)
             } catch (e: Throwable) {
                 session.close()
                 throw e

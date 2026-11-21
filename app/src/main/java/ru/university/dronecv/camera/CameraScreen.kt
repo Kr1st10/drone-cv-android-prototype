@@ -48,6 +48,8 @@ import ru.university.dronecv.diagnostics.DiagnosticViewModel
 import ru.university.dronecv.motion.MotionViewModel
 import ru.university.dronecv.motion.recordMotionFrame
 import ru.university.dronecv.R
+import ru.university.dronecv.BuildConfig
+import ru.university.dronecv.qnn.QnnCameraBackend
 import ru.university.dronecv.detection.DetectorWorker
 import ru.university.dronecv.tracking.GrayFrame
 import ru.university.dronecv.tracking.OpenCvLkTracker
@@ -62,12 +64,16 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
     val motionModel: MotionViewModel = viewModel()
     val motion = motionModel.journal
     var running by rememberSaveable { mutableStateOf(false) }
+    val pilot = remember {
+        if (BuildConfig.QNN_CAMERA) QnnCameraBackend(context, initialThreads, motion.ui.value.mode == "yolo") else null
+    }
     val controller = remember {
         val tracking = LiveTracking<CameraFrameSnapshot>(VisionWorker.executor, TrackingSession(::OpenCvLkTracker)) { frame, key, stamp ->
             GrayFrame.fromArgb(key, stamp, frame.image, frame.rotationDegrees)
         }
-        LiveController(AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads,
+        LiveController(pilot ?: AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads,
             eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking, motion = motion,
+            experimentalYolo = pilot != null,
             packagedMetadataFields = ru.university.dronecv.PackagedBuild.metadataFields,
             motionFrame = { frame, token, stamp -> recordMotionFrame(motion, frame, token, stamp) },
             onFailure = { diagnostics.stop(true, "Detector error: $it") })
@@ -142,6 +148,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
             else -> key(bindAttempt) {
                 LiveCameraContent(
                     controller = controller,
+                    pilot = pilot,
                     threadState = threadState,
                     probe = cameraProbe,
                     diagnostics = diagnostics,
