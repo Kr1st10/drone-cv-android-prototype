@@ -2,37 +2,60 @@
   'use strict';
   const $ = id => document.getElementById(id), stage = $('motionStage'), canvas = $('motionCanvas'), ctx = canvas.getContext('2d');
   const parameters = ['motionWidth', 'motionSpeed', 'motionAcceleration', 'motionLaps','motionAreaX','motionAreaY','motionAreaWidth','motionAreaHeight','motionTagSize','motionSyncSize'];
-  const inputs = ['motionPhoto', ...parameters, 'motionSetup', 'motionZoom', 'motionOrientation', 'motionCamera', 'motionDistance'];
+  const conditionInputs = ['motionSetup', 'motionZoom', 'motionOrientation', 'motionCamera', 'motionDistance'];
+  const savedInputs = [...parameters, ...conditionInputs];
+  const inputs = ['motionPhoto', ...savedInputs];
   const maxRuns = 20, maxSamples = 40000, maxSeriesSamples = 120000;
   const saved = MotionGallery.load('motion_settings', {});
   let selectedId = typeof saved?.photo_id === 'string' ? saved.photo_id : null;
-  parameters.forEach(key => { if (typeof saved?.[key] === 'string') $(key).value = saved[key]; });
+  savedInputs.forEach(key => { if (typeof saved?.[key] === 'string') $(key).value = saved[key]; });
   let runs = [], lastLocalRun = null, lastScenario = null, active = null, attempt = null, finishing = false, refreshVersion = 0;
   let seriesId = id(), ready=false, saveFailure=null;
   function id() { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0].toString(16).padStart(8, '0'); }
   function freshRunId() { let x; do { x = id(); } while (runs.some(r => r.run_id === x) || SyncCheckUI.hasId(x)); return x; }
   function sampleCount() { return runs.reduce((n, r) => n + r.samples.length, 0); }
+  function startBlockReason(){
+    if(!ready)return 'Дождитесь восстановления истории запусков.';
+    if(attempt||active||finishing)return 'Дождитесь завершения текущего запуска и его сохранения.';
+    const continuation='Экспортируйте записи и продолжите в отдельном профиле браузера. История и исходники сохраняются.';
+    if(runs.length>=maxRuns)return 'Достигнут предел 20 запусков. '+continuation;
+    if(sampleCount()>=maxSeriesSamples)return 'Достигнут предел 120 000 samples. '+continuation;
+    return null;
+  }
   function status(message) { $('motionStatus').textContent = message; }
   function rememberLocalRun(run){runs.push(run);lastLocalRun=run;$('motionHistoryStatus').textContent='Последний локальный запуск: '+run.run_id;}
+  function includeImported(imported) {
+    const known = new Set(runs.map(run => run.run_id));
+    for (const run of imported) {
+      if (known.has(run.run_id)) continue;
+      runs.push(run);
+      known.add(run.run_id);
+    }
+    update();
+  }
   function persist() {
-    if(!MotionGallery.save('motion_settings', { photo_id: selectedId, ...Object.fromEntries(parameters.map(key => [key, $(key).value])) })) status('Не удалось сохранить настройки. Освободите место и повторите.');
+    if(!MotionGallery.save('motion_settings', { photo_id: selectedId, ...Object.fromEntries(savedInputs.map(key => [key, $(key).value])) })) status('Не удалось сохранить настройки. Освободите место и повторите.');
+  }
+  function updateGeometry() {
+    persist();
     const m=Number($('motionSyncSize').value);$('syncSizeStatus').textContent=Number.isInteger(m)&&m>=2?`Код с белым полем: ${12*m} × ${10*m} px canvas; чёрная подложка: ${14*m} × ${12*m} px canvas. Читаемость камерой ещё не подтверждена. Размер в кадре камеры отличается.`:'Введите целую сторону ячейки не меньше 2 px canvas.';
     const p=$('motionAreaPreview'),c=p.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,p.width,p.height);c.strokeStyle='#111';c.lineWidth=2;
     const [x,y,w,h]=['motionAreaX','motionAreaY','motionAreaWidth','motionAreaHeight'].map(k=>Number($(k).value));c.strokeRect(x*p.width/100,y*p.height/100,w*p.width/100,h*p.height/100);c.fillStyle='#111';c.font='16px sans-serif';c.fillText('Рабочая область (без sync-кода)',12,22);
   }
   function update() {
-    const busy = !!attempt || !!active || finishing, limit = runs.length >= maxRuns || sampleCount() >= maxSeriesSamples;
+    const busy = !!attempt || !!active || finishing, blocked = startBlockReason();
     $('syncCheckStart').disabled=busy;
     document.querySelectorAll('[data-sync-size]').forEach(b=>b.disabled=busy);
-    $('motionStart').disabled = busy || limit || !ready;
-    $('motionRepeat').disabled = busy || limit || !lastScenario || !ready;
+    $('motionStart').disabled = !!blocked;
+    $('motionRepeat').disabled = !!blocked || !lastScenario;
     $('motionNewSeries').disabled = busy;
     $('motionExport').disabled = !runs.length;
     $('motionExportLast').disabled = !lastLocalRun;
     inputs.forEach(key => $(key).disabled = busy);
     $('motionUpload').disabled = busy;
     $('motionBounds').disabled = busy || !MotionGallery.images().some(m => m.id === selectedId);
-    if (limit) status('Достигнут предел серии. Экспортируйте записи и начните новую серию.');
+    if (ready&&!busy&&blocked) status(blocked);
+    window.MotionABUI?.render();
   }
   async function refresh(selected) {
     const version = ++refreshVersion, select = $('motionPhoto');
@@ -43,7 +66,7 @@
     const m = MotionGallery.images().find(x => x.id === selectedId);
     if (!m && selectedId) { const o = document.createElement('option'); o.value = selectedId; o.textContent = `${selectedId} — сохранённое фото недоступно`; select.append(o); }
     select.value = selectedId || '';
-    persist(); update();
+    updateGeometry(); update();
     $('motionPhotoStatus').textContent = m && MotionGallery.bounds(m) ? 'Границы подтверждены.' : 'Выберите снимок и подтвердите границы объекта.';
     $('motionPhotoPreview').hidden=true;$('motionPhotoPreview').removeAttribute('src');
     if (!m) { $('motionPhotoStatus').textContent = 'Сохранённая фотография недоступна. Выберите или загрузите фото заново.'; return; }
@@ -100,12 +123,21 @@
         const result=SyncCheckUI.save(current.run);if(!result.saved)saveFailure=Error('Не удалось сохранить проверку чтения');
         status((reason?'Проверка прервана: '+reason:'Проверка завершена')+'. '+(result.saved?'Запись проверки сохранена отдельно от движения.':'Не удалось сохранить в браузере. Экспортируйте проверку до закрытия страницы.')+(cleanupError?' Ошибка очистки: '+cleanupError:'')+(result.displayError?' Ошибка отображения: '+result.displayError:''));return;
       }
-      canvas.width=0;
+      if (reason) canvas.width=0;
+      else {
+        ctx.fillStyle='#000';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
       MotionTimeline.close(current.run,current.start===null?null:Math.max(current.run.samples.at(-1)?.elapsed_ms??0,performance.now()-current.start));
+      if (!reason) {
+        update();
+        // Allow the blank canvas to paint, then retain fullscreen for the phone's final frames.
+        await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,500)));
+      }
       rememberLocalRun(current.run);
       flush(current);
-      current.writes=current.writes.then(()=>MotionStore.end(current.key,current.run));
-      current.finalWrite=current.writes.catch(e=>{saveFailure=e;});
+      current.writes=current.writes.then(()=>current.run.pair_index?MotionABUI.end(current.key,current.run):MotionStore.end(current.key,current.run));
+      current.finalWrite=current.writes.catch(e=>{saveFailure=e;if(current.run.pair_index){current.run.complete=false;current.run.abort_reason='ошибка сохранения: '+e.message;MotionABUI.failed(current.run);}});
       attempt=null;
       finishing=current;
     }
@@ -119,7 +151,7 @@
       status(message);
     } finally { finishing=false;update(); }
   }
-  function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;const metadata=structuredClone({...current.run,samples:[]});current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples,metadata));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
+  function flush(current){const samples=current.run.samples.slice(current.saved);if(!samples.length)return;const index=current.saved;current.saved+=samples.length;const metadata=structuredClone({...current.run,complete:false,abort_reason:current.run.abort_reason||'не завершён',samples:[]});current.writes=current.writes.then(()=>MotionStore.append(current.key,index,samples,metadata));current.writes.catch(e=>{saveFailure=e;if(active===current)finish('ошибка сохранения');});}
   async function startCheck(){
     if(attempt||active||finishing)return;
     const pending={cancelled:false};attempt=pending;update();
@@ -158,13 +190,13 @@
     }}
     finally{if(attempt===pending)attempt=null;update();}
   }
-  async function start(repeat = false) {
-    if (attempt || active || finishing || runs.length >= maxRuns || sampleCount() >= maxSeriesSamples) return;
+  async function start(repeat = false, ab = null) {
+    const blocked=startBlockReason();if(blocked){status(blocked);return;}
     const pending = { cancelled: false }; attempt = pending; update();
     let operation='fullscreen';
     try {
       persist();
-      const v = repeat ? structuredClone(lastScenario.values) : values();
+      const v = ab ? structuredClone(ab.values) : repeat ? structuredClone(lastScenario.values) : values();
       stage.classList.remove('hidden');
       await stage.requestFullscreen();
       if (pending.cancelled) { await returnToSettings(); return; }
@@ -180,18 +212,21 @@
       if (repeat && !same(vp, lastScenario.viewport)) throw Error('Размер области движения изменился. Для нового размера нажмите «Старт».');
       const [ax,ay,aw,ah]=v.area;
       const button=$('motionStop').getBoundingClientRect();
-      const plan = repeat ? structuredClone(lastScenario.plan) : MotionScenario.plan({ width: vp.width, height: vp.height, control_width_px:button.width*vp.dpr,control_height_px:button.height*vp.dpr,workspace:{x:ax*vp.width/100,y:ay*vp.height/100,width:aw*vp.width/100,height:ah*vp.height/100},calibration_size_px:v.calibration_size_px,sync_module_px:v.sync_module_px, image_width: v.m.width, image_height: v.m.height, bbox: v.bbox, target_width_px: v.target_width_px, max_speed_px_s: v.max_speed_px_s, acceleration_px_s2: v.acceleration_px_s2, laps: v.laps });
+      let plan = repeat ? structuredClone(lastScenario.plan) : MotionScenario.plan({ width: vp.width, height: vp.height, control_width_px:button.width*vp.dpr,control_height_px:button.height*vp.dpr,workspace:{x:ax*vp.width/100,y:ay*vp.height/100,width:aw*vp.width/100,height:ah*vp.height/100},calibration_size_px:v.calibration_size_px,sync_module_px:v.sync_module_px, image_width: v.m.width, image_height: v.m.height, bbox: v.bbox, target_width_px: v.target_width_px, max_speed_px_s: v.max_speed_px_s, acceleration_px_s2: v.acceleration_px_s2, laps: v.laps });
+      if(ab)plan=MotionABUI.plan(ab,v,vp,plan);
       $('motionStop').style.left=plan.control_rect[0]/vp.dpr+'px';$('motionStop').style.top=plan.control_rect[1]/vp.dpr+'px';$('motionStop').style.right='auto';
-      const runId = freshRunId();
+      const runId = ab ? ab.run_id : freshRunId();
       const run = { schema: 'dronecv-motion-run-3', run_id: runId, mode: null, series_id: seriesId, photo: { id: v.m.id, sha256: v.m.sha256 || null, width: v.m.width, height: v.m.height, bbox: v.bbox }, conditions: { ...v.conditions, viewport: vp }, scenario: plan.config, calibration_points: plan.calibration_points, calibration_markers:plan.calibration_markers,sync_backing:plan.sync_backing, marker: plan.marker, duration_ms: plan.duration_ms, complete: false, abort_reason: 'не завершён', sync_period_ms: MotionTimeline.DEFAULT_PERIOD_MS, sync_intervals: [], end_ms: null, samples: [] };
       saveFailure=null;
       operation='storage';
       const scenario={values:structuredClone(v),viewport:structuredClone(vp),plan:structuredClone(plan)};
-      const key=await MotionStore.begin(run,scenario);
+      if(ab)Object.assign(run,{series_id:ab.series_id,pair_index:ab.pair_index,variant:ab.slot,slot:ab.planned_order.indexOf(ab.slot)+1,order:ab.planned_order,attempt:ab.attempt,planned_order:ab.planned_order,actual_order:ab.actual_order,settings_snapshot:structuredClone(scenario)});
+      const key=ab?await MotionABUI.write(()=>MotionABUI.begin(run,scenario)):await MotionStore.begin(run,scenario);
+      if(ab)ab.committed=true;
       lastScenario=scenario;
       if(pending.cancelled){
         run.abort_reason='старт отменён';rememberLocalRun(run);
-        try{await MotionStore.end(key,run);}catch(e){saveFailure=e;}
+        try{if(ab)await MotionABUI.end(key,run);else await MotionStore.end(key,run);}catch(e){saveFailure=e;}
         await returnToSettings();
         status(saveFailure?`Ошибка сохранения: ${saveFailure.message}. Экспортируйте эталон до закрытия страницы.`:'Запуск прерван до первого кадра. Эталон сохранён как неполный.');
         return;
@@ -229,14 +264,15 @@
         finally { finishing=false; }
         status(message);
       }
-    } finally { if (attempt === pending) attempt = null; update(); }
+    } finally { if (attempt === pending) attempt = null; update();if(ab)await MotionABUI.settled(ab); }
   }
   $('motionPhoto').onchange = () => { selectedId = $('motionPhoto').value; refresh(); };
-  parameters.forEach(key => $(key).addEventListener('input', persist));
+  parameters.forEach(key => $(key).addEventListener('input', updateGeometry));
+  conditionInputs.forEach(key => $(key).addEventListener('input', persist));
   $('motionUpload').onchange = async e => { try { const m = await MotionGallery.upload(e.target.files[0]); refresh(m.id); } catch (err) { status(err.message); } e.target.value = ''; };
   $('motionBounds').onclick = () => MotionGallery.edit(selectedId);
   $('syncCheckStart').onclick=startCheck;
-  document.querySelectorAll('[data-sync-size]').forEach(b=>b.onclick=()=>{$('motionSyncSize').value=b.dataset.syncSize;persist();});
+  document.querySelectorAll('[data-sync-size]').forEach(b=>b.onclick=()=>{$('motionSyncSize').value=b.dataset.syncSize;updateGeometry();});
   $('motionStart').onclick = () => start();
   $('motionRepeat').onclick = () => start(true);
   $('motionStop').onclick = () => finish('остановлено оператором');
@@ -248,7 +284,7 @@
   document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement !== stage) finish('выход из полного экрана'); });
   window.addEventListener('resize', () => { if (active && !same(viewport(), active.viewport)) finish('размер окна изменён'); });
   window.addEventListener('beforeunload', e => { if (active || finishing || saveFailure) { e.preventDefault(); e.returnValue = ''; } });
-  window.MotionUI = { refresh };
+  window.MotionUI = { refresh, values, startAB:ab=>start(false,ab), startBlockReason, freshRunId, includeImported, busy:()=>!!attempt||!!active||!!finishing, runs:()=>runs };
   status('Настройте движение и нажмите «Старт».');
   MotionStore.history().then(history=>{runs=history.runs;lastLocalRun=history.last_local_run;lastScenario=history.last_scenario;ready=true;update();$('motionHistoryStatus').textContent=lastLocalRun?'Последний локальный запуск: '+lastLocalRun.run_id+(lastScenario?'':'. Связанный снимок повторения отсутствует. Начните новый сценарий.'):history.chronology_unknown?'Порядок прежних записей неизвестен. Экспортируйте все записи кнопкой «Экспорт серии»; последний запуск не выбран произвольно.':'Локальных запусков ещё нет. Импорт эталонов не назначает последний запуск.';}).catch(e=>{status('Хранилище эталонов недоступно: '+e.message);});
   refresh();

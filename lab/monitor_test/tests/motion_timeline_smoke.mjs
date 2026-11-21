@@ -52,7 +52,8 @@ try{
     await tick(100);completeAt+=100;
   }
   await clean();const completed=await exported();
-  assert.equal(completed.complete,true);assert.equal(completed.sync_intervals.at(-1).end_ms,completeAt);
+  assert.equal(completed.complete,true);assert.equal(completed.sync_intervals.at(-1).end_ms,completed.end_ms);
+  assert.ok(completeAt>=completed.end_ms,'fullscreen blank hold does not extend the code interval');
   assert.equal(completed.end_ms-completed.samples.at(-1).elapsed_ms,100,'completion records removal, not planned duration');
   assert.ok(completed.sync_intervals.slice(0,-1).every(s=>s.end_ms-s.start_ms>=100));
   await page.reload();await page.click('[data-section=motion]');await page.waitForFunction(()=>!document.getElementById('motionExportLast').disabled,null,{polling:50});
