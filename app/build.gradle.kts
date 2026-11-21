@@ -45,6 +45,7 @@ android {
         versionName = "0.5.2"
 
         buildConfigField("boolean", "QNN_PILOT", "false")
+        buildConfigField("boolean", "QNN_CAMERA", "false")
         buildConfigField("String", "QNN_PLUGIN_VERSION", "\"${libs.versions.qnnPlugin.get()}\"")
         buildConfigField("String", "QNN_RUNTIME_VERSION", "\"${libs.versions.qnnRuntime.get()}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -74,6 +75,14 @@ android {
             versionNameSuffix = "-qnn-r5"
             buildConfigField("boolean", "QNN_PILOT", "true")
         }
+        if (qnnPilot) create("qnnCamera") {
+            initWith(getByName("debug"))
+            matchingFallbacks += "debug"
+            applicationIdSuffix = ".qnn.camera"
+            versionNameSuffix = "-qnn-camera"
+            buildConfigField("boolean", "QNN_PILOT", "true")
+            buildConfigField("boolean", "QNN_CAMERA", "true")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -82,6 +91,8 @@ android {
             )
         }
     }
+
+    if (qnnPilot) sourceSets.getByName("qnnCamera").manifest.srcFile("src/qnn/AndroidManifest.xml")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -170,6 +181,8 @@ dependencies {
     if (qnnPilot) {
         add("qnnImplementation", libs.onnxruntime.qnn.get())
         add("qnnImplementation", libs.qualcomm.qnn.runtime.get())
+        add("qnnCameraImplementation", libs.onnxruntime.qnn.get())
+        add("qnnCameraImplementation", libs.qualcomm.qnn.runtime.get())
     }
     implementation(libs.opencv)
     implementation(libs.kotlinx.coroutines.android)

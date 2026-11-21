@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import ru.university.dronecv.detection.onnx.OnnxDroneDetector
 import ru.university.dronecv.detection.onnx.YoloEngineOptions
+import ru.university.dronecv.detection.onnx.YoloResult
 import ru.university.dronecv.detection.onnx.ThreadSessionManager
 import ru.university.dronecv.detection.yolo.PostprocessConfig
 import ru.university.dronecv.detection.yolo.toDetection
@@ -19,9 +20,7 @@ class AndroidLiveBackend(context: Context, initialThreads: Int = 2) : LiveBacken
             val active = sessions.session()
             val result = active.detectArgbDetailed(frame.image, frame.rotationDegrees,
                 PostprocessConfig(confidenceThreshold = confidence))
-            return LiveInference(result.detections.map { it.toDetection(result.imageWidth, result.imageHeight) },
-                result.imageWidth, result.imageHeight, result.inferenceMs,
-                frame.conversionMs, result.preprocessMs, result.postprocessMs, active.inputSize)
+            return result.toLiveInference(frame, active.inputSize)
         } catch (e: Exception) {
             Log.e("LiveDetection", "Frame inference failed", e)
             throw e
@@ -34,3 +33,7 @@ class AndroidLiveBackend(context: Context, initialThreads: Int = 2) : LiveBacken
         try { sessions.close() } catch (e: Exception) { Log.e("LiveDetection", "Model release failed", e) }
     }
 }
+
+internal fun YoloResult.toLiveInference(frame: CameraFrameSnapshot, inputSize: Int): LiveInference =
+    LiveInference(detections.map { it.toDetection(imageWidth, imageHeight) }, imageWidth, imageHeight,
+        inferenceMs, frame.conversionMs, preprocessMs, postprocessMs, inputSize)

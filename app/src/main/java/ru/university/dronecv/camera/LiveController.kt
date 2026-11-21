@@ -35,6 +35,7 @@ data class LiveInference(
     val preprocessMs: Double? = null,
     val postprocessMs: Double? = null,
     val modelInputSize: Int? = null,
+    val htpProfileNodeEvents: Int? = null,
 )
 
 data class LiveState(
@@ -48,11 +49,13 @@ data class LiveState(
     val target: TargetSignal? = null,
     val tracking: TrackingSignal? = null,
     val trackingFps: Double? = null,
+    val htpProfileNodeEvents: Int? = null,
 )
 
 /** All backend methods run on the same worker, including release after pause or failure. */
 interface LiveBackend<Frame> : AutoCloseable {
     fun infer(frame: Frame, confidence: Float): LiveInference
+    fun warmUp(frame: Frame, confidence: Float): Boolean = false
     fun changeThreads(threads: Int) { throw UnsupportedOperationException("Thread switching unsupported") }
 }
 
@@ -76,6 +79,7 @@ class LiveController<Frame : AutoCloseable>(
     private val motionFrame: ((Frame, Long, FrameStamp) -> Long?)? = null,
     private val onFailure: ((String) -> Unit)? = null,
     private val packagedMetadataFields: String? = null,
+    private val experimentalYolo: Boolean = false,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     init {
@@ -203,7 +207,23 @@ class LiveController<Frame : AutoCloseable>(
     private fun clearTimeline(now: Long, reason: String, token: Long? = motion?.token()) {
         updateTimeline(now, reason, token, null, null, null, null, null)
     }
-    private fun metadata(extra: String): String = "{${packagedMetadataFields?.let { "$it," } ?: ""}\"mode\":\"${if (trackingEnabled) "yolo_lk" else "yolo"}\",\"confidence\":$confidence,\"nms_iou\":${ru.university.dronecv.detection.yolo.PostprocessConfig().iouThreshold},\"nms_max_detections\":${ru.university.dronecv.detection.yolo.PostprocessConfig().maxDetections},\"model_input_size\":${mutableState.value.result?.modelInputSize},\"model_input_size_source\":\"latest retained inference result; null means unavailable (not measured or result cleared)\",\"backend\":\"ONNX Runtime CPU, intra-op ${mutableThreads.value.threads}, inter-op 1\",\"inter_op_threads\":1,\"execution_mode\":\"SEQUENTIAL\",\"execution_provider\":\"CPU\",\"intra_op_threads\":${mutableThreads.value.threads},\"yolo_period_ns\":${quoted(tracking?.session?.yoloPeriodNs)},\"confirmation_ttl_ns\":${quoted(tracking?.session?.confirmationTtlNs)},\"retry_ns\":${quoted(tracking?.session?.retryNs)},\"coordinate_timeout_ns\":${quoted(MAX_TRACKING_SILENCE_NS)},\"lk\":{\"max_points\":${ru.university.dronecv.tracking.LkParameters.MAX_POINTS},\"min_points\":${ru.university.dronecv.tracking.LkParameters.MIN_POINTS},\"corner_quality\":${ru.university.dronecv.tracking.LkParameters.CORNER_QUALITY},\"corner_distance\":${ru.university.dronecv.tracking.LkParameters.CORNER_DISTANCE},\"window\":${ru.university.dronecv.tracking.LkParameters.WINDOW},\"pyramid_levels\":${ru.university.dronecv.tracking.LkParameters.PYRAMID_LEVELS},\"iterations\":${ru.university.dronecv.tracking.LkParameters.ITERATIONS},\"epsilon\":${ru.university.dronecv.tracking.LkParameters.EPSILON},\"forward_back_error\":${ru.university.dronecv.tracking.LkParameters.FORWARD_BACK_ERROR},\"inlier_distance\":${ru.university.dronecv.tracking.LkParameters.INLIER_DISTANCE},\"retained_fraction\":${ru.university.dronecv.tracking.LkParameters.RETAINED_FRACTION},\"min_correlation\":${ru.university.dronecv.tracking.LkParameters.MIN_CORRELATION}},\"camera_context\":$extra}"
+    private fun executionMetadata(): String {
+        val state = mutableState.value
+        val nodes = state.htpProfileNodeEvents
+        val threads = mutableThreads.value.threads
+        if (nodes != null) {
+            return "\"backend\":\"ONNX Runtime QNN HTP, intra-op $threads, inter-op 1\"," +
+                "\"execution_provider\":\"QNNExecutionProvider\",\"htp_confirmed\":true," +
+                "\"cpu_ep_fallback_disabled\":true,\"profile_node_events\":{\"QNNExecutionProvider\":$nodes}"
+        }
+        return if (experimentalYolo && !trackingEnabled && state.completedFrames == 0L) {
+            "\"backend\":null,\"execution_provider\":null"
+        } else {
+            "\"backend\":\"ONNX Runtime CPU, intra-op $threads, inter-op 1\",\"execution_provider\":\"CPU\""
+        }
+    }
+
+    private fun metadata(extra: String): String = "{${packagedMetadataFields?.let { "$it," } ?: ""}\"mode\":\"${if (trackingEnabled) "yolo_lk" else "yolo"}\",\"confidence\":$confidence,\"nms_iou\":${ru.university.dronecv.detection.yolo.PostprocessConfig().iouThreshold},\"nms_max_detections\":${ru.university.dronecv.detection.yolo.PostprocessConfig().maxDetections},\"model_input_size\":${mutableState.value.result?.modelInputSize},\"model_input_size_source\":\"latest retained inference result; null means unavailable (not measured or result cleared)\",${executionMetadata()},\"inter_op_threads\":1,\"execution_mode\":\"SEQUENTIAL\",\"intra_op_threads\":${mutableThreads.value.threads},\"yolo_period_ns\":${quoted(tracking?.session?.yoloPeriodNs)},\"confirmation_ttl_ns\":${quoted(tracking?.session?.confirmationTtlNs)},\"retry_ns\":${quoted(tracking?.session?.retryNs)},\"coordinate_timeout_ns\":${quoted(MAX_TRACKING_SILENCE_NS)},\"lk\":{\"max_points\":${ru.university.dronecv.tracking.LkParameters.MAX_POINTS},\"min_points\":${ru.university.dronecv.tracking.LkParameters.MIN_POINTS},\"corner_quality\":${ru.university.dronecv.tracking.LkParameters.CORNER_QUALITY},\"corner_distance\":${ru.university.dronecv.tracking.LkParameters.CORNER_DISTANCE},\"window\":${ru.university.dronecv.tracking.LkParameters.WINDOW},\"pyramid_levels\":${ru.university.dronecv.tracking.LkParameters.PYRAMID_LEVELS},\"iterations\":${ru.university.dronecv.tracking.LkParameters.ITERATIONS},\"epsilon\":${ru.university.dronecv.tracking.LkParameters.EPSILON},\"forward_back_error\":${ru.university.dronecv.tracking.LkParameters.FORWARD_BACK_ERROR},\"inlier_distance\":${ru.university.dronecv.tracking.LkParameters.INLIER_DISTANCE},\"retained_fraction\":${ru.university.dronecv.tracking.LkParameters.RETAINED_FRACTION},\"min_correlation\":${ru.university.dronecv.tracking.LkParameters.MIN_CORRELATION}},\"camera_context\":$extra}"
     /** Snapshot current controls at the caller boundary, never on a frame callback. */
     fun exportMetadata(extra: String = "null"): String = publicationTransaction {
         metadata(extra).dropLast(1) + ",\"frame_geometry\":${latestFrameGeometry?.invoke() ?: "null"}," +
@@ -696,6 +716,7 @@ class LiveController<Frame : AutoCloseable>(
                     onDiscard?.invoke(TrackingFailure.STALE_QUEUE)
                     return null
                 }
+                if (!forTracking && backend.warmUp(frame, request.second)) return null
                 if (token != null) diagnostics?.received(token)
                 val rawResult = backend.infer(frame, request.second)
                 val result = rawResult.copy(detections = rawResult.detections.visibleDetections())
@@ -720,6 +741,7 @@ class LiveController<Frame : AutoCloseable>(
                         val next = previous.copy(
                             phase = LivePhase.RUNNING, result = result, pipelineMs = processingMs, fps = fps,
                             completedFrames = previous.completedFrames + 1,
+                            htpProfileNodeEvents = result.htpProfileNodeEvents,
                             revision = if (forTracking) previous.revision else ++revision, target = preparedSignal,
                         )
                         beforePublication?.invoke()

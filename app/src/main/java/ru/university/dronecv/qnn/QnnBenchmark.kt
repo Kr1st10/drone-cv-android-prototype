@@ -21,9 +21,11 @@ import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 import ru.university.dronecv.BuildConfig
+import ru.university.dronecv.camera.CameraFrameSnapshot
 import ru.university.dronecv.detection.onnx.ModelFiles
 import ru.university.dronecv.detection.onnx.YoloEngineOptions
 import ru.university.dronecv.detection.onnx.YoloOnnxEngine
+import ru.university.dronecv.detection.onnx.YoloResult
 import ru.university.dronecv.detection.onnx.toArgbImage
 import ru.university.dronecv.detection.yolo.Letterbox
 import ru.university.dronecv.detection.yolo.PostprocessConfig
@@ -57,7 +59,7 @@ internal object QnnBenchmark {
     private const val CONFIDENCE = 0.5f
     private const val BORDERLINE = 0.05f
     private const val MATCH_IOU = 0.90f
-    private const val WARMUPS = 4
+    const val WARMUPS = 4
     private const val SAMPLES = 20
 
     private fun reportMetadata() = JSONObject()
@@ -118,7 +120,7 @@ internal object QnnBenchmark {
             try {
                 checkActive()
                 progress("Проверка модели")
-                val model = verifiedModel()
+                val model = verifiedModel(context)
                 val env = OrtEnvironment.getEnvironment()
                 root.put("ort_version", env.version)
                 for (provider in mode.providers) {
@@ -255,7 +257,7 @@ internal object QnnBenchmark {
                 require(photos.size in 1..MAX_SUSTAINED_PHOTOS) { "Выберите от 1 до $MAX_SUSTAINED_PHOTOS кадров" }
                 // Start both variants without a retained HTP graph from the short comparison.
                 check(releaseHtp() == null) { "Не удалось освободить предыдущую сессию HTP" }
-                val model = verifiedModel()
+                val model = verifiedModel(context)
                 stopIfRequested()
                 val env = OrtEnvironment.getEnvironment()
                 report.put("ort_version", env.version)
@@ -343,10 +345,41 @@ internal object QnnBenchmark {
             )
         }
 
-        private fun verifiedModel(): File {
-            val asset = BuildConfig.DRONE_MODEL_ASSET
-            val target = File(File(context.noBackupFilesDir, "models"), File(asset).name)
-            return ModelFiles.installVerified({ context.assets.open(asset) }, target, BuildConfig.DRONE_MODEL_SHA256)
+    }
+
+    private fun verifiedModel(context: Context): File {
+        val asset = BuildConfig.DRONE_MODEL_ASSET
+        val target = File(File(context.noBackupFilesDir, "models"), File(asset).name)
+        return ModelFiles.installVerified({ context.assets.open(asset) }, target, BuildConfig.DRONE_MODEL_SHA256)
+    }
+
+    /** Owned by the camera backend on the same ML worker as the offline pilot. */
+    class CameraSession : AutoCloseable {
+        private val session = SessionRun(BenchmarkProvider.HTP)
+        var profileNodeEvents: Int = 0
+            private set
+
+        fun warmUp(context: Context, threads: Int, frame: CameraFrameSnapshot, confidence: Float) {
+            val model = verifiedModel(context)
+            session.open(context, OrtEnvironment.getEnvironment(), model, YoloEngineOptions(intraOpThreads = threads))
+            check(session.engine != null) { session.setupError ?: "Не удалось открыть QNN HTP" }
+            repeat(WARMUPS) {
+                detect(frame, confidence)
+                session.confirmAfterWarmup()
+            }
+            check(session.confirmedHtp) { "Профиль ORT не подтвердил QNN HTP: ${session.proofIssue}" }
+            profileNodeEvents = session.confirmedNodeEvents
+        }
+
+        val inputSize: Int get() = checkNotNull(session.engine).spec.inputSize
+
+        fun detect(frame: CameraFrameSnapshot, confidence: Float): YoloResult =
+            checkNotNull(session.engine).detect(frame.image, frame.rotationDegrees,
+                PostprocessConfig(confidenceThreshold = confidence))
+
+        override fun close() {
+            val issue = session.close()
+            check(issue == null) { checkNotNull(issue) }
         }
     }
 
@@ -380,7 +413,9 @@ internal object QnnBenchmark {
             retainedForReuse = false
         }
 
-        fun open(context: Context, ort: OrtEnvironment, model: File) {
+        fun open(
+            context: Context, ort: OrtEnvironment, model: File, engineOptions: YoloEngineOptions = YoloEngineOptions(),
+        ) {
             env = ort
             var stage = "session_create"
             try {
@@ -437,14 +472,14 @@ internal object QnnBenchmark {
                     profileDir = java.nio.file.Files.createTempDirectory(context.cacheDir.toPath(), "qnn-profile-").toFile()
                     val profilePrefix = File(checkNotNull(profileDir), "ort").absolutePath
                     stage = "session_create"
-                    engine = YoloOnnxEngine.fromFile(model, YoloEngineOptions()) { _, sessionOptions ->
+                    engine = YoloOnnxEngine.fromFile(model, engineOptions) { _, sessionOptions ->
                         sessionOptions.setSessionLogLevel(OrtLoggingLevel.ORT_LOGGING_LEVEL_INFO)
                         sessionOptions.addConfigEntry("session.disable_cpu_ep_fallback", "1")
                         sessionOptions.addExecutionProvider(devices, options)
                         sessionOptions.enableProfiling(profilePrefix)
                     }
                 } else {
-                    engine = YoloOnnxEngine.fromFile(model)
+                    engine = YoloOnnxEngine.fromFile(model, engineOptions)
                 }
                 sessionMs = engine?.sessionCreationMs
             } catch (e: Exception) {
@@ -500,14 +535,21 @@ internal object QnnBenchmark {
             }
         }
 
+        val setupError: String? get() = setupFailure?.let { "${it.stage}: ${it.text}" }
+        val proofIssue: String get() = profileFailure?.text ?: "провайдеры в профиле: $profileNodes"
+        val confirmedNodeEvents: Int get() = checkNotNull(profileNodes[QNN_EP]).also { check(confirmedHtp) }
+
         fun warmup(input: FloatArray) {
-            val active = checkNotNull(engine)
-            active.runRaw(input)
+            checkNotNull(engine).runRaw(input)
+            confirmAfterWarmup()
+        }
+
+        fun confirmAfterWarmup() {
             ranInference = true
             // The first successful HTP warmup supplies proof without profiling the timed samples.
             if (provider == BenchmarkProvider.HTP && !ranProfiledInference) {
                 ranProfiledInference = true
-                attempt("qnn_profile_read", { issue -> profileFailure = issue }) { readProfile(active) }
+                attempt("qnn_profile_read", { issue -> profileFailure = issue }) { readProfile(checkNotNull(engine)) }
             }
         }
 
