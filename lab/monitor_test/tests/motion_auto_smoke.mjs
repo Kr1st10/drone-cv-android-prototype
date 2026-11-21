@@ -49,6 +49,7 @@ try{
     mode:'yolo_lk',confidence:.5,nms_iou:.7,nms_max_detections:300,intra_op_threads:2,model_input_size:640,
     model_asset:'synthetic.onnx',model_sha256:'b'.repeat(64),camera_context:{scope:'latest_context_not_frame_bound',requested_zoom:5,confirmed_zoom:null}};
   journal.metadata_records=[{type:'metadata',data:buildMetadata}];
+  await page.locator('#motionJournalReport > summary').click();
   await uploadJournal(journal);await page.waitForFunction(()=>!document.getElementById('reportExport').disabled,null,{polling:50});assert.match(await page.textContent('#reportStatus'),/4 из 4 найдены/);assert.match(await page.textContent('#reportOutput'),/режим телефона: yolo_lk/);assert.equal(await page.evaluate(()=>document.getElementById('reportCanvas').width),pixels.width);
   const [reportDownload]=await Promise.all([page.waitForEvent('download'),page.click('#reportExport')]);const report=JSON.parse(fs.readFileSync(await reportDownload.path(),'utf8'));assert.equal(report.runs[0].run_id,first.run_id);assert.equal(report.runs[0].calibration.markers.length,4);
   assert.equal(report.schema,'dronecv-motion-scenario-report-2');assert.equal(report.runs[0].criterion_version,'motion-scenario-v5');

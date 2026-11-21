@@ -14,6 +14,7 @@ const status = (page, value) => page.waitForFunction(value => document.querySele
 const disk = page => page.evaluate(() => MotionStore.ab());
 const payload = (name, text) => ({ name, mimeType: 'application/json', buffer: Buffer.from(text) });
 const selectedA = page => page.locator('#abResults label').filter({ hasText: 'Вариант A, попытка' }).locator('select');
+const setupField = (page, name) => page.locator('#manualSetup [name="' + name + '"]');
 
 async function open(context) {
   const page = await context.newPage();
@@ -62,6 +63,9 @@ async function run(page, button) {
 }
 
 async function pickA(page, run) {
+  if (await page.locator('#abJournalCompare').getAttribute('open') === null) {
+    await page.locator('#abJournalCompare > summary').click();
+  }
   await selectedA(page).selectOption(run);
   await page.getByRole('button', { name: 'Ручная оценка A', exact: true }).click();
 }
@@ -74,6 +78,22 @@ async function download(page, selector) {
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: true });
   const page = await open(context);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const capture = page.locator('#motionCaptureConditions');
+  assert.equal(await capture.getAttribute('open'), null);
+  await capture.locator('summary').focus();
+  await page.keyboard.press('Space');
+  assert.equal(await capture.getAttribute('open'), '');
+  const conditions = { setup_id: ['motionSetup', 'fixture desk'], zoom: ['motionZoom', '2x'],
+    orientation: ['motionOrientation', 'landscape'], camera_config: ['motionCamera', 'rear'],
+    distance_cm: ['motionDistance', '65.5'] };
+  for (const [id, value] of Object.values(conditions)) await page.fill('#' + id, value);
+  assert.equal(await page.locator('#settings').evaluate(panel => panel.scrollWidth > panel.clientWidth), false);
+  await page.reload();
+  await page.click('[data-section=motion]');
+  assert.equal(await capture.getAttribute('open'), null);
+  for (const [id, value] of Object.values(conditions)) assert.equal(await page.inputValue('#' + id), value);
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.evaluate(async () => {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 96;
@@ -87,10 +107,17 @@ try {
   await page.fill('#abPairs', '1');
   await page.click('#abCreate');
   await wait(page, () => !document.querySelector('#abNext').disabled);
+  assert.equal(await page.locator('#abSeriesSettings').getAttribute('open'), null);
   await page.locator('#manualSetup summary').click();
-  await page.fill('#manualSetup [name=build_id]', 'build-fixture');
-  await page.selectOption('#manualSetup [name=mode]', 'yolo');
-  await page.fill('#manualSetup [name=deviations]', 'Условие пилота');
+  for (const [name, [, value]] of Object.entries(conditions)) {
+    assert.equal(await setupField(page, name).inputValue(), value);
+  }
+  assert.equal(await setupField(page, 'mode').inputValue(), 'yolo');
+  assert.equal(await page.locator('#manualConfirmSetup').isChecked(), false);
+  await setupField(page, 'build_id').fill('build-fixture');
+  await setupField(page, 'settings').fill('{"confidence":0.25}');
+  await setupField(page, 'route_visible').check();
+  await setupField(page, 'deviations').fill('Условие пилота');
   await page.check('#manualConfirmSetup');
 
   const staleNext = await open(context);
@@ -109,7 +136,13 @@ try {
   assert.match(await staleNext.locator('#abInstruction').textContent(), /Вариант B, попытка 1/);
   assert.equal((await disk(staleNext)).series[0].attempts.length, 1);
   await staleNext.close();
-  assert.equal((await disk(page)).series[0].attempts[0].manual_setup.operator.build_id, 'build-fixture');
+  const aSetup = (await disk(page)).series[0].attempts[0].manual_setup.operator;
+  assert.equal(aSetup.build_id, 'build-fixture');
+  assert.equal(aSetup.distance_cm, 65.5);
+  assert.equal(aSetup.route_visible, true);
+  assert.equal(await setupField(page, 'mode').inputValue(), 'yolo_lk');
+  assert.equal(await setupField(page, 'build_id').inputValue(), '');
+  assert.equal(await page.locator('#manualConfirmSetup').isChecked(), false);
   await pickA(page, a.run_id);
   await field(page, 'drops_status').selectOption('known');
   await field(page, 'drops').fill('0');
@@ -133,8 +166,21 @@ try {
   const staleRetry = await open(context);
   await wait(staleRetry, () => !document.querySelector('#abRetry').disabled);
   assert.match(await staleRetry.locator('#abRetryInstruction').textContent(), /вариант A, попытка 2/);
+  await setupField(page, 'orientation').fill('');
+  await setupField(page, 'setup_target').selectOption('1');
+  assert.equal(await setupField(page, 'build_id').inputValue(), 'build-fixture');
+  assert.equal(await setupField(page, 'settings').inputValue(), '{"confidence":0.25}');
+  assert.equal(await setupField(page, 'route_visible').isChecked(), false);
+  assert.equal(await setupField(page, 'deviations').inputValue(), '');
+  await setupField(page, 'setup_target').selectOption('0');
+  assert.equal(await setupField(page, 'orientation').inputValue(), '');
+  await setupField(page, 'setup_target').selectOption('1');
+  assert.equal(await page.locator('#manualConfirmSetup').isChecked(), false);
+  await page.locator('#abRetrySettings > summary').click();
   const repeated = await run(page, '#abRetry');
+  assert.equal((await disk(page)).series[0].attempts[1].manual_setup, undefined);
   await staleRetry.bringToFront();
+  await staleRetry.locator('#abRetrySettings > summary').click();
   await staleRetry.click('#abRetry');
   await wait(staleRetry, () => document.querySelector('#abStatus').textContent.includes('Очередь серии изменилась'));
   assert.equal(await staleRetry.evaluate(() => document.fullscreenElement), null);
@@ -144,6 +190,7 @@ try {
   await pickA(page, repeated.run_id);
   assert.equal(await field(page, 'drops_status').inputValue(), 'unanswered');
   assert.equal(await field(page, 'notes').inputValue(), '');
+  assert.equal(await field(page, 'capture').inputValue(), '');
   await pickA(page, a.run_id);
   assert.equal(await field(page, 'drops').inputValue(), '0');
   const originalSeriesId = (await disk(page)).series[0].id;
@@ -183,6 +230,8 @@ try {
     };
   });
   await field(page, 'lap_1').selectOption('violation');
+  await field(page, 'capture').selectOption('after_return');
+  await field(page, 'after_return').selectOption('true');
   await status(page, 'Есть несохранённые изменения');
   await page.click('#manualExport');
   await status(page, 'Экспорт не включает открытый черновик');
@@ -201,6 +250,7 @@ try {
   assert.equal(intersected.manual_observations[0].run_id, a.run_id);
   assert.equal(intersected.manual_observations[0].notes, 'После фонового анализа');
   assert.equal(intersected.manual_observations[0].laps[0].value, 'violation');
+  assert.deepEqual(intersected.manual_observations[0].capture, { status: 'known', value: 'after_return' });
   assert.equal(intersected.analyses[0].result.timing_status, 'incompatible');
   assert.equal(intersected.selections['1:A'], repeated.run_id);
   await pickA(page, a.run_id);
@@ -209,6 +259,8 @@ try {
   await pickA(page, a.run_id);
   assert.equal(await field(page, 'notes').inputValue(), 'После фонового анализа');
   assert.equal(await field(page, 'before_hide').inputValue(), 'false');
+  assert.equal(await field(page, 'capture').inputValue(), 'after_return');
+  assert.equal(await field(page, 'after_return').inputValue(), 'true');
 
   await page.evaluate(() => {
     const put = IDBObjectStore.prototype.put;
@@ -247,6 +299,7 @@ try {
   assert.equal(await field(restored, 'notes').inputValue(), 'Черновик после сбоя');
   assert.equal(await field(restored, 'drops').inputValue(), '0');
   assert.equal(await field(restored, 'before_hide').inputValue(), 'false');
+  assert.equal(await field(restored, 'capture').inputValue(), 'after_return');
   await restored.setInputFiles('#abImport', payload('manual-again.json', exported));
   await wait(restored, () => document.querySelector('#abStatus').textContent.includes('ID уже существует'));
   assert.deepEqual((await disk(restored)).series[0], bundle.base.series);
@@ -293,6 +346,7 @@ try {
   assert.equal(await peer.locator('#manualConfirmSetup').isChecked(), false);
   await peer.check('#manualConfirmSetup');
   await peer.selectOption('#manualSetup [name=setup_target]', '1');
+  await peer.locator('#abRetrySettings > summary').click();
   await peer.fill('#abRetryPair', '2');
   assert.equal(await peer.locator('#manualConfirmSetup').isChecked(), false);
   await peer.fill('#abRetryPair', '1');

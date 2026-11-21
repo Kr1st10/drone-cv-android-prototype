@@ -38,8 +38,12 @@
   }
 
   function comparisons(series, runs) {
+    const selected = { ...series, selections: Manual.selectionsFor(series) };
     return Array.from({ length: series.pair_count }, (_, index) => {
-      const { pair_index, run_ids, state, reasons, rows } = Manual.compare(series.manual_observations ?? [], series, index + 1, runs);
+      const { pair_index, run_ids, state, reasons, rows } = Manual.compare(series.manual_observations ?? [], selected, index + 1, runs);
+      if (series.manual_selection_rule !== Manual.SELECTION_RULE && state === 'awaiting_attempt') {
+        return { pair_index, run_ids, state, reasons: ['Нужны две разные, однозначно выбранные попытки этой пары.'], rows: [] };
+      }
       return { pair_index, run_ids, state, reasons, rows };
     });
   }
@@ -71,6 +75,7 @@
 
   function csv(series, runs) {
     const lines = [['series_id', 'run_id', 'pair', 'slot', 'attempt', 'metric', 'status', 'value', 'reason', 'notes', 'selected', 'provenance']];
+    const selections = Manual.selectionsFor(series);
     for (const attempt of series.attempts) {
       const run = runs.find(item => item.run_id === attempt.run_id);
       if (!run) continue;
@@ -80,7 +85,7 @@
       for (const [metric, answer] of Object.entries(answers)) {
         lines.push([series.id, run.run_id, attempt.pair_index, attempt.slot, attempt.attempt, metric,
           answer.status, answer.value, answer.reason, entry.notes,
-          series.selections[attempt.pair_index + ':' + attempt.slot] === run.run_id,
+          selections[attempt.pair_index + ':' + attempt.slot] === run.run_id,
           entry.answer_sources?.[metric] ?? (answer.status === 'unanswered' ? '' : 'operator')]);
       }
     }

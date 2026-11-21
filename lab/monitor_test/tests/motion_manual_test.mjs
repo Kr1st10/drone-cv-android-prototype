@@ -35,6 +35,78 @@ function byKey(result, key) {
   return result.rows.find(row => row.key === key);
 }
 
+// Operator marks from the worked examples in MANUAL_PROTOCOL.md.
+const protocolExamples = [
+  {
+    name: 'full observation without a correct box',
+    capture: 'no_capture', laps: ['violation', 'violation', 'violation'], drops: blank,
+    before: false, after: known(false),
+  },
+  {
+    name: 'first capture after the pause does not count the preceding absence as a drop',
+    capture: 'after_return', laps: ['violation', 'violation', 'clean'], drops: known(0),
+    before: false, after: known(true),
+  },
+  {
+    name: 'a box absent only during the planned pause leaves zero drops and three clean laps',
+    capture: 'before_hide', laps: ['clean', 'clean', 'clean'], drops: known(0),
+    before: true, after: known(true), pause_ms: 1_400,
+    notes: 'Рамки не было только во время планового скрытия.',
+  },
+  {
+    name: 'one confirmed drop before the pause and a correct box on return',
+    capture: 'before_hide', laps: ['clean', 'violation', 'clean'], drops: known(1),
+    before: false, after: known(true),
+  },
+  {
+    name: 'a box on the background in lap three counts as a violation and a drop',
+    capture: 'before_hide', laps: ['clean', 'clean', 'violation'], drops: known(1),
+    before: true, after: known(true), notes: 'Рамка была на фоне больше секунды.',
+  },
+  {
+    name: 'a missed part of lap one leaves that lap and the drop total uncertain',
+    capture: 'before_hide', laps: [gap('uncertain', 'Пропущена часть круга.'), 'clean', 'clean'],
+    drops: gap('uncertain', 'Не весь маршрут просмотрен.'), before: true, after: known(true),
+    partial: true,
+  },
+  {
+    name: 'stop inside the return window retains the violation and leaves the final lap unstarted',
+    capture: 'before_hide', laps: ['clean', 'violation', blank],
+    drops: gap('uncertain', 'Прогон остановлен до порога срыва.'), before: true, after: known(false),
+    stop: 7_200,
+  },
+];
+
+for (const example of protocolExamples) test('manual protocol: ' + example.name, () => {
+  const { series, runs: [run], observations } = fixture();
+  Object.assign(run.scenario, {
+    calibration_ms: 1_000, stationary_ms: 1_000, movement_ms: 12_000,
+    disappearance_start_ms: 6_500, disappearance_ms: example.pause_ms ?? 500,
+  });
+  run.end_ms = example.stop ?? 14_000;
+  if (example.stop) run.complete = series.attempts[0].complete = false;
+  const partial = example.partial || !!example.stop;
+  const laps = example.laps.map(lap => typeof lap === 'string' ? known(lap) : lap);
+  const patch = {
+    capture: known(example.capture), laps, drops: example.drops,
+    before_hide: known(example.before), after_return: example.after,
+    coverage: { scenario_complete: !partial, after_return: example.stop ? 'partial' : 'complete' },
+    notes: example.notes ?? '',
+  };
+  const result = Manual.save(observations, series, run, patch);
+  assert.deepEqual(result.capture, patch.capture);
+  assert.deepEqual(result.before_hide, patch.before_hide);
+  assert.deepEqual(result.laps.slice(0, 2), laps.slice(0, 2));
+  assert.deepEqual(result.laps[2], example.stop ? gap('not_applicable', 'Круг ещё не начался.') : laps[2]);
+  assert.deepEqual(result.after_return, example.stop
+    ? gap('uncertain', 'Полный просмотр окна после появления не подтверждён.') : patch.after_return);
+  assert.deepEqual(result.drops, example.capture === 'no_capture'
+    ? gap('not_applicable', 'Правильного захвата не было.') : patch.drops);
+  assert.equal(result.notes, patch.notes);
+  assert.equal(result.observation_complete, true);
+  assert.deepEqual(Manual.read(JSON.parse(JSON.stringify(observations)), series, run), result);
+});
+
 test('pilot observations preserve zero, a third-lap violation and unanswered marks', () => {
   const { series, runs, observations } = fixture();
   const [a, b] = runs;

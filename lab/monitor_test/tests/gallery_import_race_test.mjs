@@ -13,12 +13,14 @@ let passed = 0, failed = 0;
 
 async function fixture(action) {
   const context = await browser.newContext();
-  await context.addInitScript(value => { window.MANIFEST = value; }, manifest);
+  await context.addInitScript(value => {
+    Object.defineProperty(window, 'MANIFEST', { value });
+  }, manifest);
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
   page.on('dialog', dialog => dialog.accept());
   try {
-    await page.goto('file://' + path.join(dir, 'gallery.html'));
+    await page.goto('file://' + path.join(dir, 'gallery.html'), { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       T = { run_id: 'TEST-RUN', index: 0, settings: { ...readSettings(), mode: 'advanced' },
         order: M.slice(0, 2).map(m => ({ id: m.id, level: null })) };

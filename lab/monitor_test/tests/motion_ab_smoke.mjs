@@ -30,7 +30,10 @@ async function complete(p){
   await p.waitForFunction(()=>!document.fullscreenElement&&!MotionUI.busy(),null,{polling:50});
   await until(async()=>(await state(p)).series[0].attempts.at(-1).complete);
 }
-async function download(p,button){const [d]=await Promise.all([p.waitForEvent('download'),p.click(button)]);return fs.readFileSync(await d.path(),'utf8');}
+async function download(p,button){
+  if(await p.locator('#abFiles').getAttribute('open')===null)await p.locator('#abFiles > summary').click();
+  const [d]=await Promise.all([p.waitForEvent('download'),p.click(button)]);return fs.readFileSync(await d.path(),'utf8');
+}
 function journal(run,jpeg,mode){
   const offset=100e6,frames=run.samples.map((s,i)=>({frame_id:i,capture_ns:s.elapsed_ms*1e6+offset,analyzer_ns:s.elapsed_ms*1e6+offset+1e6,marker:{run_id:run.run_id,step_id:run.sync_intervals.find(c=>c.start_ms<=s.elapsed_ms&&s.elapsed_ms<c.end_ms)?.step_id??run.sync_intervals.at(-1).step_id}}));
   return {schema:'dronecv-motion-android-1',mode,complete:true,recording_complete:true,truncated:false,stop_ns:run.end_ms*1e6+offset+100e6,
@@ -58,6 +61,7 @@ try{
   assert.notDeepEqual(second.samples,first.samples);assert.equal(second.samples[0].elapsed_ms,0);
   assert.match(await p.textContent('#abInstruction'),/Пара 2 из 2. Вариант B/);
   // Explicit selection, never automatic best-attempt selection.
+  await p.locator('#abJournalCompare > summary').click();
   await p.locator('#abResults select').nth(0).selectOption(first.run_id);await p.locator('#abResults select').nth(1).selectOption(second.run_id);
   const ja=journal(first,jpeg,'yolo'),jb=journal(second,jpeg,'yolo_lk');
   await p.setInputFiles('#reportJournals',[{name:'arbitrary-A.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(ja))},{name:'arbitrary-B.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(jb))}]);
@@ -124,7 +128,8 @@ try{
   await until(async()=>(await state(q))?.series.length===1);
   const restored=(await state(q)).series[0];assert.deepEqual(restored.selections,bundle.series.selections);assert.equal(restored.journals.length,2);
   // Retrospective pairing needs saved references, not a currently selected photo.
-  await q.click('[data-section=motion]');await q.selectOption('#motionTestMode','ab');await q.getByText('Ретроспективная пара из прежних прогонов', { exact: true }).click();
+  await q.click('[data-section=motion]');await q.selectOption('#motionTestMode','ab');await q.locator('#abFiles > summary').click();
+  await q.getByText('Ретроспективная пара из прежних прогонов', { exact: true }).click();
   await q.fill('#abRetroA',first.run_id);await q.fill('#abRetroB',second.run_id);await q.click('#abRetro');
   await until(async()=>(await state(q)).series.length===2);
   const noJpeg={...ja,calibration_image:null};

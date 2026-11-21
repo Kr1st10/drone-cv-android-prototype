@@ -2,11 +2,13 @@
   'use strict';
   const $ = id => document.getElementById(id), stage = $('motionStage'), canvas = $('motionCanvas'), ctx = canvas.getContext('2d');
   const parameters = ['motionWidth', 'motionSpeed', 'motionAcceleration', 'motionLaps','motionAreaX','motionAreaY','motionAreaWidth','motionAreaHeight','motionTagSize','motionSyncSize'];
-  const inputs = ['motionPhoto', ...parameters, 'motionSetup', 'motionZoom', 'motionOrientation', 'motionCamera', 'motionDistance'];
+  const conditionInputs = ['motionSetup', 'motionZoom', 'motionOrientation', 'motionCamera', 'motionDistance'];
+  const savedInputs = [...parameters, ...conditionInputs];
+  const inputs = ['motionPhoto', ...savedInputs];
   const maxRuns = 20, maxSamples = 40000, maxSeriesSamples = 120000;
   const saved = MotionGallery.load('motion_settings', {});
   let selectedId = typeof saved?.photo_id === 'string' ? saved.photo_id : null;
-  parameters.forEach(key => { if (typeof saved?.[key] === 'string') $(key).value = saved[key]; });
+  savedInputs.forEach(key => { if (typeof saved?.[key] === 'string') $(key).value = saved[key]; });
   let runs = [], lastLocalRun = null, lastScenario = null, active = null, attempt = null, finishing = false, refreshVersion = 0;
   let seriesId = id(), ready=false, saveFailure=null;
   function id() { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0].toString(16).padStart(8, '0'); }
@@ -32,7 +34,10 @@
     update();
   }
   function persist() {
-    if(!MotionGallery.save('motion_settings', { photo_id: selectedId, ...Object.fromEntries(parameters.map(key => [key, $(key).value])) })) status('Не удалось сохранить настройки. Освободите место и повторите.');
+    if(!MotionGallery.save('motion_settings', { photo_id: selectedId, ...Object.fromEntries(savedInputs.map(key => [key, $(key).value])) })) status('Не удалось сохранить настройки. Освободите место и повторите.');
+  }
+  function updateGeometry() {
+    persist();
     const m=Number($('motionSyncSize').value);$('syncSizeStatus').textContent=Number.isInteger(m)&&m>=2?`Код с белым полем: ${12*m} × ${10*m} px canvas; чёрная подложка: ${14*m} × ${12*m} px canvas. Читаемость камерой ещё не подтверждена. Размер в кадре камеры отличается.`:'Введите целую сторону ячейки не меньше 2 px canvas.';
     const p=$('motionAreaPreview'),c=p.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,p.width,p.height);c.strokeStyle='#111';c.lineWidth=2;
     const [x,y,w,h]=['motionAreaX','motionAreaY','motionAreaWidth','motionAreaHeight'].map(k=>Number($(k).value));c.strokeRect(x*p.width/100,y*p.height/100,w*p.width/100,h*p.height/100);c.fillStyle='#111';c.font='16px sans-serif';c.fillText('Рабочая область (без sync-кода)',12,22);
@@ -61,7 +66,7 @@
     const m = MotionGallery.images().find(x => x.id === selectedId);
     if (!m && selectedId) { const o = document.createElement('option'); o.value = selectedId; o.textContent = `${selectedId} — сохранённое фото недоступно`; select.append(o); }
     select.value = selectedId || '';
-    persist(); update();
+    updateGeometry(); update();
     $('motionPhotoStatus').textContent = m && MotionGallery.bounds(m) ? 'Границы подтверждены.' : 'Выберите снимок и подтвердите границы объекта.';
     $('motionPhotoPreview').hidden=true;$('motionPhotoPreview').removeAttribute('src');
     if (!m) { $('motionPhotoStatus').textContent = 'Сохранённая фотография недоступна. Выберите или загрузите фото заново.'; return; }
@@ -118,8 +123,17 @@
         const result=SyncCheckUI.save(current.run);if(!result.saved)saveFailure=Error('Не удалось сохранить проверку чтения');
         status((reason?'Проверка прервана: '+reason:'Проверка завершена')+'. '+(result.saved?'Запись проверки сохранена отдельно от движения.':'Не удалось сохранить в браузере. Экспортируйте проверку до закрытия страницы.')+(cleanupError?' Ошибка очистки: '+cleanupError:'')+(result.displayError?' Ошибка отображения: '+result.displayError:''));return;
       }
-      canvas.width=0;
+      if (reason) canvas.width=0;
+      else {
+        ctx.fillStyle='#000';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
       MotionTimeline.close(current.run,current.start===null?null:Math.max(current.run.samples.at(-1)?.elapsed_ms??0,performance.now()-current.start));
+      if (!reason) {
+        update();
+        // Allow the blank canvas to paint, then retain fullscreen for the phone's final frames.
+        await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,500)));
+      }
       rememberLocalRun(current.run);
       flush(current);
       current.writes=current.writes.then(()=>current.run.pair_index?MotionABUI.end(current.key,current.run):MotionStore.end(current.key,current.run));
@@ -253,11 +267,12 @@
     } finally { if (attempt === pending) attempt = null; update();if(ab)await MotionABUI.settled(ab); }
   }
   $('motionPhoto').onchange = () => { selectedId = $('motionPhoto').value; refresh(); };
-  parameters.forEach(key => $(key).addEventListener('input', persist));
+  parameters.forEach(key => $(key).addEventListener('input', updateGeometry));
+  conditionInputs.forEach(key => $(key).addEventListener('input', persist));
   $('motionUpload').onchange = async e => { try { const m = await MotionGallery.upload(e.target.files[0]); refresh(m.id); } catch (err) { status(err.message); } e.target.value = ''; };
   $('motionBounds').onclick = () => MotionGallery.edit(selectedId);
   $('syncCheckStart').onclick=startCheck;
-  document.querySelectorAll('[data-sync-size]').forEach(b=>b.onclick=()=>{$('motionSyncSize').value=b.dataset.syncSize;persist();});
+  document.querySelectorAll('[data-sync-size]').forEach(b=>b.onclick=()=>{$('motionSyncSize').value=b.dataset.syncSize;updateGeometry();});
   $('motionStart').onclick = () => start();
   $('motionRepeat').onclick = () => start(true);
   $('motionStop').onclick = () => finish('остановлено оператором');

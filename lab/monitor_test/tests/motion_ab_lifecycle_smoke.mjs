@@ -33,7 +33,10 @@ async function open(){
 async function start(p,button='#abNext'){await p.click(button);await p.waitForFunction(()=>document.fullscreenElement&&document.querySelector('#settings').classList.contains('hidden'));await p.evaluate(()=>lifecycleTick(0));}
 async function finishDisplay(p){await p.evaluate(()=>{for(let i=0;i<200&&!MotionUI.runs().some(r=>r.variant==='B');i++)lifecycleTick(1000);});}
 async function idle(p){await p.waitForFunction(()=>!MotionUI.busy()&&!document.fullscreenElement);}
-async function downloaded(p){const [d]=await Promise.all([p.waitForEvent('download'),p.click('#abExport')]);return JSON.parse(fs.readFileSync(await d.path(),'utf8'));}
+async function downloaded(p){
+  if(await p.locator('#abFiles').getAttribute('open')===null)await p.locator('#abFiles > summary').click();
+  const [d]=await Promise.all([p.waitForEvent('download'),p.click('#abExport')]);return JSON.parse(fs.readFileSync(await d.path(),'utf8'));
+}
 async function importFixture(p,{id,count,size,manual}){
   const payload=await p.evaluate(async({seed,id,count,size,manual})=>{
     const series=MotionAB.create({id,factor:'mode',pair_count:1,variants:{A:{value:'yolo'},B:{value:'yolo_lk'}}});

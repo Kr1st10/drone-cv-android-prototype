@@ -60,6 +60,7 @@ try {
     const detect=MotionCalibration.detect;MotionCalibration.detect=im=>(window.lastCorners=detect(im));
     const homography=MotionReport.homography;MotionReport.homography=(a,b)=>{window.usedCorners=structuredClone(b);return homography(a,b);};
   });
+  await page.locator('#motionJournalReport > summary').click();
   await page.setInputFiles('#reportReference',{name:'synthetic-geometry-only.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(reference))});
   await page.waitForFunction(()=>document.querySelector('#reportStatus').textContent.includes('Загружено эталонов'));
   async function imported(data,name='camera.json') {

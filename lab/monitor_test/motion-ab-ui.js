@@ -4,6 +4,7 @@
   let workspace={schema:'dronecv-motion-ab-workspace-1',series:[],selected:null},ready=false,busy=false,writes=Promise.resolve(),revision=0,references=[];
   let manualSelection=null, committed=clone(workspace);
   const manualDrafts=new Map();
+  const openReports=new Set();
   const observation=(series,id)=>series?.manual_observations?.find(item=>item.run_id===id);
   const draftKey=(series,id)=>JSON.stringify([series,id]);
   function adopt(saved,sent){
@@ -90,6 +91,7 @@
     if(series?.id!==seriesId||!attempt)return;
     manualSelection={series:seriesId,pair:attempt.pair_index,slot:attempt.slot,runId};
     renderManual(series,mergeRuns(references));
+    $('manualPanel').open=true;
     $('manualEditor').querySelector('button[type=submit]')?.focus();
   }
   const warnManualExport=()=>MotionManualUI.warnUnsaved(current()?.id,showDraft);
@@ -102,6 +104,85 @@
     return (e.lower!=null?f(e.lower)+'…'+(e.upper==null?'не подтверждено':f(e.upper)):e.value!=null?f(e.value):'Недоступно')+(e.unit?' '+(e.unit==='fraction'?'%':e.unit==='pp'?'п.п.':e.unit):'')+(e.coverage!=null?' (покрытие '+(100*e.coverage).toFixed(1)+'%)':'')+(e.n!=null?' n='+e.n:'')+(e.reason?'; '+e.reason:'');
   }
   function node(tag,value,parent){const n=document.createElement(tag);n.textContent=value;parent.append(n);return n;}
+  function reportDetails(root,seriesId,part,title,pairIndex=null){
+    const details=node('details','',root);
+    details.dataset.abReport=JSON.stringify([seriesId,part,pairIndex]);
+    details.open=openReports.has(details.dataset.abReport);
+    node('summary',title,details);
+    return details;
+  }
+  function reportTable(root, labels, rows){
+    const scroll=node('div','',root);
+    scroll.className='motion-report-table';
+    const table=node('table','',scroll),head=node('tr','',table.createTHead()),body=table.createTBody();
+    for(const label of labels)node('th',label,head).scope='col';
+    for(const row of rows){
+      const tr=node('tr','',body);
+      for(const value of row)node('td',value,tr);
+    }
+  }
+  function renderManualReport(root, pair, series, locked){
+    const plan=series.retrospective?'порядок заранее не задан':pair.pair_index%2?'AB':'BA';
+    const section=reportDetails(root,series.id,'manual',
+      `Пара ${pair.pair_index} · ${pair.kind==='aa'?'A/A':'A/B'} · план ${plan}`,pair.pair_index);
+    section.className='manual-pair-report';
+    const labels={capture:'Первый правильный захват', drops:'Незапланированные срывы',
+      before_hide:'Правильная рамка перед скрытием', after_return:'Правильная рамка после появления'};
+    const values={before_hide:'До скрытия',after_return:'После появления',no_capture:'Захвата не было',
+      clean:'Чистый',violation:'С нарушением',true:'Да',false:'Нет',same:'Без изменения',changed:'Изменилось'};
+    const value=v=>v==null?'Не указано':typeof v==='object'?JSON.stringify(v):Object.hasOwn(values,v)?values[v]:String(v);
+    const answer=a=>a.status==='known'?value(a.value):({unanswered:'Не оценено',uncertain:'Не удалось оценить',not_applicable:'Неприменимо'})[a.status];
+    node('p',`Выбраны A: ${pair.run_ids.A??'нет'}, B: ${pair.run_ids.B??'нет'}.`,section);
+    node('p',`Разности доступны для ${pair.rows.filter(row=>row.delta.status==='known').length} из ${pair.rows.length} показателей.`,section);
+    for(const slot of ['A','B']){
+      const entry=pair.attempts[slot], evidence=pair.journals[slot];
+      if(entry){
+        const answers=pair.rows.map(row=>row[slot]);
+        node('p',`${slot} · Известно ${answers.filter(a=>a.status==='known').length} из ${answers.length}, `+
+          `сценарий просмотрен полностью: ${entry.coverage.scenario_complete===true?'да':'не подтверждено'}. `+
+          `Окно после появления: ${({complete:'просмотрено полностью',partial:'просмотрено частично',not_started:'не началось'})[entry.coverage.after_return]??'нет отметки'}.`,section);
+      }
+      if(evidence)node('p',`${slot} · ${evidence.status}`,section);
+      for(const limitation of evidence?.limitations??[]){
+        node('p',`${slot} · ${limitation.reason} Отметка оператора: ${limitation.operator}.`,section);
+      }
+      for(const conflict of evidence?.conflicts??[]){
+        node('p',`${slot} · Расхождение с журналом (${labels[conflict.key]??conflict.key}). `+
+          (conflict.reason?`${conflict.reason}: ${value(conflict.journal)}.`:`Отметка оператора: ${value(conflict.operator)}. Журнал: ${value(conflict.journal)}.`),section);
+      }
+    }
+    if(pair.reasons.length)node('p',pair.reasons.join(' · '),section);
+    const issues=pair.conditions?.checks.filter(check=>check.state!=='equal')??[];
+    if(issues.length)reportTable(section,['Условие','A или план варианта','B или отметка оператора','Проверка'],
+      issues.map(check=>[check.key,value(check.A),value(check.B),check.state==='different'?'Различается':'Не подтверждено']));
+    if(pair.conditions){
+      const declared=pair.conditions.checks.filter(check=>check.key.startsWith('variant.'));
+      if(declared.length)reportTable(section,['Объявленный фактор','План','Факт','Проверка'],
+        declared.map(check=>[check.key,value(check.A),value(check.B),({equal:'Совпадает',different:'Различается',unknown:'Не подтверждено'})[check.state]]));
+    }
+    reportTable(section,['Ручной показатель','A','B','Разность B−A','Ограничения'],pair.rows.map(row=>[
+      labels[row.key]??'Круг '+row.key.slice(4),answer(row.A),answer(row.B),
+      row.delta.status==='known'?value(row.delta.value):'Недоступна',
+      [row.A.reason&&'A: '+row.A.reason,row.B.reason&&'B: '+row.B.reason,
+        row.delta.status==='unavailable'&&'Разность: '+row.delta.reasons.join(' · ')].filter(Boolean).join(' · '),
+    ]));
+    const history=reportDetails(section,series.id,'attempts',`Все попытки (${pair.history.length})`,pair.pair_index);
+    const list=node('ul','',history);
+    for(const a of pair.history){
+      const item=node('li',[
+        `${a.slot} №${a.attempt} · ${a.run_id} · факт №${a.actual_order??'—'}`,
+        a.complete?'завершена':'прервана: '+(a.abort_reason||'причина не указана'),
+        a.assessment,a.selected?'выбрана':a.excluded,
+        a.selected&&!a.reference_available?'Эталон недоступен':null,
+        (a.attempt>1||a.repeat_reason)?`Повтор ${a.repeat_of??''}: ${a.repeat_reason??'причина не указана'}`:null,
+        a.deviations&&'Отклонения: '+a.deviations,a.notes&&'Примечание: '+a.notes,
+      ].filter(Boolean).join(' · '),list);
+      if(a.reference_available){
+        const edit=node('button','Открыть ручную оценку '+a.run_id,item);
+        edit.type='button';edit.disabled=locked;edit.onclick=()=>showDraft(series.id,a.run_id);
+      }
+    }
+  }
   function render(){
     const s=current(),locked=busy||!!window.MotionUI?.busy();
     const blocked=window.MotionUI?.startBlockReason();
@@ -116,46 +197,64 @@
     for(const item of workspace.series){const o=node('option',item.id+' / '+item.factor+(item.retrospective?' / ретроспектива':''),select);o.value=item.id;}select.value=workspace.selected||'';
     const n=s&&!s.retrospective?next(s):null;
     const nextSetup=setupTarget(s,n),retrySetup=setupTarget(s,retryTarget());
-    window.MotionManualUI?.targets(nextSetup,retrySetup);
+    window.MotionManualUI?.targets(nextSetup,retrySetup,s);
     $('abInstruction').textContent=n?`Пара ${n.pair_index} из ${s.pair_count}. Вариант ${n.slot}, попытка ${nextSetup.attempt}. Подготовьте телефон и начните запись`:
-      s?s.retrospective?'Ретроспективная серия: заранее запланированного порядка нет.':'Все запланированные варианты выполнены. Импортируйте журналы и выберите попытки.':'Создайте серию из настроек движения ниже.';
+      s?s.retrospective?'Ретроспективная серия: заранее запланированного порядка нет.':'Все запланированные варианты выполнены. Откройте ручную оценку нужного запуска.':'Настройте движение и создайте серию A/B.';
     if(s&&!s.retrospective&&!locked&&blocked)$('abInstruction').textContent=blocked;
     $('abRetryInstruction').textContent=retrySetup
       ? `Повтор: пара ${retrySetup.pair_index} из ${s.pair_count}, вариант ${retrySetup.slot}, попытка ${retrySetup.attempt}.`
       : '';
-    const root=$('abResults');root.replaceChildren();
+    const root=$('abResults');
+    for(const details of root.querySelectorAll('details[data-ab-report]')){
+      if(details.open)openReports.add(details.dataset.abReport);
+      else openReports.delete(details.dataset.abReport);
+    }
+    root.replaceChildren();
     const runs=s?mergeRuns(references):[];renderManual(s,runs);if(!s)return;
     node('p',`Фактор: ${s.factor}; A: ${s.variants.A.value} (${s.variants.A.description}); B: ${s.variants.B.value} (${s.variants.B.description}). Описания: ввод оператора.`,root);
-    const summary=MotionAB.summarize(s,runs);
-    node('p',`Запланировано пар: ${summary.planned}; выполнено: ${summary.performed}; пригодно: ${summary.usable}.`,root);
-    node('p',summary.aggregation_rule||'Разности рассчитываются внутри пар. Сводка: медиана и диапазон разностей по пригодным парам; кадры не являются повторными экспериментами.',root);
-    for(const issue of s.import_issues||[])node('p',issue.name+': '+issue.reason,root);
+    node('h4','Ручное сравнение',root);
+    node('p',MotionManualReport.rule(s),root);
     for(let i=1;i<=s.pair_count;i++){
-      const p=MotionAB.compare(s,i,runs),names={complete:'пара полная',unconfirmed:'условия не подтверждены',incomparable:'данные несопоставимы',awaiting_attempt:'выберите попытки',awaiting_journal:'ожидается журнал',interrupted:'запись прервана'};node('h5',`Пара ${i}: ${names[p.state]||p.state}. План: ${s.retrospective?'не планировался':i%2?'AB':'BA'}`,root);
-      node('p',(p.reasons||[]).join('; '),root);
+      try{renderManualReport(root,MotionManualReport.compare(s,i,runs),s,locked);}
+      catch(e){node('p',`Пара ${i} · Ручное сравнение недоступно. ${e.message}`,root);}
+    }
+    const journalReport=reportDetails(root,s.id,'journals','Сравнение по журналам');
+    journalReport.id='abJournalCompare';
+    const summary=MotionAB.summarize(s,runs);
+    node('p',`Запланировано пар: ${summary.planned}; выполнено: ${summary.performed}; пригодно: ${summary.usable}.`,journalReport);
+    node('p',summary.aggregation_rule||'Разности рассчитываются внутри пар. Сводка: медиана и диапазон разностей по пригодным парам; кадры не являются повторными экспериментами.',journalReport);
+    for(const issue of s.import_issues||[])node('p',issue.name+': '+issue.reason,journalReport);
+    for(let i=1;i<=s.pair_count;i++){
+      const p=MotionAB.compare(s,i,runs),names={complete:'пара полная',unconfirmed:'условия не подтверждены',incomparable:'данные несопоставимы',awaiting_attempt:'выберите попытки',awaiting_journal:'ожидается журнал',interrupted:'запись прервана'};node('h5',`Пара ${i}: ${names[p.state]||p.state}. План: ${s.retrospective?'не планировался':i%2?'AB':'BA'}`,journalReport);
+      node('p',(p.reasons||[]).join('; '),journalReport);
       for(const slot of ['A','B']){
-        const label=node('label',`Вариант ${slot}, попытка в сравнении `,root),sel=document.createElement('select');label.append(sel);node('option','Не выбрана',sel).value='';
+        const label=node('label',`Вариант ${slot}, попытка в сравнении `,journalReport),sel=document.createElement('select');label.append(sel);node('option','Не выбрана',sel).value='';
         for(const a of s.attempts.filter(a=>a.pair_index===i&&a.slot===slot)){
           node('option',`№${a.attempt} / ${a.run_id} / ${a.complete?'завершена':a.abort_reason||'прервана'} / факт ${a.actual_order??'неизвестен'}`,sel).value=a.run_id;
         }
         sel.value=s.selections[`${i}:${slot}`]||'';sel.disabled=locked;
         if(window.MotionManualUI){
-          const edit=node('button','Ручная оценка '+slot,root);
+          const edit=node('button','Ручная оценка '+slot,journalReport);
           edit.type='button';edit.disabled=locked||!sel.value||runs.filter(run=>run.run_id===sel.value).length!==1;
-          edit.onclick=()=>{manualSelection={series:s.id,pair:i,slot};renderManual(s,runs);$('manualEditor').querySelector('[name=capture]')?.focus();};
+          edit.onclick=()=>{
+            manualSelection={series:s.id,pair:i,slot};
+            renderManual(s,runs);
+            $('manualPanel').open=true;
+            $('manualEditor').querySelector('[name=capture]')?.focus();
+          };
         }
         sel.onchange=()=>{if(sel.value)MotionAB.select(s,i,slot,sel.value);else delete s.selections[`${i}:${slot}`];persist().catch(()=>{});render();};
       }
-      const table=document.createElement('table');root.append(table);const head=document.createElement('tr');table.append(head);
-      ['Метрика','A','B','Разница B−A','Доступность и ограничения'].forEach(t=>node('th',t,head));
-      for(const r of p.rows||[]){const tr=document.createElement('tr');table.append(tr);[r.label,text(r.A),text(r.B),text(r.delta),[r.A?.reason,r.B?.reason,r.delta?.reason].filter(Boolean).join('; ')].forEach(t=>node('td',t,tr));}
+      reportTable(journalReport,['Метрика','A','B','Разница B−A','Доступность и ограничения'],
+        (p.rows||[]).map(r=>[r.label,text(r.A),text(r.B),text(r.delta),[r.A?.reason,r.B?.reason,r.delta?.reason].filter(Boolean).join('; ')]));
     }
-    if(summary.metrics)node('pre',JSON.stringify(summary.metrics,null,2),root).style.whiteSpace='pre-wrap';
+    if(summary.metrics)node('pre',JSON.stringify(summary.metrics,null,2),journalReport).style.whiteSpace='pre-wrap';
   }
   async function create(retro=false){
     if(workspace.series.length>=8)throw Error('Предел 8 серий. Экспортируйте данные; используйте отдельный профиль браузера для новых серий.');
     const o=options(retro);if(retro)o.pair_count=1;
     const s=MotionAB.create(o);
+    if(!retro)s.manual_selection_rule=MotionManualReport.POLICY;
     for(const slot of ['A','B']){const v=clone(s.base_values);if(s.factor==='speed')v.max_speed_px_s=Number(s.variants[slot].value);if(s.factor==='acceleration')v.acceleration_px_s2=Number(s.variants[slot].value);s.snapshots[slot]={values:v};}
     if(retro){
       const runs=await MotionStore.list(),a=$('abRetroA').value.trim(),b=$('abRetroB').value.trim();
@@ -165,7 +264,11 @@
         const r=candidates[0];s.attempts.push({run_id:id,pair_index:1,slot,attempt:1,planned_order:null,actual_order:null,complete:r.complete,abort_reason:r.abort_reason});s.selections['1:'+slot]=id;
       }s.retrospective=true;
     }
-    workspace.series.push(s);workspace.selected=s.id;++revision;await persist();render();notice('Серия сохранена. Выбор попыток для сравнения выполняется вручную.');
+    workspace.series.push(s);workspace.selected=s.id;++revision;await persist();render();notice('Серия сохранена. '+MotionManualReport.rule(s));
+    if(!retro){
+      $('abSeriesSettings').open=false;
+      $('abSeriesSettings').querySelector('summary').focus();
+    }
   }
   function setupTarget(series,item){
     if(!series||!item||series.retrospective||!MotionAB.schedule(series).some(row=>row.pair_index===item.pair_index&&row.slot===item.slot))return null;
@@ -183,6 +286,7 @@
     if(!expected)throw Error('Нет доступной попытки для запуска.');
     const expectedQueue=queueKey(series);
     const manualSetup=window.MotionManualUI?.confirmation(expected);
+    const repeatReason=$('abRetryReason').value.trim();
     busy=true;render();
     try{
       const launch=await write(async()=>{
@@ -197,6 +301,11 @@
           const {pair_index,slot}=target;
           const attempt=MotionAB.begin(latest,{run_id,pair_index,slot,started_at:new Date().toISOString()});
           attempt.abort_reason='старт не подтверждён';
+          if(attempt.attempt>1){
+            const previous=latest.attempts.filter(row=>row.pair_index===pair_index&&row.slot===slot).at(-2);
+            attempt.repeat_of=previous.run_id;
+            attempt.repeat_reason=(retry&&repeatReason)||(!previous.complete&&previous.abort_reason)||'Причина не указана оператором';
+          }
           if(manualSetup)attempt.manual_setup=manualSetup;
           const values=clone(latest.snapshots[slot]?.values||latest.base_values);
           if(latest.factor==='speed')values.max_speed_px_s=Number(latest.variants[slot].value);
@@ -207,12 +316,13 @@
         if(saved)adopt(saved,sent);
         return reserved;
       });
-      window.MotionManualUI?.resetConfirmation();
+      window.MotionManualUI?.resetConfirmation(launch ? expected : null);
       if(!launch){
         if(workspace.series.some(row=>row.id===expected.series_id))workspace.selected=expected.series_id;
         notice('Очередь серии изменилась в другой вкладке. Проверьте обновлённую цель и подтвердите условия перед запуском.');
         return;
       }
+      if(retry)$('abRetryReason').value='';
       await MotionUI.startAB(launch);
     }finally{busy=false;render();}
   }
@@ -340,5 +450,12 @@
     notice('Серия восстановлена.');
   },true);
   window.MotionABUI={enabled,notice,plan,begin,end,failed,settled,capture,render,write,ingest,analysisError,references:updateReferences};
-  MotionStore.ab().then(data=>{if(data?.schema==='dronecv-motion-ab-workspace-1')workspace=data;committed=clone(workspace);$('motionTestMode').value=workspace.mode||'single';ready=true;render();}).catch(e=>notice('Хранилище A/B недоступно: '+e.message));
+  MotionStore.ab().then(data=>{
+    if(data?.schema==='dronecv-motion-ab-workspace-1')workspace=data;
+    committed=clone(workspace);
+    $('motionTestMode').value=workspace.mode||'single';
+    $('abSeriesSettings').open=!current();
+    ready=true;
+    render();
+  }).catch(e=>notice('Хранилище A/B недоступно: '+e.message));
 })();

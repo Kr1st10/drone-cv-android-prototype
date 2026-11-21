@@ -5,6 +5,7 @@
   'use strict';
 
   const VERSION = 'manual-observation-v1';
+  const SELECTION_RULE = 'first_completed_per_slot_v1';
   const slots = ['A', 'B'];
   const fields = {
     capture: value => ['before_hide', 'after_return', 'no_capture'].includes(value),
@@ -279,6 +280,15 @@
       .map(item => (item.state === 'different' ? 'Различается: ' : 'Не подтверждено: ') + item.key) };
   }
 
+  function selectionsFor(series) {
+    if (series.manual_selection_rule !== SELECTION_RULE) return series.selections;
+    const selections = {};
+    for (const attempt of series.attempts.filter(row => row.complete === true).sort((a, b) => a.actual_order - b.actual_order)) {
+      selections[attempt.pair_index + ':' + attempt.slot] ??= attempt.run_id;
+    }
+    return selections;
+  }
+
   function compare(observations, series, pairIndex, runs) {
     const run_ids = Object.fromEntries(slots.map(slot => [slot, series.selections[pairIndex + ':' + slot] ?? null]));
     const entries = slots.map(slot => {
@@ -289,48 +299,57 @@
       const matches = runs.filter(run => run.run_id === id);
       return matches.length === 1 && (series.retrospective || matches[0].series_id === series.id) ? matches[0] : null;
     });
-    const result = { pair_index: pairIndex, run_ids, rows: [], attempts: { A: null, B: null }, conditions: null };
-    if (entries.some(run => !run) || run_ids.A === run_ids.B) {
-      return { ...result, state: 'awaiting_attempt', result_state: 'insufficient_data', reasons: ['Нужны две разные, однозначно выбранные попытки этой пары.'] };
-    }
-    const saved = entries.map(run => savedFor(observations, series, run));
+    const saved = entries.map(run => run && savedFor(observations, series, run));
     const versionIssues = saved.flatMap((entry, index) => entry && entry.version !== VERSION
       ? [slots[index] + ': ' + versionReason(entry)] : []);
     if (saved.every(Boolean) && saved[0].version !== saved[1].version) {
       versionIssues.push('Версии ручных оценок A и B различаются.');
     }
-    if (versionIssues.length) return { ...result, state: 'incomparable', result_state: 'insufficient_data', reasons: versionIssues };
-    const answers = entries.map(run => read(observations, series, run));
+    const missing = entries.some(run => !run) || run_ids.A === run_ids.B;
+    const readingIssues = [];
+    const answers = entries.map((run, index) => {
+      if (!run || saved[index] && saved[index].version !== VERSION) return null;
+      try {
+        return read(observations, series, run);
+      } catch (error) {
+        readingIssues.push(slots[index] + ': ' + error.message);
+        return null;
+      }
+    });
     const [A, B] = answers;
-    const conditions = compareConditions(series, entries, answers);
+    const conditions = !missing && A && B ? compareConditions(series, entries, answers) : null;
     const interrupted = answers.flatMap(entry => {
+      if (!entry) return [];
       if (entry.run_complete !== entry.attempt_complete) {
         return ['Завершённость попытки и эталона различается: ' + entry.run_id];
       }
       return entry.run_complete ? [] : ['Прогон не завершён: ' + entry.run_id];
     });
-    const reasons = [...interrupted, ...conditions.reasons];
+    const reasons = [...interrupted, ...versionIssues, ...readingIssues, ...(conditions?.reasons ?? [])];
+    if (missing) reasons.push('Нужны две разные, однозначно выбранные попытки этой пары.');
     const rows = [];
     const add = (key, a, b) => {
+      a ??= unanswered();
+      b ??= unanswered();
       const unavailable = [a, b].flatMap((item, i) => item.status === 'known' ? [] : [slots[i] + ': ' + (item.reason ?? 'нет ответа')]);
       const delta = reasons.length || unavailable.length
         ? { status: 'unavailable', reasons: [...reasons, ...unavailable] }
         : { status: 'known', value: key === 'drops' ? b.value - a.value : a.value === b.value ? 'same' : 'changed' };
       rows.push({ key, A: a, B: b, delta });
     };
-    add('capture', A.capture, B.capture);
-    for (let i = 0; i < Math.max(A.laps.length, B.laps.length); i++) {
+    add('capture', A?.capture, B?.capture);
+    for (let i = 0; i < Math.max(A?.laps.length ?? 0, B?.laps.length ?? 0); i++) {
       const absent = { status: 'not_applicable', reason: 'Круг не был запланирован.' };
-      add('lap_' + (i + 1), A.laps[i] ?? absent, B.laps[i] ?? absent);
+      add('lap_' + (i + 1), A && (A.laps[i] ?? absent), B && (B.laps[i] ?? absent));
     }
-    for (const key of ['drops', 'before_hide', 'after_return']) add(key, A[key], B[key]);
+    for (const key of ['drops', 'before_hide', 'after_return']) add(key, A?.[key], B?.[key]);
     const available = rows.filter(row => row.delta.status === 'known').length;
     const result_state = !available ? 'insufficient_data' : available < rows.length ? 'partial' : 'complete';
     if (!available) reasons.push('Недостаточно данных для расчёта разностей.');
-    const state = interrupted.length ? 'interrupted'
+    const state = missing ? 'awaiting_attempt' : !conditions ? 'incomparable' : interrupted.length ? 'interrupted'
       : conditions.state === 'comparable' && !available ? 'insufficient_data' : conditions.state;
-    return { ...result, attempts: { A, B }, rows, conditions, reasons, state, result_state };
+    return { pair_index: pairIndex, run_ids, attempts: { A, B }, rows, conditions, reasons, state, result_state };
   }
 
-  return { VERSION, read, save, compare };
+  return { VERSION, SELECTION_RULE, selectionsFor, read, save, compare };
 });

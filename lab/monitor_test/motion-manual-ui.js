@@ -8,7 +8,8 @@
     frame: [['true', 'Да'], ['false', 'Нет']],
   };
   let active = null, warnedSeries = null, openDraft;
-  let setup, setupTargets = [], confirmationKey = null;
+  let setup, setupTargets = [], setupSeries, activeSetupKey = null, confirmationKey = null;
+  const setupDrafts = new Map();
   const drafts = new Map();
 
   function node(parent, tag, text) {
@@ -84,16 +85,51 @@
     setupNotice.textContent = message;
   }
 
-  function targets(next, retry) {
-    setupTargets = [next, retry];
+  function suggestedSetup(series, { slot }) {
+    const conditions = series.snapshots?.[slot]?.values?.conditions ?? series.base_values?.conditions;
+    const previous = series.attempts.findLast(attempt =>
+      attempt.slot === slot && attempt.manual_setup?.provenance === 'operator');
+    return {
+      ...conditions,
+      ...(series.factor === 'mode' ? { mode: series.variants[slot].value } : {}),
+      ...previous?.manual_setup.operator,
+    };
+  }
+
+  function selectSetupTarget() {
     const target = setupTargets[Number(targetChoice.value)];
-    if (confirmationKey && confirmationKey !== targetKey(target)) {
+    const key = target ? targetKey(target) : null;
+    if (activeSetupKey !== key) {
+      const wasConfirmed = confirmed.checked;
       invalidateSetup('Цель запуска изменилась. Подтвердите условия заново.');
+      activeSetupKey = key;
+      const suggested = target ? suggestedSetup(setupSeries, target) : {};
+      const draft = setupDrafts.get(key) ?? {};
+      let prefilled = false;
+      for (const [name, field] of Object.entries(setup)) {
+        if (field.type === 'checkbox') {
+          field.checked = draft[name] === true;
+        } else {
+          const value = name === 'deviations' ? null : suggested[name];
+          field.value = draft[name] ?? (name === 'settings' && value ? JSON.stringify(value) : value ?? '');
+          if (!Object.hasOwn(draft, name) && field.value) prefilled = true;
+        }
+      }
+      if (!wasConfirmed) {
+        setupNotice.textContent = prefilled ? 'Подставлены условия серии или прошлой попытки. Сверьте их перед подтверждением.' : '';
+      }
     }
     targetLabel.textContent = target
       ? 'Серия ' + target.series_id + ', пара ' + target.pair_index + ', вариант ' + target.slot + ', попытка ' + target.attempt
       : 'Нет доступной попытки для подтверждения.';
     confirmed.disabled = !target;
+    for (const field of Object.values(setup)) field.disabled = !target;
+  }
+
+  function targets(next, retry, series) {
+    setupTargets = [next, retry];
+    setupSeries = series;
+    selectSetupTarget();
   }
 
   function confirmation(target) {
@@ -243,22 +279,33 @@
     if (root.firstChild !== form) root.replaceChildren(form);
   }
 
-  setup = setupFields($('manualSetup'));
-  const confirmed = control($('manualSetup'), 'Подтверждаю введённые условия для этого запуска', 'input', 'confirm_setup', 'checkbox');
-  confirmed.id = 'manualConfirmSetup';
-  const targetChoice = select($('manualSetup'), 'Подтвердить для', 'setup_target',
+  const setupPanel = $('manualSetup');
+  const targetChoice = select(setupPanel, 'Подтвердить для', 'setup_target',
     [['0', 'Следующий вариант'], ['1', 'Выбранный повтор']], '0');
-  const targetLabel = node($('manualSetup'), 'p');
-  const setupNotice = node($('manualSetup'), 'p');
+  const targetLabel = node(setupPanel, 'p');
+  targetLabel.className = 'muted';
+  const setupNotice = node(setupPanel, 'p');
   setupNotice.setAttribute('role', 'status');
-  targetChoice.addEventListener('change', () => targets(...setupTargets));
+  const setupGrid = node(setupPanel, 'div');
+  setupGrid.className = 'motion-fields';
+  setup = setupFields(setupGrid);
+  const confirmed = control(setupPanel, 'Подтверждаю введённые условия для этого запуска', 'input', 'confirm_setup', 'checkbox');
+  confirmed.id = 'manualConfirmSetup';
+  targetChoice.addEventListener('change', selectSetupTarget);
   confirmed.addEventListener('change', () => {
     confirmationKey = confirmed.checked ? targetKey(setupTargets[Number(targetChoice.value)]) : null;
     setupNotice.textContent = '';
   });
-  for (const field of Object.values(setup)) {
-    field.addEventListener('input', () => invalidateSetup('Условия изменились. Подтвердите их заново.'));
-    field.addEventListener('change', () => invalidateSetup('Условия изменились. Подтвердите их заново.'));
+  for (const [name, field] of Object.entries(setup)) {
+    function edited() {
+      if (!activeSetupKey) return;
+      const draft = setupDrafts.get(activeSetupKey) ?? {};
+      draft[name] = field.type === 'checkbox' ? field.checked : field.value;
+      setupDrafts.set(activeSetupKey, draft);
+      invalidateSetup('Условия изменились. Подтвердите их заново.');
+    }
+    field.addEventListener('input', edited);
+    field.addEventListener('change', edited);
   }
 
   const exportWarning = node($('manualPanel'), 'div');
@@ -285,6 +332,7 @@
     warnedSeries = seriesId;
     openDraft = open;
     if (!renderExportWarning()) return false;
+    $('manualPanel').open = true;
     const draft = drafts.get(active);
     if (draft?.seriesId === seriesId && (draft.pending || (draft.dirty && !draft.exportable))) {
       status(active, 'Экспорт не включает открытый черновик. Сохраните оценку перед выгрузкой.');
@@ -293,6 +341,11 @@
     return true;
   }
 
-  window.MotionManualUI = { show, targets, confirmation, warnUnsaved,
-    resetConfirmation: () => { confirmationKey = null; confirmed.checked = false; } };
+  function resetConfirmation(consumedTarget) {
+    if (consumedTarget) setupDrafts.delete(targetKey(consumedTarget));
+    confirmationKey = null;
+    confirmed.checked = false;
+  }
+
+  window.MotionManualUI = { show, targets, confirmation, warnUnsaved, resetConfirmation };
 })();
