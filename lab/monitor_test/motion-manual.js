@@ -103,9 +103,10 @@
   function lateCaptureConflict(entry, run) {
     if (entry.capture.value !== 'after_return') return null;
     const { calibration_ms, stationary_ms, movement_ms, laps, disappearance_start_ms, disappearance_ms } = run.scenario;
+    const timings = [calibration_ms, stationary_ms, movement_ms, disappearance_start_ms, disappearance_ms];
+    if (!timings.every(value => Number.isFinite(value) && value >= 0) || movement_ms === 0) return null;
     const motionStart = calibration_ms + stationary_ms;
     const returnAt = disappearance_start_ms + disappearance_ms;
-    if (![motionStart, movement_ms, returnAt].every(Number.isFinite) || movement_ms <= 0) return null;
     const index = entry.laps.findIndex((lap, i) => lap.value === 'clean' &&
       motionStart + movement_ms / laps * (i + 1) <= returnAt);
     return index < 0 ? null : `Круг ${index + 1} закончился до возможного первого захвата после появления (запуск ${run.run_id}). Проверьте оценку круга и время первого захвата.`;

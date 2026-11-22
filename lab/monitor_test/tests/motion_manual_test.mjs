@@ -444,6 +444,10 @@ test('a clean lap ending before the planned return contradicts a late first capt
     assert.deepEqual(saved.laps, answers);
   }
   assert.deepEqual(save({ capture: blank, laps: [known('clean'), blank, blank] }).laps[0], known('clean'));
+  run.scenario = { ...run.scenario, disappearance_ms: null };
+  const withoutReturnTime = save({ capture, laps: [known('clean'), blank, blank] });
+  assert.deepEqual(withoutReturnTime.capture, capture);
+  assert.deepEqual(withoutReturnTime.laps[0], known('clean'));
 });
 
 test('late first capture uses the number and timing of the saved laps', () => {
