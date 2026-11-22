@@ -26,7 +26,7 @@ try{
   await page.goto('file://'+path.join(root,'gallery.html'));await page.waitForFunction(()=>/Изображений: 90/.test(document.getElementById('status').textContent),null,{polling:100});await page.click('[data-section=motion]');
   await page.selectOption('#motionPhoto','civ01');const m=await page.evaluate(()=>MANIFEST.images.find(m=>m.id==='civ01'));
   await page.click('#motionBounds');for(const [i,id] of ['boundX1','boundY1','boundX2','boundY2'].entries())await page.fill('#'+id,String(m.object_bbox[i]));await page.click('#saveBounds');
-  const detail=page.locator('#motionSection details').first();await detail.locator('summary').focus();await page.keyboard.press('Enter');assert.equal(await detail.getAttribute('open'),'');
+  const detail=page.locator('#motionWorkspace');await detail.locator('summary').focus();await page.keyboard.press('Enter');assert.equal(await detail.getAttribute('open'),'');
   const changed={motionAreaX:'12',motionAreaY:'10',motionAreaWidth:'76',motionAreaHeight:'80',motionTagSize:'72',motionSyncSize:'8'};
   for(const [id,value] of Object.entries(changed))await page.fill('#'+id,value);
   await page.reload();await page.click('[data-section=motion]');await page.waitForFunction(()=>!document.getElementById('motionStart').disabled,null,{polling:50});
@@ -45,7 +45,7 @@ try{
   await finish();const first=await download('#motionExportLast');assert.equal(first.conditions.viewport.dpr,2);assert.equal(first.scenario.workspace.x,2560*.12);assert.equal(first.scenario.calibration_size_px,72);assert.equal(first.marker.module_px,8);assert.equal(first.complete,true);checkGeometry(first,button);
   const focusRepeat=await focus('motionRepeat');assert.equal(focusRepeat.focused,true);assert.equal(focusRepeat.visible,true);assert.equal(focusRepeat.width,'3px');
   // Test the complete screen workspace at DPR2, including the actual Stop box.
-  await page.locator('#motionSection details').first().locator('summary').click();
+  await page.locator('#motionWorkspace summary').click();
   for(const [id,value] of Object.entries({motionAreaX:'0',motionAreaY:'0',motionAreaWidth:'100',motionAreaHeight:'100',motionTagSize:'48',motionSyncSize:'6'}))await page.fill('#'+id,value);
   await start();await tick(0);const fullButton=await page.evaluate(()=>{const r=document.getElementById('motionStop').getBoundingClientRect(),d=devicePixelRatio;return [r.left*d,r.top*d,r.right*d,r.bottom*d];});
   await page.screenshot({path:'/private/tmp/dronecv-motion-dpr2-controls.png'});await finish();const full=await download('#motionExportLast');assert.deepEqual(full.scenario.workspace,{x:0,y:0,width:2560,height:1600});checkGeometry(full,fullButton);
