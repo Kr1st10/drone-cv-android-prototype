@@ -30,10 +30,35 @@ async function open(){
   await page.waitForFunction(()=>!document.querySelector('#abNext').disabled);
   return {context,page,errors};
 }
-async function start(p){await p.click('#abNext');await p.waitForFunction(()=>document.fullscreenElement&&document.querySelector('#settings').classList.contains('hidden'));await p.evaluate(()=>lifecycleTick(0));}
+async function start(p,button='#abNext'){await p.click(button);await p.waitForFunction(()=>document.fullscreenElement&&document.querySelector('#settings').classList.contains('hidden'));await p.evaluate(()=>lifecycleTick(0));}
 async function finishDisplay(p){await p.evaluate(()=>{for(let i=0;i<200&&!MotionUI.runs().some(r=>r.variant==='B');i++)lifecycleTick(1000);});}
 async function idle(p){await p.waitForFunction(()=>!MotionUI.busy()&&!document.fullscreenElement);}
 async function downloaded(p){const [d]=await Promise.all([p.waitForEvent('download'),p.click('#abExport')]);return JSON.parse(fs.readFileSync(await d.path(),'utf8'));}
+async function importFixture(p,{id,count,size,manual}){
+  const payload=await p.evaluate(async({seed,id,count,size,manual})=>{
+    const series=MotionAB.create({id,factor:'mode',pair_count:1,variants:{A:{value:'yolo'},B:{value:'yolo_lk'}}});
+    const runs=Array.from({length:count},(_,index)=>{
+      const run_id=(0xabcdef00+index).toString(16);
+      const attempt=MotionAB.begin(series,{run_id,pair_index:1,slot:'A'});
+      attempt.complete=true;
+      return {...seed,run_id,series_id:series.id,attempt:attempt.attempt,actual_order:attempt.actual_order,
+        samples:Array.from({length:size},(_,step)=>({elapsed_ms:step}))};
+    });
+    return JSON.stringify(await (manual?MotionManualTransfer:MotionAB).exportBundle(series,runs));
+  },{seed,id,count,size,manual});
+  await p.evaluate(()=>{window.liveImportSentinel=true;});
+  await p.setInputFiles('#abImport',{name:id+'.json',mimeType:'application/json',buffer:Buffer.from(payload)});
+  await p.waitForFunction(()=>document.querySelector('#abStatus').textContent.includes('Серия восстановлена.'));
+  assert.equal(await p.evaluate(()=>window.liveImportSentinel),true);
+  return await p.evaluate(id=>MotionStore.list().then(runs=>runs.filter(run=>run.series_id===id).map(run=>run.run_id)),id);
+}
+async function storedSeries(p,id){
+  return p.evaluate(id=>MotionStore.ab().then(state=>state.series.find(series=>series.id===id)),id);
+}
+async function downloadMotion(p,button='#motionExport'){
+  const [file]=await Promise.all([p.waitForEvent('download'),p.click(button)]);
+  return JSON.parse(fs.readFileSync(await file.path(),'utf8'));
+}
 // Read raw stores independently of the production convenience readers.
 async function disk(p){return p.evaluate(()=>new Promise((resolve,reject)=>{
   const request=indexedDB.open('dronecv-motion',1);request.onerror=()=>reject(request.error);request.onsuccess=()=>{
@@ -144,11 +169,81 @@ try{
       assert.deepEqual(errors,[]);
     }finally{await context.close();}
   });
-  for(const changed of [false,true])await check(changed?'new analysis is refused at 64':'identical journal analysis restores a complete pair at 64',async()=>{
+  for(const {id,count,size,manual,label} of [
+    {id:'live-ab-run-limit',count:20,size:1,manual:false,label:'20 runs'},
+    {id:'live-manual-sample-limit',count:3,size:40000,manual:true,label:'120000 samples'},
+  ])await check('file import without reload enforces '+label,async()=>{
+    const {context,page:p,errors}=await open();
+    try{
+      const runIds=await importFixture(p,{id,count,size,manual});
+      assert.equal(runIds.length,count);
+      const before=await storedSeries(p,id);
+      assert.equal(before.attempts.length,count);
+      assert.equal(before.attempts.every(attempt=>attempt.slot==='A'&&attempt.complete),true);
+      assert.match(await p.textContent('#abInstruction'),label==='20 runs'?/предел 20/:/предел 120[ \u00a0]?000/);
+      assert.equal(await p.isDisabled('#abNext'),true);
+      assert.equal(await p.isDisabled('#abRetry'),true);
+      assert.equal(await p.isDisabled('#motionExport'),false);
+      const exported=await downloadMotion(p);
+      assert.deepEqual(exported.runs.map(run=>run.run_id).sort(),runIds.sort());
+      assert.equal(exported.runs.reduce((total,run)=>total+run.samples.length,0),count*size);
+      const fullscreenCalls=await p.evaluate(async()=>{
+        let calls=0;
+        document.querySelector('#motionStage').requestFullscreen=()=>{calls++;return Promise.reject(Error('test unexpected fullscreen'));};
+        await document.querySelector('#abNext').onclick();
+        await document.querySelector('#abRetry').onclick();
+        return calls;
+      });
+      assert.equal(fullscreenCalls,0);
+      assert.deepEqual(await storedSeries(p,id),before);
+      assert.deepEqual(errors,[]);
+    }finally{await context.close();}
+  });
+  await check('file import keeps the memory-only portion of the last local run and its repeat plan',async()=>{
+    const {context,page:p,errors}=await open();
+    try{
+      await p.evaluate(()=>{
+        const append=MotionStore.append;
+        window.restoreAppend=()=>{MotionStore.append=append;};
+        MotionStore.append=()=>Promise.reject(Error('synthetic append failure'));
+      });
+      await start(p);
+      await p.evaluate(()=>lifecycleTick(1000));
+      await p.click('#motionStop');
+      await idle(p);
+      const local=await p.evaluate(()=>MotionUI.runs().at(-1));
+      assert.ok(local.samples.length>0);
+      const persisted=await p.evaluate(id=>MotionStore.list().then(runs=>runs.find(run=>run.run_id===id)),local.run_id);
+      assert.equal(persisted.samples.length,0);
+      await p.evaluate(()=>restoreAppend());
+
+      const imported=await importFixture(p,{id:'live-import-with-memory',count:1,size:1,manual:true});
+      const exported=await downloadMotion(p);
+      assert.equal(exported.runs.length,2);
+      assert.deepEqual(exported.runs.find(run=>run.run_id===local.run_id),local);
+      assert.ok(exported.runs.some(run=>run.run_id===imported[0]));
+      assert.deepEqual(await downloadMotion(p,'#motionExportLast'),local);
+      await p.selectOption('#motionTestMode','single');
+      await p.fill('#motionWidth',String(local.scenario.target_width_px+10));
+      assert.equal(await p.isDisabled('#motionRepeat'),false);
+      await start(p,'#motionRepeat');
+      await p.click('#motionStop');
+      await idle(p);
+      const repeated=await p.evaluate(()=>MotionUI.runs().at(-1));
+      assert.notEqual(repeated.run_id,local.run_id);
+      assert.deepEqual(repeated.scenario,local.scenario);
+      assert.deepEqual(errors,[]);
+    }finally{await context.close();}
+  });
+  for(const [kind,label] of [
+    ['identical','identical journal analysis restores a complete pair at 64'],
+    ['changed','new analysis is refused at 64'],
+    ['other-tab','a stale tab cannot save a 65th analysis'],
+  ])await check(label,async()=>{
     assert.ok(seed);
     const {context,page:p,errors}=await open();
     try{
-      await p.evaluate(async seed=>{
+      await p.evaluate(async({seed,kind})=>{
         const workspace=await MotionStore.ab(), series=workspace.series[0];
         const fields={git_sha:'test',git_dirty:false,app_version:'1',version_code:1,build_type:'debug',
           model_sha256:'test',device:'test',confidence:.25,nms_iou:.45,backend:'cpu',model_input_size:640,
@@ -165,7 +260,8 @@ try{
           const {source}=await MotionAB.registerSource(series,{name:run_id+'.json',raw:JSON.stringify(data),data});
           MotionAB.bind(series,run_id,source.hash);
           const parameters={calibration_points:[[0,0],[1,0],[1,1],[0,1]],calibration_method:'manual'};
-          for(let version=0;version<32;version++)MotionAB.recordAnalysis(series,run_id,{source_hash:source.hash,parameters,
+          const count=kind==='other-tab'&&slot==='A'?31:32;
+          for(let version=0;version<count;version++)MotionAB.recordAnalysis(series,run_id,{source_hash:source.hash,parameters,
             result:{mode:series.variants[slot].value,criterion_version:'motion-scenario-v5',timing_status:'compatible',
               provenance:{geometry:{width:100,height:100},android:{fields}},good_ms:version}});
         }
@@ -174,30 +270,50 @@ try{
           capture:blank,drops:blank,before_hide:blank,after_return:blank,
           laps:Array(seed.scenario.laps).fill(blank),operator:{},notes:'Сохранённая оценка'}];
         await MotionStore.ab(workspace);
-      },seed);
-      await p.reload();await p.click('[data-section=motion]');
-      await p.waitForFunction(()=>!document.querySelector('#abExport').disabled&&MotionUI.runs().length===2);
-      const before=await downloaded(p);
+      },{seed,kind});
+      async function ready(page){
+        await page.click('[data-section=motion]');
+        await page.waitForFunction(()=>!document.querySelector('#abExport').disabled&&MotionUI.runs().length===2);
+      }
+      await p.reload();await ready(p);
+      let before=await downloaded(p);
+      if(kind==='other-tab'){
+        assert.equal(before.series.analyses.length,63);
+        const other=await context.newPage();
+        await other.goto(p.url());await ready(other);
+        await other.evaluate(async()=>{
+          const series=(await MotionStore.ab()).series[0], run=MotionUI.runs().find(r=>r.run_id==='abcde002');
+          const saved=series.analyses.findLast(a=>a.run_id===run.run_id);
+          const {name,raw,data}=series.journals.find(j=>j.hash===saved.source_hash);
+          await MotionABUI.capture({name,raw,data,points:saved.parameters.calibration_points,manual:true},
+            run,{...saved.result,good_ms:999},()=>true);
+        });
+        before=await downloaded(other);
+        await other.close();
+      }
+      assert.equal(before.series.analyses.length,64);
       assert.equal(before.summary.pairs[0].state,'complete',JSON.stringify(before.summary.pairs[0].reasons));
-      const error=await p.evaluate(async changed=>{
+      const error=await p.evaluate(async kind=>{
         const series=(await MotionStore.ab()).series[0], run=MotionUI.runs().find(r=>r.run_id==='abcde001');
         const saved=series.analyses.findLast(a=>a.run_id===run.run_id);
         const {name,raw,data}=series.journals.find(j=>j.hash===saved.source_hash);
         const journal={name,raw,data,points:saved.parameters.calibration_points,manual:true};
-        await MotionABUI.ingest([journal],()=>true);
-        if(!(await MotionStore.ab()).series[0].analysis_errors[run.run_id])throw Error('Expected pending analysis');
-        if(changed)journal.points=[[.1,.1],[.9,.1],[.9,.9],[.1,.9]];
+        if(kind!=='other-tab'){
+          await MotionABUI.ingest([journal],()=>true);
+          if(!(await MotionStore.ab()).series[0].analysis_errors[run.run_id])throw Error('Expected pending analysis');
+        }
+        if(kind!=='identical')journal.points=[[.1,.1],[.9,.1],[.9,.9],[.1,.9]];
         try{await MotionABUI.capture(journal,run,saved.result,()=>true);}
         catch(error){return error.message;}
         return null;
-      },changed);
+      },kind);
       const after=await downloaded(p);
       assert.equal(after.series.analyses.length,64);
       for(const key of ['analyses','journals','manual_observations','bindings','selections']){
         assert.deepEqual(after.series[key],before.series[key]);
       }
       assert.deepEqual(after.runs,before.runs);
-      if(changed){
+      if(kind!=='identical'){
         assert.match(error,/64 сохранённых анализов/);
         assert.equal(after.summary.pairs[0].state,'unconfirmed');
         assert.match(after.summary.pairs[0].reasons.join(' '),/64 сохранённых анализов/);

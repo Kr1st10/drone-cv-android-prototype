@@ -155,6 +155,7 @@
       <p>Три пары предложены для удобства, достаточность эксперимента этим не подтверждается. Условия ниже фиксируются при создании серии; планы сохраняются при первом запуске. A/B в браузере не подтверждает режим телефона.</p>
       <button id="abCreate">Создать серию из текущих настроек</button>
       <p id="abInstruction" role="status"></p>
+      <details id="manualSetup"><summary>Фактические условия перед запуском</summary></details>
       <button id="abNext" class="primary" disabled>Запустить следующий вариант</button>
       <label>Пара для повторной попытки <input id="abRetryPair" type="number" min="1" value="1"></label>
       <label>Вариант повтора <select id="abRetrySlot"><option>A</option><option>B</option></select></label>
@@ -163,7 +164,14 @@
       <p id="abStatus" role="status"></p>
       <div id="abResults" style="overflow-x:auto"></div>
       <button id="abExport" disabled>Экспорт A/B JSON с исходниками</button><button id="abCSV" disabled>Экспорт A/B CSV</button>
-      <label>Восстановить экспорт A/B <input id="abImport" type="file" accept=".json,application/json"></label>
+      <section id="manualPanel" hidden>
+        <h4>Ручная оценка</h4>
+        <p id="manualStatus" role="status"></p>
+        <div id="manualEditor"></div>
+        <button id="manualExport" type="button">Экспорт ручной серии JSON</button>
+        <button id="manualCSV" type="button">Экспорт ручных оценок CSV</button>
+      </section>
+      <label>Восстановить серию A/B или ручную серию <input id="abImport" type="file" accept=".json,application/json"></label>
       <details><summary>Ретроспективная пара из прежних прогонов</summary>
         <label>run_id A <input id="abRetroA"></label><label>run_id B <input id="abRetroB"></label>
         <button id="abRetro">Объединить явно выбранные прогоны</button>
@@ -406,6 +414,9 @@
 <script src="motion-scenario.js"></script>
 <script src="motion-store.js"></script>
 <script src="motion-ab.js"></script>
+<script src="motion-manual.js"></script>
+<script src="motion-manual-transfer.js"></script>
+<script src="motion-manual-ui.js" defer></script>
 <script src="motion-ab-ui.js" defer></script>
 <script src="motion-calibration.js"></script>
 <script src="sync-check.js"></script>

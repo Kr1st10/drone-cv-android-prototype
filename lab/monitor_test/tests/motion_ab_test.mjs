@@ -131,3 +131,18 @@ test('bundle rejects excessive virtual pair count before allocating a summary',a
   bundle.series.pair_count=1000000;delete bundle.integrity;bundle.integrity=await AB.sha256(AB.canonical(bundle));
   await assert.rejects(AB.importBundle(bundle),/структура или лимиты/);
 });
+
+test('saved plan accepts absent base marker but still detects route changes and unknown fields',()=>{
+  const {series,runs}=fixture();
+  for(const r of runs)r.settings_snapshot={plan:{base:{marker:null,route:[{x:10,y:20},{x:50,y:60}]},duration_ms:1000}};
+  const planCheck=()=>AB.compare(series,1,runs).conditions.checks.find(c=>c.label==='сохранённый план движения');
+  assert.equal(planCheck().state,'equal');
+  assert.equal(AB.compare(series,1,runs).conditions.status,'comparable');
+  runs[1].settings_snapshot.plan.base.route[1].x++;
+  assert.equal(planCheck().state,'different');
+  assert.equal(AB.compare(series,1,runs).conditions.status,'incomparable');
+  runs[1].settings_snapshot.plan=structuredClone(runs[0].settings_snapshot.plan);
+  runs[0].settings_snapshot.plan.base.route=null;
+  runs[1].settings_snapshot.plan.base.route=null;
+  assert.equal(planCheck().state,'unknown');
+});
