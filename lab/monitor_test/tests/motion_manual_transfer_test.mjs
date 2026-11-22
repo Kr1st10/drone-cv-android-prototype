@@ -70,3 +70,27 @@ test('CSV distinguishes operator responses, phase-derived marks, and unanswered 
   assert.match(row(a, 'before_hide'), /,"scenario"$/);
   assert.match(row(b, 'drops'), /"unanswered".*,""$/);
 });
+
+test('import rejects a historical contradictory lap and preserves the supplied export', async () => {
+  const { series, runs } = fixture();
+  const [run] = runs;
+  run.scenario = { laps: 3, calibration_ms: 2000, stationary_ms: 1500, movement_ms: 9000,
+    disappearance_start_ms: 6650, disappearance_ms: 1000 };
+  const known = value => ({ status: 'known', value });
+  const blank = { status: 'unanswered' };
+  series.manual_observations = [{
+    version: Manual.VERSION, series_id: series.id, run_id: run.run_id, capture: known('after_return'),
+    laps: [known('clean'), blank, blank], drops: blank, before_hide: blank, after_return: known(true),
+    operator: {}, notes: 'Исходная оценка',
+  }];
+  const bundle = await AB.exportBundle(series, runs);
+  const original = structuredClone(bundle);
+  await assert.rejects(Transfer.importBundle(bundle), /Круг 1.*первого захвата после появления/);
+  assert.deepEqual(bundle, original);
+
+  const comparison = Manual.compare(series.manual_observations, series, 1, runs);
+  assert.equal(comparison.state, 'incomparable');
+  assert.match(comparison.reasons.join(' '), /Круг 1.*первого захвата после появления/);
+  assert.deepEqual(comparison.rows.find(row => row.key === 'lap_1').A, known('clean'));
+  assert.equal(comparison.result_state, 'insufficient_data');
+});

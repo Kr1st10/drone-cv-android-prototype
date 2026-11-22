@@ -24,10 +24,16 @@
     return [...new Map([...stored.filter(r=>!memory.some(m=>isPrefix(r,m))),...memory].map(r=>[MotionAB.canonical(r),r])).values()];
   }
   function updateReferences(rows){references=rows;render();}
-  function persist(){
+  function persist(update=merged=>merged){
     return write(async()=>{
       const sent=clone(workspace);
-      adopt(await MotionStore.ab(stored=>mergeWrite(sent,stored)),sent);
+      let applied=false;
+      const saved=await MotionStore.ab(stored=>{
+        const next=update(mergeWrite(sent,stored));
+        applied=next!==undefined;
+        return next;
+      });
+      if(applied)adopt(saved,sent);
     }).catch(e=>{notice('Ошибка хранения A/B: '+e.message+'. Данные остаются в памяти; выгрузите JSON до закрытия страницы.');throw e;});
   }
   async function saveManual(seriesId, runId, patch, baseline){
@@ -386,15 +392,28 @@
     const parameters={calibration_points:clone(j.points),calibration_method:j.manual?'manual':'automatic'};
     const valid=()=>ticket===revision&&isCurrent()&&s===current()&&captureTicket===j.abTicket;
     if(!s||!s.attempts.some(a=>a.run_id===run.run_id))return;
-    const signature=JSON.stringify({result,points:j.points});if(j.abSignature===signature&&!s.analysis_errors?.[run.run_id])return;
+    const signature=JSON.stringify({result,parameters});if(j.abSignature===signature&&!s.analysis_errors?.[run.run_id])return;
     const hash=await MotionAB.sha256(j.raw);if(!valid())return;
     if(!s.journals.some(x=>x.hash===hash))await retainSource(s,j,valid);
     if(!valid())return;
     MotionAB.bind(s,run.run_id,hash);
-    if(workspace.series.reduce((n,s)=>n+s.analyses.length,0)>=64)throw Error('Достигнут предел 64 сохранённых анализов. Выгрузите серии для продолжения в отдельном профиле браузера.');
-    MotionAB.recordAnalysis(s,run.run_id,{result,parameters,source_hash:hash});
-    if(s.analysis_errors)delete s.analysis_errors[run.run_id];
-    j.abSignature=signature;await persist();render();
+    const reason='Достигнут предел 64 сохранённых анализов. Выгрузите серии для продолжения в отдельном профиле браузера.';
+    let refused=false;
+    await persist(merged=>{
+      if(!valid())return;
+      const series=merged.series.find(item=>item.id===s.id);
+      const next={...series,analyses:series.analyses.slice(),analysis_errors:{...series.analysis_errors}};
+      const saved=MotionAB.recordAnalysis(next,run.run_id,{result,parameters,source_hash:hash},
+        ()=>merged.series.reduce((total,item)=>total+item.analyses.length,0)<64);
+      refused=!saved;
+      if(refused)next.analysis_errors[run.run_id]=reason;
+      else delete next.analysis_errors[run.run_id];
+      return {...merged,series:merged.series.map(item=>item===series?next:item)};
+    });
+    if(!valid())return;
+    render();
+    if(refused)throw Error(reason);
+    j.abSignature=signature;
   }
   function action(fn,lock=false){return async()=>{if(lock&&(busy||MotionUI.busy()))return;try{if(lock){busy=true;render();}await fn();}catch(e){notice('Ошибка A/B: '+e.message+'. Доступные данные можно экспортировать.');}finally{if(lock)busy=false;render();}};}
   $('motionTestMode').onchange=()=>{workspace.mode=$('motionTestMode').value;render();if(ready)persist().catch(()=>{});};
