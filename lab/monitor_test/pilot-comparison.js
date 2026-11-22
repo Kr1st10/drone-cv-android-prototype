@@ -12,7 +12,24 @@
   const number = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 5, useGrouping: false });
   const round = (value, decimals) => Number.isFinite(value) ? +value.toFixed(decimals) : value;
 
-  function scaleMismatch(record, display, settings, step, image, confirmed) {
+  function validBounds(box, width, height) {
+    return Array.isArray(box) && box.length === 4 && box.every(Number.isFinite) &&
+      box[0] >= 0 && box[1] >= 0 && box[2] <= width && box[3] <= height && box[2] > box[0] && box[3] > box[1];
+  }
+
+  function confirmedBounds(image, savedBounds) {
+    const row = savedBounds?.[image.id];
+    return row && row.image_width === image.width && row.image_height === image.height &&
+      row.image_sha256 === (image.sha256 || null) && validBounds(row.bbox, image.width, image.height) ? row.bbox : null;
+  }
+
+  function placementAnchor(image, box, center) {
+    if (center && box) return [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
+    if (positive(image.width) && positive(image.height)) return [image.width / 2, image.height / 2];
+    return null;
+  }
+
+  function plannedScale(display, settings, step, image, confirmed) {
     const { width, height, category } = image;
     const box = confirmed ?? image.object_bbox;
     const side = box && Math.max(box[2] - box[0], box[3] - box[1]);
@@ -53,6 +70,10 @@
         sizes.push([level * 10, 'screen_object_width_mm_calculated', 'мм', 2]);
         break;
     }
+    return { coefficient, sizes };
+  }
+
+  function scaleMismatch(record, { coefficient, sizes }) {
     const difference = ([expected, field, unit, decimals]) => {
       const actual = record[field];
       if (!positive(expected) || !Number.isFinite(actual) || round(expected, decimals) === round(actual, decimals)) return null;
@@ -85,7 +106,7 @@
     return { correct: drone ? correct : null, extra: extraConflict ? null : extra, missed: drone ? !correct : null };
   }
 
-  function conditionsAgainstPlan(record, trial, settings, run, step, image, confirmed) {
+  function conditionsAgainstPlan(record, trial, settings, run, step, scale) {
     const snapshot = trial?.pilot_condition ?? {};
     const profile = settings.device_profile ?? {};
     const camera = {
@@ -114,12 +135,12 @@
       .filter(([key, value]) => known(value) && known(observed?.[key]) && !same(value, observed[key]))
       .map(([key, value]) => `${prefix}${key}: план ${JSON.stringify(value)}, запись ${JSON.stringify(observed[key])}`);
     const mismatches = [...diff(record, facts), ...diff(record.experiment_condition, camera, 'experiment_condition.')];
-    const scale = scaleMismatch(record, trial?.pilot_display, settings, step, image, confirmed);
-    if (scale) mismatches.push(scale);
+    const mismatch = scaleMismatch(record, scale);
+    if (mismatch) mismatches.push(mismatch);
     return mismatches;
   }
 
-  function compare({ runs, records, images, manifest, confirmedBounds = () => null }) {
+  function compare({ runs, records, images, manifest }) {
     const issues = [];
     const conditionIssues = [];
     const ids = images.map(image => image.id);
@@ -147,6 +168,13 @@
       const settings = trial?.settings ?? {};
       if ((settings.experiment_kind ?? 'gallery') !== 'gallery') issues.push(slot + ': требуется статический прогон галереи.');
       const steps = new Map(plan.filter(Boolean).map(step => [step.id, step]));
+      const geometry = new Map(images.map(image => {
+        const confirmed = confirmedBounds(image, settings.object_bounds);
+        const scale = plannedScale(trial?.pilot_display, settings, steps.get(image.id), image, confirmed);
+        const anchor = typeof settings.center === 'boolean'
+          ? placementAnchor(image, confirmed ?? image.object_bbox, settings.center) : null;
+        return [image.id, { scale, anchor }];
+      }));
       const byImage = new Map();
       for (const record of records.filter(row => row.run_id === run.run_id)) {
         const image = images.find(item => item.id === record.image_id);
@@ -156,19 +184,19 @@
           continue;
         }
         byImage.set(record.image_id, record);
-        for (const mismatch of conditionsAgainstPlan(record, trial, settings, run, steps.get(image.id), image, confirmedBounds(image, settings))) {
+        for (const mismatch of conditionsAgainstPlan(record, trial, settings, run, steps.get(image.id), geometry.get(image.id).scale)) {
           const message = `${slot} · ${image.id} · ${mismatch}`;
           issues.push(message);
           conditionIssues.push({ id: image.id, message });
         }
       }
-      return { settings, trial, byImage, run, plan };
+      return { settings, trial, byImage, run, steps, geometry };
     });
 
     for (const [key, label, required] of [
       ['phone', 'телефон', true], ['zoom', 'зум', true], ['distance_cm', 'расстояние, см', true],
       ['mode', 'правила записи', true], ['scaleMode', 'режим масштаба', true],
-      ['bg', 'фон'], ['center', 'центрирование'], ['camera_id', 'камера'], ['scene_conditions', 'условия сцены'],
+      ['bg', 'фон'], ['camera_id', 'камера'], ['scene_conditions', 'условия сцены'],
       ['model_sha256', 'SHA-256 модели'], ['app_conf_pct', 'порог confidence'], ['frame_w', 'ширина кадра анализа'],
       ['frame_h', 'высота кадра анализа'], ['yolo_input', 'вход YOLO'],
     ]) {
@@ -177,8 +205,8 @@
       else check(label, ...values, required);
     }
     check('единица наблюдения', a.settings.observation_unit ?? 'window', b.settings.observation_unit ?? 'window');
-    if (a.trial?.pilot_display && b.trial?.pilot_display) {
-      for (const key of ['width', 'height', 'dpr']) check('окно показа / ' + key, a.trial.pilot_display[key], b.trial.pilot_display[key], true);
+    if (a.trial?.pilot_display || b.trial?.pilot_display) {
+      for (const key of ['width', 'height', 'dpr']) check('окно показа / ' + key, a.trial?.pilot_display?.[key], b.trial?.pilot_display?.[key], true);
     }
     if (a.settings.scaleMode === b.settings.scaleMode) {
       if (a.settings.scaleMode === 'native') check('коэффициент показа', round(a.settings.scaleFactor, 5), round(b.settings.scaleFactor, 5), true);
@@ -196,10 +224,13 @@
       });
       if (values.every(value => value !== undefined)) check(key, ...values);
     }
-    const plannedLevels = side => new Map(side.plan.filter(Boolean).map(step => [step.id, step.level ?? null]));
-    const levelsA = plannedLevels(a), levelsB = plannedLevels(b);
     for (const id of ids) {
-      if (levelsA.get(id) !== levelsB.get(id)) issues.push('Различается запланированный масштаб снимка ' + id);
+      if ((a.steps.get(id)?.level ?? null) !== (b.steps.get(id)?.level ?? null)) issues.push('Различается запланированный масштаб снимка ' + id);
+      const start = issues.length;
+      const geometryA = a.geometry.get(id), geometryB = b.geometry.get(id);
+      check('положение снимка ' + id, geometryA.anchor, geometryB.anchor);
+      check('масштаб показа снимка ' + id, round(geometryA.scale.coefficient, 5), round(geometryB.scale.coefficient, 5));
+      for (const message of issues.slice(start)) conditionIssues.push({ id, message });
       const A = a.byImage.get(id), B = b.byImage.get(id);
       if (!A || !B) continue;
       check('фактический масштаб / ' + id, round(A.display_scale, 5), round(B.display_scale, 5));
@@ -235,5 +266,5 @@
       rows: rows.filter(row => !same(row.A, row.B) || !row.recorded.A || !row.recorded.B || row.extraConflicts.A || row.extraConflicts.B) };
   }
 
-  return { compare };
+  return { compare, validBounds, confirmedBounds, placementAnchor };
 });

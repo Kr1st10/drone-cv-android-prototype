@@ -545,7 +545,7 @@ function physicalScale(lineCssPx, lineMm) {
   return positive(k) ? k : null;
 }
 function validBounds(b, width, height) {
-  return Array.isArray(b) && b.length === 4 && b.every(Number.isFinite) && b[0] >= 0 && b[1] >= 0 && b[2] <= width && b[3] <= height && b[2] > b[0] && b[3] > b[1];
+  return PilotComparison.validBounds(b, width, height);
 }
 function physicalWidth(b, imageWidth, imageHeight, cssScale, mmPerCssPx) {
   if (!validBounds(b, imageWidth, imageHeight) || !positive(cssScale) || !positive(mmPerCssPx)) return null;
@@ -843,8 +843,7 @@ function calibrationFor(s) {
   return cal && s.screen_calibration?.id === cal.id ? cal : null;
 }
 function confirmedBounds(m, s) {
-  const r = (s ? s.object_bounds : BOUNDS)?.[m.id];
-  return r && r.image_width === m.width && r.image_height === m.height && r.image_sha256 === (m.sha256 || null) && validBounds(r.bbox, m.width, m.height) ? r.bbox : null;
+  return PilotComparison.confirmedBounds(m, s ? s.object_bounds : BOUNDS);
 }
 function objectBox(m, s) { return confirmedBounds(m, s) || m.object_bbox; }
 function referenceFor(m, s) {
@@ -1073,9 +1072,8 @@ function show() {
 }
 function place(m, sc, s) {
   const w = m.width * sc, h = m.height * sc, W = innerWidth, H = innerHeight;
-  let x = (W - w) / 2, y = (H - h) / 2;
-  const b = objectBox(m, s);
-  if (s.center && b) { /* object at screen centre (also in quick mode: 5x sees only the centre) */ x = W / 2 - (b[0] + b[2]) / 2 * sc; y = H / 2 - (b[1] + b[3]) / 2 * sc; }
+  const [anchorX, anchorY] = PilotComparison.placementAnchor(m, objectBox(m, s), s.center);
+  const x = W / 2 - anchorX * sc, y = H / 2 - anchorY * sc;
   img.style.left = x + 'px'; img.style.top = y + 'px'; img.style.width = w + 'px'; img.style.height = h + 'px';
 }
 function sizes(m, s, measuredCam) { // three distinct units; null = not measured / not applicable
@@ -1333,7 +1331,6 @@ function renderPilotComparison() {
       return { id, category, width, height, sha256, object_bbox, drone: DRONE_CATS.includes(category) };
     }),
     manifest: { version: window.MANIFEST.version, sha256: window.MANIFEST_SHA256 ?? null },
-    confirmedBounds,
   });
   if (pair.issues.length) {
     const photos = new Map(pair.conditionIssues?.map(({ id, message }) => [message, id]));

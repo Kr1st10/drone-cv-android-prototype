@@ -218,3 +218,48 @@ test('pilot compares camera pixels after the gallery rounds monitor pixels and u
   unpaired.screen_object_width_mm_calculated = 35.2;
   assert.match(Pilot.compare(data).conditionIssues[0].message, /32 мм.*35,2 мм/);
 });
+
+test('pilot rejects shifted placement from saved bounds at identical fit scale', () => {
+  const data = pilotWithBounds();
+  const image = data.images[0];
+  data.runs[1].trial.settings.object_bounds = {
+    [image.id]: { bbox: [40, 40, 80, 80], image_width: 100, image_height: 100, image_sha256: null },
+  };
+  const report = Pilot.compare(data);
+  assert.match(report.issues.join(' '), /положение снимка.*photo-0/);
+  assert.equal(report.metrics, undefined);
+});
+
+test('pilot accepts equivalent placement from confirmed bounds or manifest fallback', () => {
+  const data = pilotWithBounds();
+  assert.deepEqual(Pilot.compare(data).issues, []);
+  const [a, b] = data.runs;
+  const image = data.images[0];
+  b.trial.settings.object_bounds = {
+    [image.id]: { ...a.trial.settings.object_bounds[image.id], bbox: [40, 40, 60, 60] },
+  };
+  assert.deepEqual(Pilot.compare(data).issues, [], 'fit placement uses the centre, independent of box size');
+  a.trial.settings.center = b.trial.settings.center = false;
+  b.trial.settings.object_bounds[image.id].bbox = [40, 40, 80, 80];
+  assert.deepEqual(Pilot.compare(data).issues, [], 'uncentred fit ignores bounds in placement');
+});
+
+function pilotWithBounds() {
+  const data = pilot();
+  data.images = images.map(image => ({ ...image, width: 100, height: 100,
+    object_bbox: image.drone ? [20, 20, 80, 80] : null }));
+  for (const run of data.runs) {
+    run.trial.pilot_display = { width: 800, height: 800, dpr: 1 };
+    run.trial.settings.center = true;
+    run.trial.settings.object_bounds = {};
+  }
+  const { id, object_bbox: bbox } = data.images[0];
+  data.runs[0].trial.settings.object_bounds[id] = { bbox, image_width: 100, image_height: 100, image_sha256: null };
+  const original = new Map(data.records.map(row => [row.run_id + '/' + row.image_id, row]));
+  data.records = data.runs.flatMap(run => run.trial.order.map(({ id }, step) => {
+    const { category } = data.images.find(image => image.id === id);
+    return { run_id: run.run_id, image_id: id, step, category, detection: 'no_box',
+      ...original.get(run.run_id + '/' + id), display_scale: 8 };
+  }));
+  return data;
+}
