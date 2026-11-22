@@ -93,12 +93,14 @@ internal object DjiRsAttitudeCodec {
 
         val headerCrc = reflectedCrc(frame, CRC16_OFFSET, CRC16_POLYNOMIAL).toShort()
         if (buffer.getShort(CRC16_OFFSET) != headerCrc) return Invalid(InvalidReason.HEADER_CRC)
+
+        val sequence = buffer.getShort(SEQUENCE_OFFSET).toInt() and 0xFFFF
+        if (sequence != expectedSequence) return Invalid(InvalidReason.SEQUENCE)
+
         val frameCrcOffset = frame.size - CRC32_BYTES
         val frameCrc = reflectedCrc(frame, frameCrcOffset, CRC32_POLYNOMIAL)
         if (buffer.getInt(frameCrcOffset) != frameCrc) return Invalid(InvalidReason.FRAME_CRC)
 
-        val sequence = buffer.getShort(SEQUENCE_OFFSET).toInt() and 0xFFFF
-        if (sequence != expectedSequence) return Invalid(InvalidReason.SEQUENCE)
         buffer.position(DATA_OFFSET)
         if (buffer.get() != GIMBAL_COMMAND_SET.toByte() || buffer.get() != READ_ANGLES.toByte()) {
             return Invalid(InvalidReason.COMMAND)

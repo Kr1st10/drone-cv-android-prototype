@@ -38,6 +38,18 @@ class DjiRsAttitudeReaderTest {
         assertEquals(1, transport.writes.size)
     }
 
+    @Test fun skipsAForeignReplyWithCorruptedPayload() {
+        val corrupted = foreignReply.copyOf().also { it[16] = 0 }
+        transport.replies.add(ReplyAfter(corrupted, 40))
+        transport.replies.add(ReplyAfter(matchingReply, 20))
+
+        val exchange = reader.readOnce(TIMEOUT)
+
+        assertEquals(Outcome.Reply(expectedAngles), exchange.outcome)
+        assertEquals(1, transport.writes.size)
+        assertEquals(listOf(TIMEOUT, 60L), transport.receiveTimeouts)
+    }
+
     @Test fun reportsCorruptionEvenIfTheDamagedHeaderContainsADifferentNumber() {
         val corrupted = matchingReply.copyOf().also { it[8] = 0x35 }
         transport.replies.add(ReplyAfter(corrupted))
