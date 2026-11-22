@@ -352,14 +352,18 @@ test('only a positive finite numeric distance confirms camera placement', () => 
   assert.equal(Manual.compare(observations, series, 1, runs).state, 'comparable');
 });
 
-function interruptedScenario() {
-  const { series, runs: [run], observations } = fixture();
-  const plan = MotionScenario.plan({
+function scenarioPlan(laps = 3) {
+  return MotionScenario.plan({
     width: 1280, height: 800, workspace: { x: 64, y: 40, width: 1152, height: 720 },
     calibration_size_px: 48, sync_module_px: 18, image_width: 800, image_height: 600,
     bbox: [200, 100, 600, 500], target_width_px: 75, max_speed_px_s: 150,
-    acceleration_px_s2: 500, laps: 3,
+    acceleration_px_s2: 500, laps,
   });
+}
+
+function interruptedScenario() {
+  const { series, runs: [run], observations } = fixture();
+  const plan = scenarioPlan();
   run.scenario = plan.config;
   run.settings_snapshot = { plan };
   run.complete = false;
@@ -417,4 +421,41 @@ test('a stop inside lap one keeps a confirmed violation and disallows a clean la
   assert.deepEqual(observed.laps.slice(1), interrupted.laps.slice(1));
   assert.deepEqual(read(), observed);
   assert.deepEqual(save({ notes: 'Нарушение до остановки' }), { ...observed, notes: 'Нарушение до остановки' });
+});
+
+test('a clean lap ending before the planned return contradicts a late first capture', () => {
+  const { series, runs: [run], observations } = fixture();
+  const plan = scenarioPlan();
+  run.scenario = plan.config;
+  run.settings_snapshot = { plan };
+  run.end_ms = plan.duration_ms;
+  const save = patch => Manual.save(observations, series, run, patch);
+  const { calibration_ms, stationary_ms, movement_ms, laps, disappearance_start_ms, disappearance_ms } = plan.config;
+  const firstLapEnd = calibration_ms + stationary_ms + movement_ms / laps;
+  const returnAt = disappearance_start_ms + disappearance_ms;
+  assert.ok(firstLapEnd < returnAt && returnAt < firstLapEnd + movement_ms / laps);
+  const capture = known('after_return');
+  assert.throws(() => save({ capture, laps: [known('clean'), blank, blank] }), /Круг 1.*первого захвата после появления/);
+  assert.deepEqual(Manual.read(observations, series, run).capture, blank);
+  for (const firstLap of [blank, gap('uncertain', 'Край превью'), known('violation')]) {
+    const answers = [firstLap, gap('uncertain', 'Пропущен участок'), known('clean')];
+    const saved = save({ capture, laps: answers, after_return: known(true) });
+    assert.deepEqual(saved.capture, capture);
+    assert.deepEqual(saved.laps, answers);
+  }
+  assert.deepEqual(save({ capture: blank, laps: [known('clean'), blank, blank] }).laps[0], known('clean'));
+});
+
+test('late first capture uses the number and timing of the saved laps', () => {
+  const { series, runs: [run], observations } = fixture();
+  const plan = scenarioPlan(6);
+  run.scenario = plan.config;
+  run.settings_snapshot = { plan };
+  run.end_ms = plan.duration_ms;
+  const { calibration_ms, stationary_ms, movement_ms, laps, disappearance_start_ms, disappearance_ms } = plan.config;
+  const returnAt = disappearance_start_ms + disappearance_ms;
+  assert.ok(calibration_ms + stationary_ms + 2 * movement_ms / laps < returnAt);
+  assert.throws(() => Manual.save(observations, series, run, {
+    capture: known('after_return'), laps: [blank, known('clean'), blank, blank, blank, blank],
+  }), /Круг 2.*первого захвата после появления/);
 });

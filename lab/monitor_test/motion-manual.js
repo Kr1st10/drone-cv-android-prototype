@@ -100,6 +100,17 @@
     }
   }
 
+  function lateCaptureConflict(entry, run) {
+    if (entry.capture.value !== 'after_return') return null;
+    const { calibration_ms, stationary_ms, movement_ms, laps, disappearance_start_ms, disappearance_ms } = run.scenario;
+    const motionStart = calibration_ms + stationary_ms;
+    const returnAt = disappearance_start_ms + disappearance_ms;
+    if (![motionStart, movement_ms, returnAt].every(Number.isFinite) || movement_ms <= 0) return null;
+    const index = entry.laps.findIndex((lap, i) => lap.value === 'clean' &&
+      motionStart + movement_ms / laps * (i + 1) <= returnAt);
+    return index < 0 ? null : `Круг ${index + 1} закончился до возможного первого захвата после появления (запуск ${run.run_id}). Проверьте оценку круга и время первого захвата.`;
+  }
+
   function loadEntry(observations, series, run, attempt) {
     const count = run.scenario?.laps;
     if (!Number.isInteger(count) || count < 1 || count > 20) throw Error('Нужно число запланированных кругов от 1 до 20.');
@@ -187,6 +198,8 @@
     if (next.capture.value === 'after_return' && (next.before_hide.value === true || next.after_return.value === false)) {
       throw Error('Ответы противоречат первому захвату после появления.');
     }
+    const conflict = lateCaptureConflict(next, run);
+    if (conflict) throw Error(conflict);
     if (next.answer_sources && !Object.keys(next.answer_sources).length) delete next.answer_sources;
     const index = observations.findIndex(item => item.series_id === series.id && item.run_id === run.run_id);
     observations.splice(index < 0 ? observations.length : index, index < 0 ? 0 : 1, next);
@@ -309,7 +322,8 @@
       }
       return entry.run_complete ? [] : ['Прогон не завершён: ' + entry.run_id];
     });
-    const reasons = [...interrupted, ...conditions.reasons];
+    const conflicts = answers.map((entry, index) => lateCaptureConflict(entry, entries[index])).filter(Boolean);
+    const reasons = [...interrupted, ...conflicts, ...conditions.reasons];
     const rows = [];
     const add = (key, a, b) => {
       const unavailable = [a, b].flatMap((item, i) => item.status === 'known' ? [] : [slots[i] + ': ' + (item.reason ?? 'нет ответа')]);
@@ -327,7 +341,7 @@
     const available = rows.filter(row => row.delta.status === 'known').length;
     const result_state = !available ? 'insufficient_data' : available < rows.length ? 'partial' : 'complete';
     if (!available) reasons.push('Недостаточно данных для расчёта разностей.');
-    const state = interrupted.length ? 'interrupted'
+    const state = interrupted.length ? 'interrupted' : conflicts.length ? 'incomparable'
       : conditions.state === 'comparable' && !available ? 'insufficient_data' : conditions.state;
     return { ...result, attempts: { A, B }, rows, conditions, reasons, state, result_state };
   }
