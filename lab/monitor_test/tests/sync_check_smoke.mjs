@@ -15,6 +15,8 @@ async function exported(){const [d]=await Promise.all([page.waitForEvent('downlo
 async function upload(j){await page.setInputFiles('#reportJournals',{name:'check.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(j))});try{await page.waitForFunction(()=>!document.getElementById('reportSelect').disabled,null,{polling:50,timeout:10000});}catch(e){console.error(await page.locator('#reportStatus').textContent());throw e;}}
 try{
   await page.goto('file://'+path.join(root,'gallery.html'));await page.click('[data-section=motion]');
+  await page.locator('#motionWorkspace > summary').click();
+  await page.locator('#motionSyncCheck > summary').click();
   assert.equal(await page.inputValue('#motionSyncSize'),'18');
   // No photo selection/annotation is required, even if the photo is unavailable.
   await page.evaluate(()=>{window.syncOriginalImages=MotionGallery.images;MotionGallery.images=()=>[];});
@@ -129,6 +131,8 @@ try{
   const mobile=await page.evaluate(()=>{const p=document.getElementById('settings');return p.scrollWidth<=p.clientWidth+1;});assert.ok(mobile);
   await page.screenshot({path:'/private/tmp/dronecv-sync-mobile.png'});
   await page.reload();await page.click('[data-section=motion]');assert.ok((await page.locator('#syncCheckSelect option').count())>=6);assert.equal((await page.evaluate(()=>MotionStore.list())).length,0);
+  await page.locator('#motionWorkspace > summary').click();
+  await page.locator('#motionSyncCheck > summary').click();
   await page.setViewportSize({width:1280,height:800});
   await page.click('[data-sync-size="18"]');
   await page.selectOption('#motionPhoto','civ01');
@@ -146,7 +150,6 @@ try{
   await clean();const motion=(await page.evaluate(()=>MotionStore.list())).at(-1);
   assert.equal(motion.complete,true);assert.equal(motion.marker.module_px,18);assert.equal(motion.scenario.target_width_px,40);assert.ok(motion.samples.some(s=>s.visible));
   // Repeat uses the saved experiment, even after fields are edited.
-  await page.locator('#motionWorkspace summary').click();
   await page.fill('#motionWidth','20');await page.fill('#motionSyncSize','6');
   await page.click('#motionRepeat');await page.waitForFunction(()=>document.fullscreenElement&&document.getElementById('settings').classList.contains('hidden'),null,{polling:50});
   await tick(0);await page.click('#motionStop');await clean();

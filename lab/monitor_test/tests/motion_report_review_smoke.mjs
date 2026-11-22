@@ -13,6 +13,7 @@ async function check(name,work){try{await work();console.log('PASS '+name);}catc
 const text=id=>page.locator('#'+id).count().then(n=>n?page.locator('#'+id).textContent():'<missing>');
 try{
  await page.goto('file://'+path.join(root,'gallery.html'));await page.click('[data-section=motion]');
+ await page.locator('#motionJournalReport > summary').click();
  const {run,journal,missing}=await page.evaluate(async()=>{
   const run_id='12345678',width=640,height=480,c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
   const tags=[[0,20,20],[1,560,20],[2,560,400],[3,20,400]].map(([id,x,y])=>({id,x,y,size:48}));tags.forEach(t=>MotionCalibration.draw(ctx,t));const jpeg=c.toDataURL('image/jpeg',.85);ctx.fillStyle='#fff';ctx.fillRect(558,398,52,52);const missing=c.toDataURL('image/jpeg',.85);

@@ -99,6 +99,7 @@ const syntheticSamples=Array.from({length:31},(_,i)=>({run_id:'12345678',step_id
 const syntheticRun={schema:'dronecv-motion-run-1',run_id:'12345678',mode:'yolo',complete:true,samples:syntheticSamples,duration_ms:3000,calibration_points:[[0,0],[100,0],[100,100],[0,100]],photo:{id:'synthetic'},conditions:{setup_id:'synthetic'},scenario:{target_width_px:20,acceleration_px_s2:100}};
 const syntheticJournal={schema:'dronecv-motion-android-1',mode:'yolo',complete:true,truncated:false,stop_ns:3000e6,geometry:{width:100,height:100},calibration_image:{width:100,height:100,data_url:jpeg},frames:syntheticSamples.map((s,i)=>({frame_id:i,analyzer_ns:i*1e8,capture_ns:i*1e8,marker:{run_id:s.run_id,step_id:i}})),detections:[{frame_id:5,published_ns:600e6,bbox:[.26,.26,.42,.42]}],publications:[{frame_id:5,published_ns:600e6,bbox:[.26,.26,.42,.42],source:'yolo'},{frame_id:null,published_ns:2500e6,bbox:null,source:'clear'}]};
 const jsonFile=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
+await page.locator('#motionJournalReport > summary').click();
 await page.setInputFiles('#reportReference',jsonFile('synthetic-reference.json',syntheticRun));
 await page.setInputFiles('#reportJournals',jsonFile('synthetic-journal.json',syntheticJournal));
 await page.waitForFunction(()=>document.getElementById('reportCanvas').width===100, null, {polling:100});
@@ -197,11 +198,25 @@ realtime.on('pageerror',e=>errors.push(String(e)));
 await realtime.goto('file://' + path.join(dir,'gallery.html'));
 await realtime.click('[data-section=motion]'); await realtime.selectOption('#motionPhoto',selected);
 for (const [key,value] of Object.entries({motionWidth:'60',motionSpeed:'50000',motionAcceleration:'10000000',motionLaps:'1'})) await realtime.fill('#'+key,value);
+await realtime.evaluate(()=>{
+  const close=MotionTimeline.close;
+  MotionTimeline.close=(run,end)=>{
+    const c=document.getElementById('motionCanvas'),pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    window.blankEnd={at:performance.now(),end,width:c.width,height:c.height,fullscreen:document.fullscreenElement?.id,
+      black:pixels.every((v,i)=>v===(i%4===3?255:0))};
+    return close(run,end);
+  };
+  document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement)window.exitAt=performance.now();});
+});
 await realtime.click('#motionStart');
 await realtime.waitForFunction(()=>document.fullscreenElement?.id==='motionStage' && document.getElementById('settings').classList.contains('hidden'),null,{polling:100});
 await realtime.waitForFunction(()=>!document.fullscreenElement && /Запуск завершён/.test(document.getElementById('motionStatus').textContent),null,{polling:100});
 const [realDownload] = await Promise.all([realtime.waitForEvent('download'),realtime.click('#motionExportLast')]);
 const realRun=JSON.parse(fs.readFileSync(await realDownload.path(),'utf8'));
+const blank=await realtime.evaluate(()=>({...blankEnd,exitAt}));
+assert.equal(blank.fullscreen,'motionStage');assert.equal(blank.black,true);
+assert.ok(blank.width>0&&blank.height>0);assert.ok(blank.exitAt-blank.at>=500);
+assert.equal(realRun.end_ms,blank.end);
 assert.equal(realRun.complete,true); assert.equal(realRun.scenario.laps,1);
 assert.equal(realRun.samples.at(-1).phase,'blank_after');
 assert.ok(realRun.samples.at(-1).elapsed_ms>=realRun.duration_ms);

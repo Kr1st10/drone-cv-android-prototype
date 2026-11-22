@@ -6,10 +6,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   #abPanel label { display:block; margin:8px 0; }
-  #abPanel input, #abPanel select { max-width:100%; box-sizing:border-box; }
+  #motionSection :is(input,select,textarea) { max-width:100%; box-sizing:border-box; }
+  #motionSection label { overflow-wrap:anywhere; }
+  .motion-actions { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0; }
+  .motion-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap:8px 12px; }
+  .motion-fields > p, #abPanel .motion-fields label { margin:0; }
+  .motion-fields label:not(:has(input[type=checkbox])) { display:grid; gap:4px; justify-items:start; margin:0; }
+  .motion-fields :is(input:not([type=checkbox]),select,textarea) { width:100%; }
+  #motionSection details > summary { overflow-wrap:anywhere; }
+  #motionSection details[open] > summary { margin-bottom:10px; }
+  #motionSection :is(#motionStatus,#abStatus,#abRetryInstruction,#manualStatus):empty { display:none; }
+  #manualSetup [role=status]:empty { display:none; }
+  .motion-report-table { overflow-x:auto; }
+  .motion-scene-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:12px 24px; align-items:start; }
+  @media (min-width:680px) {
+    .motion-scene-layout { grid-template-columns:minmax(0,2fr) minmax(0,3fr); }
+  }
+  @media (max-width:600px) {
+    #motionSection details > summary { box-sizing:border-box; min-height:44px; padding-block:10px; }
+  }
   #abResults table { border-collapse:collapse; }
   #abResults th, #abResults td { padding:6px; text-align:left; vertical-align:top; border-bottom:1px solid #555; }
-  #abResults pre { overflow-wrap:anywhere; }
+  #abResults { overflow-wrap:anywhere; }
+  .manual-pair-report td, #pilotComparison td { overflow-wrap:anywhere; }
+  #pilotComparison { overflow-x:auto; }
+  #pilotPhoto { max-width:min(90vw, 960px); }
+  #pilotPhoto img { display:block; max-width:100%; max-height:70vh; margin-block:12px; object-fit:contain; }
   html, body { margin: 0; height: 100%; background: #000; color: #ddd; font: 16px/1.4 system-ui, sans-serif; overflow: hidden; }
   #stage { position: fixed; inset: 0; overflow: hidden; background: var(--bg, #000); }
   #stage img { position: absolute; left: 0; top: 0; max-width: none; image-rendering: auto; user-select: none; -webkit-user-drag: none; }
@@ -55,13 +77,11 @@
   #hud { position: fixed; z-index: 5; left: 8px; bottom: 6px; font-size: 13px; color: #888; pointer-events: none; }
   body.motion-mode #stage, body.motion-mode #hud, body.motion-mode #geometry, body.motion-mode #stageControls, body.motion-mode #answer, body.motion-mode #record { display: none !important; }
   #motionPhoto { display: block; max-width: 100%; }
-  #motionSection input[type=file] { max-width: 100%; }
   #syncCheckStatus { white-space: pre-line; }
   #motionStage { position: fixed; inset: 0; z-index: 100; background: #fff; }
   #motionPhotoPreview { display:block; width:240px; height:140px; max-width:100%; object-fit:contain; background:white; }
   #motionPhotoPreview[hidden] { visibility:hidden; }
   #motionSection input[type=number] { max-width:7em; }
-  #motionSection select { max-width:100%; }
   #motionSection p { overflow-wrap:anywhere; }
   body.motion-mode #settings { box-sizing:border-box; width:min(1142px,94vw); }
   body.motion-mode nav button[aria-selected=true], #motionSection button.primary { background:#176b37; border-color:#32824e; color:#fff; }
@@ -69,8 +89,8 @@
   #motionSection button:disabled { cursor:default; opacity:.65; }
   #motionSection button:not(:disabled):hover { filter:brightness(.92); }
   #motionSection button:not(:disabled):active { transform:translateY(1px); }
-  #motionAreaPreview { display:block; max-width:100%; background:white; border:1px solid #888; }
-  #motionSection button:focus-visible, #motionSection input:focus-visible { outline:3px solid #38a; outline-offset:3px; }
+  #motionAreaPreview { display:block; max-width:100%; height:auto; background:white; border:1px solid #888; }
+  #motionSection :is(button,input,select,textarea,summary):focus-visible { outline:3px solid #65bad9; outline-offset:3px; }
   #motionCanvas { display: block; width: 100vw; height: 100vh; }
   #motionStop { position: absolute; right: 16px; top: 16px; }
   .hidden { display: none !important; }
@@ -121,7 +141,14 @@
     <p><b>Галерея.</b> Выберите 20/90 фото или свой набор, начните прогон. Если границы объекта ещё не подтверждены, один раз задайте их через «Границы текущего объекта». Масштабируйте +/−/0. G показывает ширину, эквивалентную дальность и сравнение с сохранённым пределом; перед наблюдением G скрывает текст. При неизвестной модели это предположение о ширине, не исходная дальность съёмки.</p>
     <p><b>Сохранение.</b> Записи, свои снимки и график хранятся в этом браузере. В «Результатах» экспортируйте JSON для резервной копии или переноса; CSV — для таблиц. После открытия сохранённого файла проверьте экран и установку. Порог относится к испытанной модели/камере/условиям и не гарантирует обнаружение другой фотографии.</p>
   </details>
-  <section id="gallerySection"></section>
+  <section id="gallerySection">
+    <details id="pilotComparison">
+      <summary>Сравнить два прогона «Пилот — 20 фото»</summary>
+      <label>Прогон A <select id="pilotRunA"></select></label>
+      <label>Прогон B <select id="pilotRunB"></select></label>
+      <div id="pilotComparisonResult" aria-live="polite"></div>
+    </details>
+  </section>
   <section id="referenceSection" class="hidden"></section>
   <section id="researchSection" class="hidden">
     <h3>Эталон Draganfly Flex FPV 10</h3>
@@ -142,94 +169,133 @@
   <section id="motionSection" class="hidden">
     <h3>Движущаяся цель</h3>
     <label>Режим стенда <select id="motionTestMode"><option value="single">Одиночный прогон</option><option value="ab">A/B-сравнение</option></select></label>
+    <div class="motion-actions">
+      <button id="motionStart" class="primary">Старт</button><button id="motionRepeat">Повторить</button><button id="motionNewSeries">Новая серия</button>
+    </div>
+    <p id="motionStatus" class="warn" role="status"></p>
     <div id="abPanel" hidden>
-      <h4>Парная серия</h4>
-      <label>Сохранённая серия <select id="abSeriesSelect"></select></label>
-      <label>Сравниваемый фактор <select id="abFactor"><option value="mode">Режим приложения</option><option value="build">Сборка / профиль настроек</option><option value="speed">Скорость, px/с</option><option value="acceleration">Ускорение, px/с²</option></select></label>
-      <label>Значение A <input id="abValueA" value="yolo" placeholder="yolo / yolo_lk, сборка или число"></label>
-      <label>Описание A (ввод оператора) <input id="abDescriptionA" value="YOLO"></label>
-      <label>Значение B <input id="abValueB" value="yolo_lk"></label>
-      <label>Описание B (ввод оператора) <input id="abDescriptionB" value="YOLO + LK"></label>
-      <p class="muted">Для режима: yolo или yolo_lk. Для сборки: точный git SHA из журнала. Для профиля: JSON с одинаковыми ключами, например {"confidence":0.25} и {"confidence":0.40}; подтверждаются только доступные поля журнала.</p>
-      <label>Число пар <input id="abPairs" type="number" min="1" max="8" value="3"></label>
-      <p>Три пары предложены для удобства, достаточность эксперимента этим не подтверждается. Условия ниже фиксируются при создании серии; планы сохраняются при первом запуске. A/B в браузере не подтверждает режим телефона.</p>
-      <button id="abCreate">Создать серию из текущих настроек</button>
+      <label>Серия A/B <select id="abSeriesSelect"></select></label>
       <p id="abInstruction" role="status"></p>
       <details id="manualSetup"><summary>Фактические условия перед запуском</summary></details>
       <button id="abNext" class="primary" disabled>Запустить следующий вариант</button>
-      <label>Пара для повторной попытки <input id="abRetryPair" type="number" min="1" value="1"></label>
-      <label>Вариант повтора <select id="abRetrySlot"><option>A</option><option>B</option></select></label>
-      <p id="abRetryInstruction" role="status"></p>
-      <button id="abRetry" disabled>Повторить выбранный вариант</button>
       <p id="abStatus" role="status"></p>
-      <div id="abResults" style="overflow-x:auto"></div>
-      <button id="abExport" disabled>Экспорт A/B JSON с исходниками</button><button id="abCSV" disabled>Экспорт A/B CSV</button>
-      <section id="manualPanel" hidden>
-        <h4>Ручная оценка</h4>
+      <details id="abSeriesSettings" open><summary>Параметры новой серии A/B</summary>
+        <div class="motion-fields">
+          <label>Сравниваемый фактор <select id="abFactor"><option value="mode">Режим приложения</option><option value="build">Сборка / профиль настроек</option><option value="speed">Скорость, px/с</option><option value="acceleration">Ускорение, px/с²</option></select></label>
+          <label>Число пар <input id="abPairs" type="number" min="1" max="8" value="3"></label>
+          <label>Значение A <input id="abValueA" value="yolo"></label>
+          <label>Описание A (ввод оператора) <input id="abDescriptionA" value="YOLO"></label>
+          <label>Значение B <input id="abValueB" value="yolo_lk"></label>
+          <label>Описание B (ввод оператора) <input id="abDescriptionB" value="YOLO + LK"></label>
+        </div>
+        <p class="muted">Для режима укажите yolo или yolo_lk, для сборки — точный git SHA из журнала. Для профилей задайте JSON с одинаковыми ключами, например {"confidence":0.25} и {"confidence":0.40}. Сверяются поля, доступные в журнале.</p>
+        <p>В ручном сравнении используется первая завершённая попытка каждого варианта по фактическому порядку. Стенд сохраняет условия при создании серии, а план — при первом запуске.</p>
+        <p class="muted">Число пар по умолчанию выбрано для удобства. Режим телефона подтверждается отдельно.</p>
+        <button id="abCreate">Создать серию из текущих настроек</button>
+      </details>
+      <details id="abRetrySettings"><summary>Повтор варианта A/B</summary>
+        <div class="motion-fields">
+          <label>Номер пары <input id="abRetryPair" type="number" min="1" value="1"></label>
+          <label>Вариант повтора <select id="abRetrySlot"><option>A</option><option>B</option></select></label>
+          <label>Причина повтора <input id="abRetryReason" maxlength="300"></label>
+        </div>
+        <p id="abRetryInstruction" role="status"></p>
+        <button id="abRetry" disabled>Повторить выбранный вариант</button>
+      </details>
+      <div id="abResults"></div>
+      <details id="manualPanel" hidden>
+        <summary>Ручная оценка и экспорт</summary>
         <p id="manualStatus" role="status"></p>
         <div id="manualEditor"></div>
-        <button id="manualExport" type="button">Экспорт ручной серии JSON</button>
-        <button id="manualCSV" type="button">Экспорт ручных оценок CSV</button>
-      </section>
-      <label>Восстановить серию A/B или ручную серию <input id="abImport" type="file" accept=".json,application/json"></label>
-      <details><summary>Ретроспективная пара из прежних прогонов</summary>
-        <label>run_id A <input id="abRetroA"></label><label>run_id B <input id="abRetroB"></label>
-        <button id="abRetro">Объединить явно выбранные прогоны</button>
-        <p>Используются фактор и описания выше. Порядок заранее не планировался. Для расчёта импортируйте исходные журналы обычным импортом ниже.</p>
+        <div class="motion-actions">
+          <button id="manualExport" type="button">Экспорт ручной серии JSON</button>
+          <button id="manualCSV" type="button">Экспорт ручных оценок CSV</button>
+        </div>
+      </details>
+      <details id="abFiles"><summary>Импорт и экспорт A/B</summary>
+        <label>Восстановить серию A/B или ручную серию <input id="abImport" type="file" accept=".json,application/json"></label>
+        <div class="motion-actions">
+          <button id="abExport" disabled>Экспорт A/B JSON с исходниками</button><button id="abCSV" disabled>Экспорт A/B CSV</button>
+        </div>
+        <details><summary>Ретроспективная пара из прежних прогонов</summary>
+          <label>run_id A <input id="abRetroA"></label><label>run_id B <input id="abRetroB"></label>
+          <button id="abRetro">Объединить явно выбранные прогоны</button>
+          <p>Используются фактор и описания из параметров новой серии. Для расчёта загрузите журналы в раздел «Отчёт по журналам Android».</p>
+        </details>
       </details>
     </div>
-    <p>Фото целиком движется по прямоугольному маршруту. Ширина, скорость и ускорение заданы в пикселях экрана, не камеры. Выберите фото, настройте движение и нажмите «Старт».</p>
-    <label>Снимок <select id="motionPhoto"></select></label>
-    <img id="motionPhotoPreview" width="240" height="140" alt="Выбранная фотография дрона">
-    <label>Заменить фотографию <input type="file" id="motionUpload" accept="image/png,image/jpeg,image/webp"></label>
-    <button id="motionBounds">Проверить / выделить границы</button><p id="motionPhotoStatus" class="muted"></p>
-    <label>Ширина дрона по разметке, px экрана <input id="motionWidth" type="number" min="1" value="40"></label>
-    <label>Максимальная скорость, px/с <input id="motionSpeed" type="number" min="1" value="300"></label>
-    <label>Ускорение, px/с² <input id="motionAcceleration" type="number" min="1" value="500"></label>
-    <label>Круги <input id="motionLaps" type="number" min="1" max="20" value="1"></label>
-    <p class="muted">Размеры заданы в пикселях canvas, не камеры. Сначала впишите рабочую область целиком в кадр телефона. Цель движется плавно; sync-код меняется отдельно, не чаще раза в 100 мс (около 10 Гц).</p>
+    <details id="motionScene" open><summary>Снимок и движение</summary>
+      <div class="motion-scene-layout">
+        <div>
+          <label>Снимок <select id="motionPhoto"></select></label>
+          <img id="motionPhotoPreview" width="240" height="140" alt="Выбранная фотография дрона">
+          <label>Заменить фотографию <input type="file" id="motionUpload" accept="image/png,image/jpeg,image/webp"></label>
+          <button id="motionBounds">Проверить / выделить границы</button><p id="motionPhotoStatus" class="muted"></p>
+        </div>
+        <div>
+          <div class="motion-fields">
+            <label>Ширина дрона по разметке, px экрана <input id="motionWidth" type="number" min="1" value="40"></label>
+            <label>Максимальная скорость, px/с <input id="motionSpeed" type="number" min="1" value="300"></label>
+            <label>Ускорение, px/с² <input id="motionAcceleration" type="number" min="1" value="500"></label>
+            <label>Круги <input id="motionLaps" type="number" min="1" max="20" value="1"></label>
+          </div>
+          <p class="muted">Снимок движется по прямоугольному маршруту. Впишите рабочую область целиком в кадр телефона. Sync-код меняется отдельно, максимум раз в 100 мс. Esc, скрытие страницы и смена геометрии прерывают прогон.</p>
+        </div>
+      </div>
+    </details>
     <p id="motionCameraStatus" class="muted">Камерой не проверено.</p>
     <details id="motionWorkspace"><summary>Рабочая область и метки для 5×</summary>
-      <label>Слева, % экрана <input id="motionAreaX" type="number" min="0" max="100" value="5"></label>
-      <label>Сверху, % экрана <input id="motionAreaY" type="number" min="0" max="100" value="5"></label>
-      <label>Ширина области, % <input id="motionAreaWidth" type="number" min="1" max="100" value="90"></label>
-      <label>Высота области, % <input id="motionAreaHeight" type="number" min="1" max="100" value="90"></label>
-      <label>Сторона угловой метки, px <input id="motionTagSize" type="number" min="24" value="48"></label>
-      <label>Ячейка sync-кода, px <input id="motionSyncSize" type="number" min="2" step="1" value="18"></label>
+      <div class="motion-fields">
+        <label>Слева, % экрана <input id="motionAreaX" type="number" min="0" max="100" value="5"></label>
+        <label>Сверху, % экрана <input id="motionAreaY" type="number" min="0" max="100" value="5"></label>
+        <label>Ширина области, % <input id="motionAreaWidth" type="number" min="1" max="100" value="90"></label>
+        <label>Высота области, % <input id="motionAreaHeight" type="number" min="1" max="100" value="90"></label>
+        <label>Сторона угловой метки, px <input id="motionTagSize" type="number" min="24" value="48"></label>
+        <label>Ячейка sync-кода, px <input id="motionSyncSize" type="number" min="2" step="1" value="18"></label>
+      </div>
+      <p>Размер ячейки, px canvas <button type="button" data-sync-size="12">12</button> <button type="button" data-sync-size="18">18</button> <button type="button" data-sync-size="24">24</button> <button type="button" data-sync-size="32">32</button></p>
+      <p id="syncSizeStatus" class="muted"></p>
       <canvas id="motionAreaPreview" width="640" height="360" aria-label="Расположение рабочей области"></canvas>
       <p>Четыре метки и маршрут перемещаются вместе с областью. Положение кода фиксируется между верхними метками. Читаемость проверяется только по данным телефона.</p>
     </details>
-    <details><summary>Дополнительно: условия съёмки (необязательно)</summary>
-      <label>Идентификатор установки / телефона <input id="motionSetup" type="text"></label>
-      <label>Зум <input id="motionZoom" type="text" placeholder="например, 1x"></label>
-      <label>Ориентация <input id="motionOrientation" type="text"></label>
-      <label>Расстояние до экрана, см (необязательно) <input id="motionDistance" type="number" min="0" step="any" placeholder="не измерено"></label>
-      <label>Камера и настройки приложения <input id="motionCamera" type="text" placeholder="физическая камера, конфигурация"></label>
-      <p class="muted">Эти сведения вводит оператор; они не измеряются автоматически.</p>
+    <details id="motionCaptureConditions"><summary>Условия съёмки</summary>
+      <div class="motion-fields">
+        <label>Идентификатор установки / телефона <input id="motionSetup" type="text"></label>
+        <label>Зум <input id="motionZoom" type="text" placeholder="например, 1x"></label>
+        <label>Ориентация <input id="motionOrientation" type="text"></label>
+        <label>Расстояние до экрана, см <input id="motionDistance" type="number" min="0" step="any" placeholder="не измерено"></label>
+        <label>Камера и настройки приложения <input id="motionCamera" type="text" placeholder="физическая камера, конфигурация"></label>
+      </div>
+      <p class="muted">Поля необязательны. Введённые значения сохраняются в этом браузере.</p>
     </details>
-    <p id="motionStatus" class="warn"></p>
-    <p>Ячейка sync: <button type="button" data-sync-size="12">12</button> <button type="button" data-sync-size="18">18</button> <button type="button" data-sync-size="24">24</button> <button type="button" data-sync-size="32">32</button> px canvas; ручной ввод выше.</p>
-    <p id="syncSizeStatus" class="muted"></p>
-    <button id="syncCheckStart">Проверить чтение кода</button>
-    <p class="muted">Без фотографии: 10 секунд неизменного кода, затем пять шагов по секунде. Сначала включите запись стенда на телефоне.</p>
-    <label>Проверка чтения <select id="syncCheckSelect"></select></label><button id="syncCheckExport" disabled>Экспорт проверки</button>
-    <p id="syncCheckStatus" role="status">Камерой не проверено. Импортируйте журнал телефона ниже.</p>
-    <button id="motionStart" class="primary">Старт</button><button id="motionRepeat">Повторить</button><button id="motionNewSeries">Новая серия</button>
-    <button id="motionExportLast">Экспорт последнего запуска JSON</button><button id="motionExport">Экспорт серии JSON</button>
-    <p id="motionHistoryStatus" class="muted"></p>
-    <h4>Отчёт по журналам Android</h4>
-    <label>Эталон прогона или серии <input id="reportReference" type="file" accept="application/json,.json"></label>
-    <label>Журналы Android <input id="reportJournals" type="file" accept="application/json,.json,.ndjson,.jsonl,application/x-ndjson" multiple></label>
-    <label>Журнал для калибровки <select id="reportSelect"></select></label>
-    <p>Эталон подбирается по ID из журнала, четыре метки распознаются на сохранённом JPEG. Если эталона нет в браузере, загрузите его файл. Для старых эталонов или неудачного распознавания включите ручные точки на настоящем кадре.</p>
-    <canvas id="reportCanvas" style="display:block;max-width:100%;height:auto;cursor:crosshair"></canvas>
-    <p id="reportSyncStatus" class="muted" aria-live="polite">Читаемость sync-кода: журнал не загружен.</p>
-    <p id="reportTimingStatus" class="muted" aria-live="polite">Временное сопоставление: журнал не загружен.</p>
-    <p id="reportCalibrationStatus" class="muted" aria-live="polite">Камерой не проверено.</p>
-    <p id="reportStatus" class="warn" aria-live="polite"></p>
-    <button id="reportReset">Ручная калибровка заново</button><button id="reportCalculate">Пересчитать отчёт</button><button id="reportExport" disabled>Экспорт отчёта JSON</button>
-    <pre id="reportOutput" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
-    <p class="muted">Эталоны сохраняются в IndexedDB этого браузера. Экспортируйте резервную копию для переноса. Прерванные запуски помечены неполными. Esc, скрытие страницы и смена геометрии прерывают движение.</p>
+    <details id="motionSyncCheck"><summary>Проверка чтения sync-кода</summary>
+      <button id="syncCheckStart">Проверить чтение кода</button>
+      <p class="muted">Без фотографии: 10 секунд неизменного кода, затем пять шагов по секунде. Сначала включите запись стенда на телефоне.</p>
+      <label>Проверка чтения <select id="syncCheckSelect"></select></label><button id="syncCheckExport" disabled>Экспорт проверки</button>
+      <p id="syncCheckStatus" role="status">Камерой не проверено. Импортируйте журнал телефона ниже.</p>
+    </details>
+    <details id="motionHistory" open><summary>Эталоны запусков и экспорт</summary>
+      <div class="motion-actions">
+        <button id="motionExportLast">Экспорт последнего запуска JSON</button><button id="motionExport">Экспорт серии JSON</button>
+      </div>
+      <p id="motionHistoryStatus" class="muted"></p>
+      <p class="muted">Эталоны сохраняются в IndexedDB этого браузера. Для переноса выгрузите JSON. Стенд помечает прерванные запуски как неполные.</p>
+    </details>
+    <details id="motionJournalReport"><summary>Отчёт по журналам Android</summary>
+      <label>Эталон прогона или серии <input id="reportReference" type="file" accept="application/json,.json"></label>
+      <label>Журналы Android <input id="reportJournals" type="file" accept="application/json,.json,.ndjson,.jsonl,application/x-ndjson" multiple></label>
+      <label>Журнал для калибровки <select id="reportSelect"></select></label>
+      <p>Эталон подбирается по ID из журнала, четыре метки распознаются на сохранённом JPEG. Если эталона нет в браузере, загрузите его файл. Для старых эталонов или неудачного распознавания включите ручные точки на настоящем кадре.</p>
+      <canvas id="reportCanvas" style="display:block;max-width:100%;height:auto;cursor:crosshair"></canvas>
+      <p id="reportSyncStatus" class="muted" aria-live="polite">Читаемость sync-кода: журнал не загружен.</p>
+      <p id="reportTimingStatus" class="muted" aria-live="polite">Временное сопоставление: журнал не загружен.</p>
+      <p id="reportCalibrationStatus" class="muted" aria-live="polite">Камерой не проверено.</p>
+      <p id="reportStatus" class="warn" aria-live="polite"></p>
+      <div class="motion-actions">
+        <button id="reportReset">Ручная калибровка заново</button><button id="reportCalculate">Пересчитать отчёт</button><button id="reportExport" disabled>Экспорт отчёта JSON</button>
+      </div>
+      <pre id="reportOutput" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+    </details>
   </section>
   <section id="resultsSection" class="hidden">
     <h3>Сохранённые исследования</h3>
@@ -335,6 +401,9 @@
     <label><span id="confidenceCaption">Максимальный confidence YOLO (%)</span> <input type="number" id="recMaxConf" min="0" max="100" step="any"></label>
     <div class="muted" id="confidenceHint">Укажите наибольшую уверенность рамки за время наблюдения. Можно оставить пустым</div>
   </div>
+  <label id="pilotExtraField" class="hidden">При правильной рамке на дроне есть лишняя?
+    <select id="pilotExtra"><option value="">Не оценено</option><option value="yes">Да</option><option value="no">Нет</option></select>
+  </label>
   <button class="big det" data-det="box_on_object"><span class="kbd">1</span> Рамка на показанном объекте</button>
   <button class="big det" data-det="box_elsewhere"><span class="kbd">2</span> Рамка только в другом месте (не на объекте)</button>
   <button class="big det" data-det="no_box"><span class="kbd">3</span> Рамок нет</button>
@@ -405,8 +474,15 @@
   <button id="saveBounds">Подтвердить и сохранить границы</button><button id="removeBounds">Удалить подтверждение</button><button id="closeBounds">Закрыть</button>
 </div>
 
+<dialog id="pilotPhoto" aria-labelledby="pilotPhotoTitle">
+  <h3 id="pilotPhotoTitle"></h3>
+  <img id="pilotPhotoImage" alt="">
+  <p id="pilotPhotoStatus" role="status"></p>
+  <form method="dialog"><button autofocus>Закрыть снимок</button></form>
+</dialog>
 <script src="manifest.js"></script>
 <script src="experiment.js"></script>
+<script src="pilot-comparison.js"></script>
 <script src="reference_drones.js"></script>
 
 <script src="motion.js"></script>
@@ -423,6 +499,7 @@
 <script src="sync-check-ui.js" defer></script>
 <script src="motion-ui.js" defer></script>
 <script src="motion-report.js"></script>
+<script src="motion-manual-report.js"></script>
 <script src="motion-report-v4.js"></script>
 <script src="motion-journal-status.js"></script>
 <script src="motion-report-ui.js" defer></script>
@@ -468,7 +545,7 @@ function physicalScale(lineCssPx, lineMm) {
   return positive(k) ? k : null;
 }
 function validBounds(b, width, height) {
-  return Array.isArray(b) && b.length === 4 && b.every(Number.isFinite) && b[0] >= 0 && b[1] >= 0 && b[2] <= width && b[3] <= height && b[2] > b[0] && b[3] > b[1];
+  return PilotComparison.validBounds(b, width, height);
 }
 function physicalWidth(b, imageWidth, imageHeight, cssScale, mmPerCssPx) {
   if (!validBounds(b, imageWidth, imageHeight) || !positive(cssScale) || !positive(mmPerCssPx)) return null;
@@ -511,6 +588,7 @@ function layout() { // Reuse controls/IDs and storage; only move the existing co
   $('mainSetup').append($('screenCalibStatus'));
   fields.slice(1).forEach(f => legacy.append(f));
   const actions = $('start').parentElement; $('gallerySection').append(actions);
+  $('gallerySection').append($('pilotComparison'));
   for (const id of ['exportCsv', 'exportJson', 'clear', 'legacy']) $('exports').append($(id));
   $('exports').append($('importJson').closest('label'));
   $('allSummaries').append($('summary'));
@@ -645,7 +723,10 @@ async function addReferencePhoto(file, motionOnly = false) {
   let im; try { im = await imageLoaded(url); } finally { URL.revokeObjectURL(url); }
   if (im.naturalWidth > 16000 || im.naturalHeight > 16000) throw new Error('Слишком большое изображение; уменьшите его перед загрузкой.');
   const ratio = Math.min(1, 2048 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
-  c.width = Math.round(im.naturalWidth * ratio); c.height = Math.round(im.naturalHeight * ratio); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  c.width = Math.round(im.naturalWidth * ratio); c.height = Math.round(im.naturalHeight * ratio);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(im, 0, 0, c.width, c.height);
   const fileUrl = c.toDataURL('image/jpeg', .9), bytes = Uint8Array.from(atob(fileUrl.split(',')[1]), ch => ch.charCodeAt(0));
   const hash = await sha256(bytes), id = 'ref-' + (hash ? hash.slice(0, 20) : Date.now());
   if (fileUrl.length > 2500000) throw new Error('Для хранения уменьшите фото: подготовленная копия превышает 2,5 МБ.');
@@ -762,8 +843,7 @@ function calibrationFor(s) {
   return cal && s.screen_calibration?.id === cal.id ? cal : null;
 }
 function confirmedBounds(m, s) {
-  const r = (s ? s.object_bounds : BOUNDS)?.[m.id];
-  return r && r.image_width === m.width && r.image_height === m.height && r.image_sha256 === (m.sha256 || null) && validBounds(r.bbox, m.width, m.height) ? r.bbox : null;
+  return PilotComparison.confirmedBounds(m, s ? s.object_bounds : BOUNDS);
 }
 function objectBox(m, s) { return confirmedBounds(m, s) || m.object_bbox; }
 function referenceFor(m, s) {
@@ -845,6 +925,7 @@ function makeSample(counts, seed, name) {
     ids: order, created: new Date().toISOString(), manifest_version: window.MANIFEST && window.MANIFEST.version };
 }
 function readCounts() { const o = {}; document.querySelectorAll('.catn').forEach(e => o[e.dataset.cat] = Math.max(0, Math.min(parseInt(e.value) || 0, +e.max))); return o; }
+function pilotSample() { return makeSample(PILOT.counts, PILOT.seed, PILOT.name); }
 function writeCounts(counts) { document.querySelectorAll('.catn').forEach(e => e.value = counts[e.dataset.cat] ?? 0); }
 function setSample(smp) {
   if (!smp.ids.length) { alert('Выборка пуста: задайте количество хотя бы для одной категории.'); return false; }
@@ -951,6 +1032,10 @@ function startRun() {
   T = { run_id, created: now.toISOString(), manifest_version: window.MANIFEST.version,
         manifest_sha256: window.MANIFEST_SHA256 || null, sample_id: SAMPLE.sample_id, sample_name: SAMPLE.name, sample_seed: SAMPLE.seed, sample_ids: SAMPLE.ids.slice(),
         settings: rs, order, index: 0 };
+  if (SAMPLE.sample_id === pilotSample().sample_id && rs.experiment_kind === 'gallery') {
+    T.pilot_condition = currentCondition(rs);
+    T.pilot_display = { width: innerWidth, height: innerHeight, dpr: devicePixelRatio || 1 };
+  }
   RUNS.push({ run_id: T.run_id, created: T.created, sample_id: T.sample_id, sample_name: T.sample_name, phone: rs.phone, zoom: rs.zoom, distance_cm: rs.distance_cm, mode: rs.mode, shows: order.length });
   persistTrial(); ui.manual = 1; ui.geometry = rs.scaleMode === 'physical' || !!calibrationFor(rs); show();
 }
@@ -987,9 +1072,8 @@ function show() {
 }
 function place(m, sc, s) {
   const w = m.width * sc, h = m.height * sc, W = innerWidth, H = innerHeight;
-  let x = (W - w) / 2, y = (H - h) / 2;
-  const b = objectBox(m, s);
-  if (s.center && b) { /* object at screen centre (also in quick mode: 5x sees only the centre) */ x = W / 2 - (b[0] + b[2]) / 2 * sc; y = H / 2 - (b[1] + b[3]) / 2 * sc; }
+  const [anchorX, anchorY] = PilotComparison.placementAnchor(m, objectBox(m, s), s.center);
+  const x = W / 2 - anchorX * sc, y = H / 2 - anchorY * sc;
   img.style.left = x + 'px'; img.style.top = y + 'px'; img.style.width = w + 'px'; img.style.height = h + 'px';
 }
 function sizes(m, s, measuredCam) { // three distinct units; null = not measured / not applicable
@@ -1025,6 +1109,9 @@ function openRecord() {
   if (!T) return; $('answer').classList.add('hidden');
   $('recIdx').textContent = `${T.index + 1}/${T.order.length}`;
   const prev = recOf(T.index); ui.chosen = prev ? prev.detection : null;
+  $('pilotExtraField').classList.toggle('hidden', T.settings.mode !== 'quick' ||
+    T.settings.experiment_kind === 'limit' || T.sample_id !== pilotSample().sample_id);
+  $('pilotExtra').value = prev?.extra_box_observed == null ? '' : prev.extra_box_observed ? 'yes' : 'no';
   ui.android = prev?.android_import ?? null;
   $('androidPreview').textContent = ui.android ? `Привязан импорт: ${ui.android.file_name}, сохранённых кадров ${ui.android.frame_count}; правильность подтверждается вручную.` : '';
   $('recChosen').textContent = ui.chosen ? DET_NAMES[ui.chosen] : '—';
@@ -1078,7 +1165,11 @@ function saveRecord() {
   const source = adv ? $('recWidthSource').value.trim() : ref ? [ref.model, ref.source].filter(Boolean).join(' · ') : '';
   const refUnchanged = ref && widthCm === ref.width_cm && source === [ref.model, ref.source].filter(Boolean).join(' · ');
   if (s.experiment_kind === 'limit' && !refUnchanged) { toast('Эталон серии зафиксирован. Для другого габарита или источника создайте новый прогон с пользовательским профилем.'); return; }
-  const fp = adv ? num($('recFp').value) : null;
+  const hasBoxes = ui.chosen !== 'no_box';
+  const fp = adv && hasBoxes ? num($('recFp').value) : null;
+  if (adv && hasBoxes && !$('recFp').validity.valid) { toast('Введите целое число лишних рамок от нуля или оставьте поле пустым.'); return; }
+  const key = $('pilotExtra').value;
+  const extra = !$('pilotExtraField').classList.contains('hidden') && ui.chosen === 'box_on_object' && key ? key === 'yes' : null;
   const imported = ui.android, actual = currentCondition(s, imported?.metadata);
   if (s.experiment_kind === 'limit' && imported?.selected_frame &&
       ((imported.selected_frame.status === 'no_target' && ui.chosen !== 'no_box') || (imported.selected_frame.status === 'detected' && ui.chosen === 'no_box'))) {
@@ -1089,14 +1180,15 @@ function saveRecord() {
   const truth = sameFrame ? currentTruthWidth(m, s, manualTruth) : null;
   const duplicateImport = imported && R.some(r => r.android_import?.sha256 === imported.sha256 && !(r.run_id === T.run_id && r.step === T.index));
   const rec = normalizeRecord({ run_id: T.run_id, sample_id: T.sample_id, sample_name: T.sample_name, sample_seed: T.sample_seed, step: T.index, image_id: m.id, category: m.category,
-    phone: actual.phone, camera_zoom: s.zoom, distance_cm: s.distance_cm, test_mode: s.mode, detection: ui.chosen, ...classify(m.category, ui.chosen, fp),
+    phone: actual.phone, camera_zoom: s.zoom, distance_cm: s.distance_cm, test_mode: s.mode, detection: ui.chosen, ...classify(m.category, ui.chosen, extra === true ? 1 : fp),
+    ...(extra !== null ? { extra_box_observed: extra } : {}),
     scale_mode: s.scaleMode, size_level: st.level, size_level_unit: st.level == null ? null : s.scaleMode === 'physical' ? 'screen_cm' : s.scaleMode === 'monitor' ? 'monitor_px' : 'camera_px',
     display_scale: +(ui.scale * (window.devicePixelRatio || 1)).toFixed(5), calibration_k: s.k,
     ...sizes(m, s, measuredSide), analysis_frame_w: actual.analysis_frame_w, analysis_frame_h: actual.analysis_frame_h, yolo_input_px: s.yolo_input,
     ...(!sameFrame ? { object_camera_width_px_expected: null, object_camera_height_px_expected: null, object_camera_px_expected: null, object_yolo_px: null, object_yolo_px_source: null } : {}),
     object_camera_width_px_measured: camW, object_camera_height_px_measured: camH,
     camera_measurement_source: measuredSide != null || camW != null || camH != null ? $('recCamSource').value : null,
-    max_confidence_pct: maxConf, target_conf_pct: adv ? num($('recConf').value) : null, fp_count: fp, fp_max_conf_pct: adv ? num($('recFpConf').value) : null,
+    max_confidence_pct: maxConf, target_conf_pct: adv ? num($('recConf').value) : null, fp_count: fp, fp_max_conf_pct: adv && hasBoxes ? num($('recFpConf').value) : null,
     drone_width_cm: widthCm, drone_width_source: source,
     ...geometryData(m, s, adv ? num($('recScreenWidth').value) : null),
     reference_model: ref?.model ?? '', reference_status: refUnchanged ? ref.status : widthCm != null ? 'manual_unverified' : 'unknown',
@@ -1130,7 +1222,7 @@ function showAnswer() {
 }
 
 // ---------- export / summary ----------
-const COLS = ['run_id', 'sample_id', 'sample_name', 'sample_seed', 'step', 'image_id', 'category', 'phone', 'camera_zoom', 'distance_cm', 'test_mode', 'detection', 'result_class', 'false_alarm',
+const COLS = ['run_id', 'sample_id', 'sample_name', 'sample_seed', 'step', 'image_id', 'category', 'phone', 'camera_zoom', 'distance_cm', 'test_mode', 'detection', 'result_class', 'false_alarm', 'extra_box_observed',
   'scale_mode', 'size_level', 'size_level_unit', 'display_scale', 'object_monitor_px', 'object_monitor_mm', 'calibration_k', 'object_camera_px_expected', 'object_camera_px_measured',
   'analysis_frame_w', 'analysis_frame_h', 'yolo_input_px', 'object_yolo_px', 'object_yolo_px_source', 'max_confidence_pct', 'target_conf_pct', 'fp_count', 'fp_max_conf_pct', 'app_conf_threshold_pct',
   'operator', 'recorded_at', 'note', 'drone_width_cm', 'drone_width_source', 'screen_object_width_mm', 'object_angular_width_deg', 'equivalent_distance_m',
@@ -1213,7 +1305,77 @@ function repeatSummary(records) {
       stability_met: rate != null && positive(g.stability_min_attempts) && positive(g.stability_threshold_pct) && g.checks >= g.stability_min_attempts ? rate * 100 >= g.stability_threshold_pct : null };
   });
 }
+function renderPilotComparison() {
+  const pilot = pilotSample();
+  const runs = RUNS.filter(run => run.sample_id === pilot.sample_id || run.sample_name === PILOT.name);
+  const selects = [$('pilotRunA'), $('pilotRunB')];
+  for (const select of selects) {
+    const selected = select.value;
+    select.replaceChildren(new Option('Выберите прогон', ''));
+    for (const run of runs) select.add(new Option(run.run_id, run.run_id));
+    if (runs.some(run => run.run_id === selected)) select.value = selected;
+  }
+  const result = $('pilotComparisonResult');
+  if (runs.length < 2 || selects.some(select => !select.value)) {
+    result.textContent = runs.length < 2 ? 'Нужны два сохранённых прогона пилота.' : 'Выберите два прогона.';
+    return;
+  }
+  const pair = PilotComparison.compare({
+    runs: selects.map(select => {
+      const matches = runs.filter(run => run.run_id === select.value);
+      return matches.length === 1 ? matches[0] : null;
+    }),
+    records: R,
+    images: pilot.ids.map(id => {
+      const { category, width, height, sha256, object_bbox } = byId(id);
+      return { id, category, width, height, sha256, object_bbox, drone: DRONE_CATS.includes(category) };
+    }),
+    manifest: { version: window.MANIFEST.version, sha256: window.MANIFEST_SHA256 ?? null },
+  });
+  if (pair.issues.length) {
+    const photos = new Map(pair.conditionIssues?.map(({ id, message }) => [message, id]));
+    result.innerHTML = '<p>Парное сравнение недоступно.</p><ul>' + pair.issues.map(issue => {
+      const id = photos.get(issue);
+      return `<li>${esc(issue)}${id ? ` <button type="button" data-pilot-image="${esc(id)}">Открыть ${esc(id)}</button>` : ''}</li>`;
+    }).join('') + '</ul>';
+    return;
+  }
+  const labels = { correct: 'Правильные обнаружения дрона', extra: 'Снимки с лишней рамкой', missed: 'Пропущенные дроны' };
+  const ratio = (m, slot) => `${m[slot].count} из ${m[slot].assessed} оценённых (${m.eligible - m[slot].assessed} не оценено)`;
+  const outcome = (row, slot) => {
+    if (!row.recorded[slot]) return 'Нет записи';
+    const answer = v => v === null ? 'не оценено' : v ? 'да' : 'нет';
+    const side = row[slot];
+    const extra = answer(side.extra) + (row.extraConflicts[slot] ? ` (${esc(row.extraConflicts[slot])})` : '');
+    return row.drone ? `Правильная: ${answer(side.correct)} · лишняя: ${extra} · пропуск: ${answer(side.missed)}` :
+      `Лишняя: ${extra}`;
+  };
+  result.innerHTML = `<p>Записи по снимкам: A — ${pair.recorded.A} из ${pair.total}, B — ${pair.recorded.B} из ${pair.total}. Разность B−A рассчитана по общим оценкам каждого показателя.</p>
+    <table><thead><tr><th scope="col">Показатель</th><th scope="col">A</th><th scope="col">B</th><th scope="col">Общие оценки и разность</th></tr></thead><tbody>
+    ${pair.metrics.map(m => `<tr><th scope="row">${labels[m.key]} (в наборе ${m.eligible})</th><td>${ratio(m, 'A')}</td><td>${ratio(m, 'B')}</td>
+    <td>${m.paired ? `A ${m.A.paired_count}/${m.paired}, B ${m.B.paired_count}/${m.paired}, B−A: ${m.delta}` : 'Общих оценок нет'}</td></tr>`).join('')}</tbody></table>
+    <h4>Изменившиеся снимки, пропуски и противоречия</h4>
+    ${pair.rows.length ? `<table><thead><tr><th scope="col">Снимок</th><th scope="col">A</th><th scope="col">B</th></tr></thead><tbody>
+    ${pair.rows.map(row => `<tr><th scope="row"><button type="button" data-pilot-image="${esc(row.id)}">Открыть ${esc(row.id)}</button></th>
+    <td>${outcome(row, 'A')}</td><td>${outcome(row, 'B')}</td></tr>`).join('')}</tbody></table>` : '<p>Изменений и пропусков записи нет.</p>'}`;
+}
+function openPilotPhoto(id) {
+  const m = byId(id), photo = $('pilotPhotoImage'), status = $('pilotPhotoStatus');
+  if (!m) return;
+  $('pilotPhotoTitle').textContent = id + ' · ' + (m.label || CAT_NAMES[m.category] || m.category);
+  photo.alt = m.label || id;
+  status.textContent = '';
+  photo.onerror = () => { status.textContent = 'Файл снимка недоступен в открытой галерее.'; };
+  photo.src = m.file;
+  $('pilotPhoto').showModal();
+}
+for (const id of ['pilotRunA', 'pilotRunB']) $(id).onchange = renderPilotComparison;
+$('pilotComparisonResult').onclick = event => {
+  const id = event.target.closest('button[data-pilot-image]')?.dataset.pilotImage;
+  if (id) openPilotPhoto(id);
+};
 function summary() {
+  renderPilotComparison();
   const rows = RUNS.map(run => { const rr = R.filter(r => r.run_id === run.run_id), c = k => rr.filter(r => r.result_class === k).length;
     return `<tr><td>${esc(run.run_id)}</td><td>${esc(run.sample_name)} (${run.sample_id})</td><td>${esc(run.phone)}</td><td>${run.zoom}</td><td>${run.distance_cm ?? '—'}</td><td>${run.mode === 'quick' ? 'быстрый' : 'расширенный'}</td>` +
       `<td>${rr.length}/${run.shows}</td><td>${c('TP')}</td><td>${c('FN')}</td><td>${c('FP')}</td><td>${c('TN')}</td></tr>`; }).join('');
@@ -1250,6 +1412,7 @@ function calib(mode = 'camera') {
 
 // ---------- keyboard ----------
 document.addEventListener('keydown', e => {
+  if ($('pilotPhoto').open) return;
   const k = e.key.toLowerCase(), inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT';
   if (!$('boundsEditor').classList.contains('hidden')) { if (k === 'escape') openSettings(); return; }
   if (!$('record').classList.contains('hidden')) {
@@ -1345,7 +1508,7 @@ for (const id of ['androidJson', 'androidSetupJson']) {
 $('clearAndroidImport').onclick = () => { invalidateAndroidImport(); ui.android = null; $('androidJson').value = ''; $('androidPreview').textContent = 'Импорт снят; результат будет ручным подтверждением выбранного кадра.'; };
 document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { document.body.classList.toggle('quick', isQuick()); readSettings(); });
 $('zoom').onchange = () => { readSettings(); summary(); };
-$('presetPilot').onclick = () => { if (setSample(makeSample(PILOT.counts, PILOT.seed, PILOT.name))) { readSettings(); summary(); } };
+$('presetPilot').onclick = () => { if (setSample(pilotSample())) { readSettings(); summary(); } };
 $('presetAll').onclick = () => { const c = {}; CATS.forEach(x => c[x] = M.filter(m => m.category === x && !m.custom).length); if (setSample(makeSample(c, parseInt($('seed').value) || 0, 'Все 90 фото'))) summary(); };
 $('makeSample').onclick = () => { if (setSample(makeSample(readCounts(), parseInt($('seed').value) || 0))) summary(); };
 document.querySelectorAll('.det').forEach(b => b.onclick = () => choose(b.dataset.det));

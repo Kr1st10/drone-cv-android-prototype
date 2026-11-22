@@ -67,6 +67,7 @@ try {
         await page.evaluate(()=>advanceCleanup(0));await page.click('#motionStop');
         await page.waitForFunction(()=>!document.fullscreenElement&&!document.getElementById('motionStart').disabled,null,{polling:50});
         assert.equal(await page.isEnabled('#motionRepeat'),true);
+        await page.locator('#motionSyncCheck > summary').click();
         await page.click('#syncCheckStart');await page.waitForFunction(()=>document.getElementById('settings').classList.contains('hidden'),null,{polling:50});
         await page.evaluate(()=>advanceCleanup(0));await page.keyboard.press('Escape');
         await page.waitForFunction(()=>!document.fullscreenElement&&!document.getElementById('motionStart').disabled,null,{polling:50});

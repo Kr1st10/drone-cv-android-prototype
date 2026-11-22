@@ -13,7 +13,7 @@ const source=name=>sourceRef?execFileSync('git',['show',`${sourceRef}:lab/monito
 
 async function harness(stall, fault){
   let now=0,next=1,id=0,visible=null,stored=null,download=null;
-  const calls=[],intervals=[],elements=new Map(),raf=new Map(),runs=[];
+  const calls=[],intervals=[],elements=new Map(),raf=new Map(),runs=[],timers=[];
   const document={hidden:false,fullscreenElement:null,addEventListener(){},querySelectorAll:()=>[],
     getElementById:key=>element(key),createElement:()=>element('option'+next++),
     async exitFullscreen(){calls.push(['exit',now]);document.fullscreenElement=null;}};
@@ -42,7 +42,7 @@ async function harness(stall, fault){
   },images:()=>[photo],bounds:()=>[1306,604,1593,895],imageLoaded:async()=>({src:photo.file,naturalWidth:2400,naturalHeight:1600}),
     settings(){calls.push(['settings',now]);if(fault==='cleanup')throw Error('cleanup fault');element('settings').classList.remove('hidden');},
     download(_,text){download=JSON.parse(text);}};
-  const sandbox={document,console,structuredClone,performance:{now:()=>now},screen:{width:1280,height:800},
+  const sandbox={document,console,structuredClone,setTimeout:(fn,ms)=>timers.push({fn,due:now+ms}),performance:{now:()=>now},screen:{width:1280,height:800},
     crypto:{getRandomValues:a=>{a[0]=++id;return a;}},devicePixelRatio:1,
     requestAnimationFrame:fn=>{const k=next++;raf.set(k,fn);return k;},cancelAnimationFrame:k=>raf.delete(k),addEventListener(){},
     MotionGallery:gallery,MotionCalibration:{draw(){}},
@@ -59,11 +59,12 @@ async function harness(stall, fault){
   sandbox.SyncCheck.analyze=(...args)=>{calls.push(['analysis',now]);if(stall==='analysis')now+=500;if(fault==='analysis')throw Error('analysis fault');return analyze(...args);};
   const reset=()=>{calls.length=0;intervals.length=0;stored=download=null;};
   async function settle(){for(let i=0;i<20;i++)await Promise.resolve();}
-  async function tick(ms){now+=ms;const work=[...raf.values()];raf.clear();work.forEach(fn=>fn(now));await settle();}
+  async function tick(ms){now+=ms;const work=[...raf.values()];raf.clear();work.forEach(fn=>fn(now));for(const t of timers.filter(t=>t.due<=now)){timers.splice(timers.indexOf(t),1);t.fn();}await settle();}
   async function start(){await element('syncCheckStart').onclick();reset();}
   async function stop(){await element('motionStop').onclick();await settle();}
   function exported(){element('syncCheckExport').onclick();return download;}
-  return {sandbox,calls,intervals,runs,start,tick,stop,exported,analyze,element,get stored(){return stored;},get now(){return now;},
+  return {sandbox,calls,intervals,runs,start,tick,stop,exported,analyze,element,document,
+    startMovement:()=>element('motionStart').onclick(),get stored(){return stored;},get now(){return now;},
     async nextLaunches(){
       assert.equal(element('syncCheckStart').disabled,false);assert.equal(element('motionStart').disabled,false);
       assert.equal(element('settings').classList.contains('hidden'),false);
@@ -109,5 +110,26 @@ await check('cancel before first RAF',async()=>{
   const h=await harness('storage');await h.start();await h.stop();const run=h.exported();
   assert.deepEqual(run.steps,[]);assert.equal(run.end_ms,null);assert.equal(run.complete,false);await h.nextLaunches();
 });
+
+
+await check('natural movement retains a full-size blank canvas for 500 ms before fullscreen exit',async()=>{
+  const h=await harness(null);await h.startMovement();await h.tick(0);
+  const run=h.runs[0],canvas=h.element('motionCanvas');
+  const width=canvas.width,height=canvas.height;
+  await h.tick(run.duration_ms);await h.tick(16);
+  const end=run.end_ms;
+  assert.ok(end>=run.duration_ms);
+  assert.equal(h.intervals.at(-1).end,end);
+  assert.equal(canvas.width,width);assert.equal(canvas.height,height);
+  assert.equal(h.document.fullscreenElement,h.element('motionStage'));
+  await h.tick(0);await h.tick(499);
+  assert.equal(h.document.fullscreenElement,h.element('motionStage'));
+  assert.equal(run.end_ms,end);
+  await h.tick(1);
+  assert.equal(h.document.fullscreenElement,null);
+  assert.equal(run.end_ms,end);
+  assert.equal(canvas.width,0);
+});
+
 assert.deepEqual(failures,[]);
-console.log('sync display end: 8 deterministic UI/RAF cases passed (not a browser test)');
+console.log('sync and movement display end: 9 deterministic UI/RAF cases passed (not a phone test)');
