@@ -29,10 +29,12 @@ python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
 ### Запрос DJI RS SDK
 
 ```bash
-./gradlew --no-daemon :app:testDebugUnitTest --tests 'ru.university.dronecv.gimbal.DjiRsAttitudeCodecTest'
+./gradlew --no-daemon :app:testDebugUnitTest --tests 'ru.university.dronecv.gimbal.DjiRsAttitude*Test'
 ```
 
-[JVM-тест](../../app/src/test/java/ru/university/dronecv/gimbal/DjiRsAttitudeCodecTest.kt) сравнивает байты запроса с контрольным пакетом и проверяет разбор знаковых углов, отказ при повреждении кадра и несовпадении номера запроса. Контрольные ответы синтетические. Их контрольные суммы рассчитаны по таблицам из архива DJI R SDK v2.5, которые сверены с примером из спецификации. Для запуска Gradle действуют общие требования к SDK и модели. Обмен с RS 5 предстоит проверить с выбранным адаптером. [Контракт кадра](../reference/api.md#чтение-ориентации-подвеса).
+[Тесты кодека](../../app/src/test/java/ru/university/dronecv/gimbal/DjiRsAttitudeCodecTest.kt) сравнивают байты запроса с контрольным пакетом и проверяют разбор ответа. Контрольные ответы синтетические. Их контрольные суммы рассчитаны по таблицам из архива DJI R SDK v2.5, которые сверены с примером из спецификации.
+
+[Тесты обмена](../../app/src/test/java/ru/university/dronecv/gimbal/DjiRsAttitudeReaderTest.kt) подают эти байты через подставной транспорт с управляемыми часами. Они проверяют готовность приёма до записи, отдельные события отправки и получения, фильтрацию чужого номера без продления тайм-аута, ошибки пакета и транспорта, отсутствие углов, код ошибки подвеса и переход номера через `65535`. Для Gradle действуют общие требования к SDK и модели. [Приёмка на оборудовании](../reference/integrations.md#стенд-dji-rs-5).
 
 ## Выполнение device tests
 
