@@ -235,6 +235,71 @@ try{
       assert.deepEqual(errors,[]);
     }finally{await context.close();}
   });
+  for(const changed of [false,true])await check(changed?'new analysis is refused at 64':'identical journal analysis restores a complete pair at 64',async()=>{
+    assert.ok(seed);
+    const {context,page:p,errors}=await open();
+    try{
+      await p.evaluate(async seed=>{
+        const workspace=await MotionStore.ab(), series=workspace.series[0];
+        const fields={git_sha:'test',git_dirty:false,app_version:'1',version_code:1,build_type:'debug',
+          model_sha256:'test',device:'test',confidence:.25,nms_iou:.45,backend:'cpu',model_input_size:640,
+          camera_context:{logical_id:'0',confirmed_zoom:1,latest_capture_zoom:1}};
+        for(const [slot,run_id] of [['A','abcde001'],['B','abcde002']]){
+          const conditions={...seed.conditions,setup_id:'desk',zoom:'1',orientation:'landscape',camera_config:'rear',distance_cm:30};
+          const run={...seed,run_id,series_id:series.id,variant:slot,conditions,
+            settings_snapshot:{ ...seed.settings_snapshot, values:{...seed.settings_snapshot.values,conditions},
+              plan:{config:seed.scenario} }};
+          await MotionStore.save(run);
+          MotionAB.begin(series,{run_id,pair_index:1,slot}).complete=true;
+          MotionAB.select(series,1,slot,run_id);
+          const data={complete:true,frames:[{marker:{run_id}}]};
+          const {source}=await MotionAB.registerSource(series,{name:run_id+'.json',raw:JSON.stringify(data),data});
+          MotionAB.bind(series,run_id,source.hash);
+          const parameters={calibration_points:[[0,0],[1,0],[1,1],[0,1]],calibration_method:'manual'};
+          for(let version=0;version<32;version++)MotionAB.recordAnalysis(series,run_id,{source_hash:source.hash,parameters,
+            result:{mode:series.variants[slot].value,criterion_version:'motion-scenario-v5',timing_status:'compatible',
+              provenance:{geometry:{width:100,height:100},android:{fields}},good_ms:version}});
+        }
+        const blank={status:'unanswered'};
+        series.manual_observations=[{version:'manual-observation-v1',series_id:series.id,run_id:'abcde001',
+          capture:blank,drops:blank,before_hide:blank,after_return:blank,
+          laps:Array(seed.scenario.laps).fill(blank),operator:{},notes:'Сохранённая оценка'}];
+        await MotionStore.ab(workspace);
+      },seed);
+      await p.reload();await p.click('[data-section=motion]');
+      await p.waitForFunction(()=>!document.querySelector('#abExport').disabled&&MotionUI.runs().length===2);
+      const before=await downloaded(p);
+      assert.equal(before.summary.pairs[0].state,'complete',JSON.stringify(before.summary.pairs[0].reasons));
+      const error=await p.evaluate(async changed=>{
+        const series=(await MotionStore.ab()).series[0], run=MotionUI.runs().find(r=>r.run_id==='abcde001');
+        const saved=series.analyses.findLast(a=>a.run_id===run.run_id);
+        const {name,raw,data}=series.journals.find(j=>j.hash===saved.source_hash);
+        const journal={name,raw,data,points:saved.parameters.calibration_points,manual:true};
+        await MotionABUI.ingest([journal],()=>true);
+        if(!(await MotionStore.ab()).series[0].analysis_errors[run.run_id])throw Error('Expected pending analysis');
+        if(changed)journal.points=[[.1,.1],[.9,.1],[.9,.9],[.1,.9]];
+        try{await MotionABUI.capture(journal,run,saved.result,()=>true);}
+        catch(error){return error.message;}
+        return null;
+      },changed);
+      const after=await downloaded(p);
+      assert.equal(after.series.analyses.length,64);
+      for(const key of ['analyses','journals','manual_observations','bindings','selections']){
+        assert.deepEqual(after.series[key],before.series[key]);
+      }
+      assert.deepEqual(after.runs,before.runs);
+      if(changed){
+        assert.match(error,/64 сохранённых анализов/);
+        assert.equal(after.summary.pairs[0].state,'unconfirmed');
+        assert.match(after.summary.pairs[0].reasons.join(' '),/64 сохранённых анализов/);
+      }else{
+        assert.equal(error,null);
+        assert.equal(after.series.analysis_errors?.abcde001,undefined);
+        assert.equal(after.summary.pairs[0].state,'complete');
+      }
+      assert.deepEqual(errors,[]);
+    }finally{await context.close();}
+  });
 }finally{await browser.close();}
 if(process.env.AB_LIFECYCLE_EVIDENCE)fs.writeFileSync(process.env.AB_LIFECYCLE_EVIDENCE,JSON.stringify({observations,failures},null,2));
 assert.deepEqual(failures,[],failures.join('\n'));

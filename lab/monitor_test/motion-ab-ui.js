@@ -276,15 +276,20 @@
     const parameters={calibration_points:clone(j.points),calibration_method:j.manual?'manual':'automatic'};
     const valid=()=>ticket===revision&&isCurrent()&&s===current()&&captureTicket===j.abTicket;
     if(!s||!s.attempts.some(a=>a.run_id===run.run_id))return;
-    const signature=JSON.stringify({result,points:j.points});if(j.abSignature===signature&&!s.analysis_errors?.[run.run_id])return;
+    const signature=JSON.stringify({result,parameters});if(j.abSignature===signature&&!s.analysis_errors?.[run.run_id])return;
     const hash=await MotionAB.sha256(j.raw);if(!valid())return;
     if(!s.journals.some(x=>x.hash===hash))await retainSource(s,j,valid);
     if(!valid())return;
     MotionAB.bind(s,run.run_id,hash);
-    if(workspace.series.reduce((n,s)=>n+s.analyses.length,0)>=64)throw Error('Достигнут предел 64 сохранённых анализов. Выгрузите серии для продолжения в отдельном профиле браузера.');
-    MotionAB.recordAnalysis(s,run.run_id,{result,parameters,source_hash:hash});
+    const saved=MotionAB.recordAnalysis(s,run.run_id,{result,parameters,source_hash:hash},
+      ()=>workspace.series.reduce((total,series)=>total+series.analyses.length,0)<64);
+    if(!saved){
+      const reason='Достигнут предел 64 сохранённых анализов. Выгрузите серии для продолжения в отдельном профиле браузера.';
+      s.analysis_errors??={};s.analysis_errors[run.run_id]=reason;
+      await persist();render();throw Error(reason);
+    }
     if(s.analysis_errors)delete s.analysis_errors[run.run_id];
-    j.abSignature=signature;await persist();render();
+    await persist();j.abSignature=signature;render();
   }
   function action(fn,lock=false){return async()=>{if(lock&&(busy||MotionUI.busy()))return;try{if(lock){busy=true;render();}await fn();}catch(e){notice('Ошибка A/B: '+e.message+'. Доступные данные можно экспортировать.');}finally{if(lock)busy=false;render();}};}
   $('motionTestMode').onchange=()=>{workspace.mode=$('motionTestMode').value;render();if(ready)persist().catch(()=>{});};

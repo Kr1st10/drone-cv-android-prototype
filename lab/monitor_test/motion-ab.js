@@ -216,7 +216,7 @@
     const ids=sourceRunIds(sources[0].data);if(ids.length!==1||ids[0]!==run_id)throw Error('Неоднозначный run_id журнала.');
     series.bindings??={};series.bindings[run_id]=hash;
   }
-  function recordAnalysis(series,run_id,analysis){
+  function recordAnalysis(series,run_id,analysis,canAppend=()=>true){
     if(series.bindings?.[run_id]!==analysis.source_hash)throw Error('Сначала привяжите исходный журнал к запуску.');
     if(!analysis.result||!analysis.parameters)throw Error('Результат анализа и параметры обязательны.');
     // Sources are retained once; each reanalysis stores parameters and a new
@@ -224,6 +224,7 @@
     const {journal,...entry}=analysis;
     const previous=selectedAnalysis(series,run_id),signature=a=>canonical({result:a.result,parameters:a.parameters,source_hash:a.source_hash,version:a.version});
     if(previous&&signature(previous)===signature({...entry,version:VERSION}))return previous;
+    if(!canAppend())return null;
     const saved={...clone(entry),run_id,version:VERSION,created_at:new Date().toISOString()};
     series.analyses.push(saved);return saved;
   }
