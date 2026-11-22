@@ -102,6 +102,19 @@ fun inspectUniformInput(modelFile: File): Int =
 
 `AndroidLiveBackend(Context, initialThreads=2)` получает CameraFrameSnapshot, не читает ImageProxy и использует ThreadSessionManager. DetectorWorker.executor/dispatcher доступны всему процессу, VisionWorker.executor обслуживает вход; экран не закрывает эти исполнители. Закрытый внешний Executor не является поддерживаемым способом отмены native-работы.
 
+## Чтение ориентации подвеса
+
+[DjiRsAttitudeCodec](../../app/src/main/java/ru/university/dronecv/gimbal/DjiRsAttitudeCodec.kt) работает с разовым запросом углов ориентации (`0x0E/0x02`, тип `0x01`) по спецификации DJI R SDK v2.5. Версия двоичного заголовка в этом формате равна 0. [Документация DJI RS SDK](https://www.dji.com/rs-sdk).
+
+| Операция | Вход и результат |
+|---|---|
+| `encodeRequest(sequence)` | Номер `0..65535` от вызывающего кода. Возвращает 19 байт кадра RS SDK с запросом ответа, CRC-16 заголовка и CRC-32 кадра. |
+| `decodeReply(frame, expectedSequence)` | Один собранный ответ RS SDK длиной 26 байт и номер запроса из того же диапазона. Проверяет длину, заголовок, обе CRC, номер и команду. |
+
+Результат `Angles` содержит `yawDegrees`, `rollDegrees` и `pitchDegrees`. Код читает знаковые значения в порядке yaw, roll, pitch и переводит десятые доли градуса в градусы. `NotReady` означает отсутствие данных об углах. `DeviceError` содержит ненулевой код подвеса. `Invalid` указывает причину отклонения кадра, в том числе неожиданный тип углов. Номер вне диапазона вызывает `IllegalArgumentException`.
+
+Сборка полного кадра из фрагментов транспорта, выделение номеров запросов, тайм-аут и проверка активной сессии относятся к будущему вызывающему коду. Кодек принимает массив байтов и выполняет проверку синхронно. [Проверки](../development/testing.md#запрос-dji-rs-sdk).
+
 ## Диагностика и UI
 
 | Интерфейс и источник | Параметры/результат | Условия и эффекты |
