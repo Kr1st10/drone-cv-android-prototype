@@ -26,6 +26,16 @@ python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
 
 Отчёты: `app/build/test-results/testDebugUnitTest/TEST-*.xml`, `app/build/reports/tests/testDebugUnitTest/index.html`, `app/build/reports/lint-results-debug.xml` и `.html`. APK и AndroidTest APK — в `app/build/outputs/apk/`.
 
+### Запрос DJI RS SDK
+
+```bash
+./gradlew --no-daemon :app:testDebugUnitTest --tests 'ru.university.dronecv.gimbal.DjiRsAttitude*Test'
+```
+
+[Тесты кодека](../../app/src/test/java/ru/university/dronecv/gimbal/DjiRsAttitudeCodecTest.kt) сравнивают байты запроса с контрольным пакетом и проверяют разбор ответа. Контрольные ответы синтетические. Их контрольные суммы рассчитаны по таблицам из архива DJI R SDK v2.5, которые сверены с примером из спецификации.
+
+[Тесты обмена](../../app/src/test/java/ru/university/dronecv/gimbal/DjiRsAttitudeReaderTest.kt) подают эти байты через подставной транспорт с управляемыми часами. Они проверяют готовность приёма до записи, отдельные события отправки и получения, фильтрацию чужого номера без продления тайм-аута, ошибки пакета и транспорта, отсутствие углов, код ошибки подвеса и переход номера через `65535`. Для Gradle действуют общие требования к SDK и модели. [Приёмка на оборудовании](../reference/integrations.md#стенд-dji-rs-5).
+
 ## Выполнение device tests
 
 `BuildIdentityTest` проверяет адаптер существующих BuildConfig-полей, полный commit/dirty/null и изоляцию metadata между записями. `LiveControllerTest` проверяет конфигурацию разных сессий и измеренную геометрию, очищаемую при invalidation. `CameraInventoryInstrumentedTest` различает запросы и неизвестные результаты, `DiagnosticJsonInstrumentedTest` читает сохранённую metadata из JSON. `LiveCameraInstrumentedTest.cameraRunsRealModelAndStopClearsLateResults` проверяет видимость идентификатора и неизменность границ превью после результата и прокрутки. Компиляция этих тестов не означает их выполнение.
