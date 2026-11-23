@@ -32,6 +32,7 @@ val (buildGitStatus, buildGitStatusKnown) = buildGitStatusInfo
 
 
 val qnnPilot = providers.gradleProperty("snapdragonQnn").orNull == "true"
+val qnnCameraVariants = listOf("qnnCamera", "qnnCameraLk")
 
 android {
     namespace = "ru.university.dronecv"
@@ -46,6 +47,7 @@ android {
 
         buildConfigField("boolean", "QNN_PILOT", "false")
         buildConfigField("boolean", "QNN_CAMERA", "false")
+        buildConfigField("boolean", "QNN_CAMERA_LK", "false")
         buildConfigField("String", "QNN_PLUGIN_VERSION", "\"${libs.versions.qnnPlugin.get()}\"")
         buildConfigField("String", "QNN_RUNTIME_VERSION", "\"${libs.versions.qnnRuntime.get()}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -75,13 +77,17 @@ android {
             versionNameSuffix = "-qnn-r5"
             buildConfigField("boolean", "QNN_PILOT", "true")
         }
-        if (qnnPilot) create("qnnCamera") {
-            initWith(getByName("debug"))
-            matchingFallbacks += "debug"
-            applicationIdSuffix = ".qnn.camera"
-            versionNameSuffix = "-qnn-camera"
-            buildConfigField("boolean", "QNN_PILOT", "true")
-            buildConfigField("boolean", "QNN_CAMERA", "true")
+        if (qnnPilot) qnnCameraVariants.forEach { variant ->
+            create(variant) {
+                initWith(getByName("debug"))
+                matchingFallbacks += "debug"
+                val trackingPilot = variant == "qnnCameraLk"
+                applicationIdSuffix = if (trackingPilot) ".qnn.camera.lk" else ".qnn.camera"
+                versionNameSuffix = if (trackingPilot) "-qnn-camera-lk" else "-qnn-camera"
+                buildConfigField("boolean", "QNN_PILOT", "true")
+                buildConfigField("boolean", "QNN_CAMERA", "true")
+                buildConfigField("boolean", "QNN_CAMERA_LK", trackingPilot.toString())
+            }
         }
         release {
             isMinifyEnabled = false
@@ -92,7 +98,9 @@ android {
         }
     }
 
-    if (qnnPilot) sourceSets.getByName("qnnCamera").manifest.srcFile("src/qnn/AndroidManifest.xml")
+    if (qnnPilot) qnnCameraVariants.forEach { variant ->
+        sourceSets.getByName(variant).manifest.srcFile("src/qnn/AndroidManifest.xml")
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -179,10 +187,10 @@ dependencies {
 
     implementation(libs.onnxruntime.android)
     if (qnnPilot) {
-        add("qnnImplementation", libs.onnxruntime.qnn.get())
-        add("qnnImplementation", libs.qualcomm.qnn.runtime.get())
-        add("qnnCameraImplementation", libs.onnxruntime.qnn.get())
-        add("qnnCameraImplementation", libs.qualcomm.qnn.runtime.get())
+        (listOf("qnn") + qnnCameraVariants).forEach { variant ->
+            add("${variant}Implementation", libs.onnxruntime.qnn.get())
+            add("${variant}Implementation", libs.qualcomm.qnn.runtime.get())
+        }
     }
     implementation(libs.opencv)
     implementation(libs.kotlinx.coroutines.android)

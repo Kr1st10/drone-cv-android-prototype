@@ -11,7 +11,7 @@ import ru.university.dronecv.camera.LiveInference
 import ru.university.dronecv.camera.toLiveInference
 
 /** Selection is set by the camera controls while stopped. Native state stays on the ML worker. */
-internal class QnnCameraBackend(context: Context, initialThreads: Int, yoloOnly: Boolean) :
+internal class QnnCameraBackend(context: Context, initialThreads: Int, selectable: Boolean) :
     LiveBackend<CameraFrameSnapshot> {
 
     private val app = context.applicationContext
@@ -20,7 +20,7 @@ internal class QnnCameraBackend(context: Context, initialThreads: Int, yoloOnly:
     private var threads = initialThreads
     private var warmed = false
 
-    private val selected = MutableStateFlow(if (yoloOnly) BenchmarkProvider.CPU else null)
+    private val selected = MutableStateFlow(if (selectable) BenchmarkProvider.CPU else null)
     val selection = selected.asStateFlow()
 
     fun select(provider: BenchmarkProvider?) {

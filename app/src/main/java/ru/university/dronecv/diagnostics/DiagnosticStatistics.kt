@@ -104,6 +104,7 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
         }
     }
     private var sessionMetadata: String? = null
+    private var yoloExecution = YoloExecution.CPU
 
     fun start(nowNanos: Long): Long = synchronized(lock) {
         check(!recording)
@@ -125,12 +126,17 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
         operationCounts.clear()
         failureCounts.clear()
         sessionMetadata = null
+        yoloExecution = YoloExecution.CPU
         recording = true
         generation
     }
-    fun event(token: Long?, type: String, payloadJson: String, time: Long) = synchronized(lock) {
+    fun event(token: Long?, type: String, payloadJson: String, time: Long,
+              execution: YoloExecution = YoloExecution.CPU) = synchronized(lock) {
         if (recording && token != null && token == generation) {
-            if (type == "metadata") sessionMetadata = payloadJson
+            if (type == "metadata") {
+                sessionMetadata = payloadJson
+                yoloExecution = execution
+            }
             timeline?.invoke(type, { payloadJson }, time)
         }
     }
@@ -190,7 +196,7 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
             if (observedFrames + corrections > 0 || operationCounts.isNotEmpty())
                 TrackingSnapshot(observedFrames, trackUpdates, corrections, lossEvents, unstoredSamples, trackingSamples.toList(),
                     TrackingOperations(operationCounts.toMap(), failureCounts.mapValues { it.value.toMap() }))
-            else null, sessionMetadata)
+            else null, sessionMetadata, yoloExecution)
     }
 }
 
@@ -206,7 +212,16 @@ data class DiagnosticFrameSnapshot(
     val cameraInput: CameraInputStats = CameraInputStats(),
     val tracking: TrackingSnapshot? = null,
     val sessionMetadata: String? = null,
+    val yoloExecution: YoloExecution = YoloExecution.CPU,
 ) {
     /** Session-wall-time throughput; pauses/stalls are included. Not camera FPS. */
     val processedFps: Double? get() = if (durationNanos > 0) completedFrames * 1_000_000_000.0 / durationNanos else null
+}
+
+enum class YoloExecution(val provider: String?, private val runtime: String?) {
+    CPU("CPU", "ONNX Runtime CPU"),
+    HTP("QNNExecutionProvider", "ONNX Runtime QNN HTP"),
+    UNCONFIRMED(null, null);
+
+    fun backend(threads: Int): String? = runtime?.let { "$it, intra-op $threads, inter-op 1" }
 }

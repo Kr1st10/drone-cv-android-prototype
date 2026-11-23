@@ -13,6 +13,7 @@ import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.detection.visibleDetections
 import ru.university.dronecv.detection.highestConfidenceVisibleDetection
 import ru.university.dronecv.diagnostics.DiagnosticFrames
+import ru.university.dronecv.diagnostics.YoloExecution
 import ru.university.dronecv.motion.MotionJournal
 import ru.university.dronecv.detection.NormalizedBox
 
@@ -80,6 +81,7 @@ class LiveController<Frame : AutoCloseable>(
     private val onFailure: ((String) -> Unit)? = null,
     private val packagedMetadataFields: String? = null,
     private val experimentalYolo: Boolean = false,
+    private val experimentalTrackingYolo: Boolean = false,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     init {
@@ -207,20 +209,24 @@ class LiveController<Frame : AutoCloseable>(
     private fun clearTimeline(now: Long, reason: String, token: Long? = motion?.token()) {
         updateTimeline(now, reason, token, null, null, null, null, null)
     }
-    private fun executionMetadata(): String {
+    private fun yoloExecution(): YoloExecution {
         val state = mutableState.value
-        val nodes = state.htpProfileNodeEvents
-        val threads = mutableThreads.value.threads
-        if (nodes != null) {
-            return "\"backend\":\"ONNX Runtime QNN HTP, intra-op $threads, inter-op 1\"," +
-                "\"execution_provider\":\"QNNExecutionProvider\",\"htp_confirmed\":true," +
-                "\"cpu_ep_fallback_disabled\":true,\"profile_node_events\":{\"QNNExecutionProvider\":$nodes}"
-        }
-        return if (experimentalYolo && !trackingEnabled && state.completedFrames == 0L) {
-            "\"backend\":null,\"execution_provider\":null"
+        if (state.htpProfileNodeEvents != null) return YoloExecution.HTP
+        return if (state.completedFrames == 0L &&
+            (if (trackingEnabled) experimentalTrackingYolo else experimentalYolo)) {
+            YoloExecution.UNCONFIRMED
         } else {
-            "\"backend\":\"ONNX Runtime CPU, intra-op $threads, inter-op 1\",\"execution_provider\":\"CPU\""
+            YoloExecution.CPU
         }
+    }
+
+    private fun executionMetadata(): String {
+        val execution = yoloExecution()
+        val threads = mutableThreads.value.threads
+        val fields = "\"backend\":${jsonString(execution.backend(threads))},\"execution_provider\":${jsonString(execution.provider)}"
+        val nodes = mutableState.value.htpProfileNodeEvents ?: return fields
+        return "$fields,\"htp_confirmed\":true,\"cpu_ep_fallback_disabled\":true," +
+            "\"profile_node_events\":{\"QNNExecutionProvider\":$nodes}"
     }
 
     private fun metadata(extra: String): String = "{${packagedMetadataFields?.let { "$it," } ?: ""}\"mode\":\"${if (trackingEnabled) "yolo_lk" else "yolo"}\",\"confidence\":$confidence,\"nms_iou\":${ru.university.dronecv.detection.yolo.PostprocessConfig().iouThreshold},\"nms_max_detections\":${ru.university.dronecv.detection.yolo.PostprocessConfig().maxDetections},\"model_input_size\":${mutableState.value.result?.modelInputSize},\"model_input_size_source\":\"latest retained inference result; null means unavailable (not measured or result cleared)\",${executionMetadata()},\"inter_op_threads\":1,\"execution_mode\":\"SEQUENTIAL\",\"intra_op_threads\":${mutableThreads.value.threads},\"yolo_period_ns\":${quoted(tracking?.session?.yoloPeriodNs)},\"confirmation_ttl_ns\":${quoted(tracking?.session?.confirmationTtlNs)},\"retry_ns\":${quoted(tracking?.session?.retryNs)},\"coordinate_timeout_ns\":${quoted(MAX_TRACKING_SILENCE_NS)},\"lk\":{\"max_points\":${ru.university.dronecv.tracking.LkParameters.MAX_POINTS},\"min_points\":${ru.university.dronecv.tracking.LkParameters.MIN_POINTS},\"corner_quality\":${ru.university.dronecv.tracking.LkParameters.CORNER_QUALITY},\"corner_distance\":${ru.university.dronecv.tracking.LkParameters.CORNER_DISTANCE},\"window\":${ru.university.dronecv.tracking.LkParameters.WINDOW},\"pyramid_levels\":${ru.university.dronecv.tracking.LkParameters.PYRAMID_LEVELS},\"iterations\":${ru.university.dronecv.tracking.LkParameters.ITERATIONS},\"epsilon\":${ru.university.dronecv.tracking.LkParameters.EPSILON},\"forward_back_error\":${ru.university.dronecv.tracking.LkParameters.FORWARD_BACK_ERROR},\"inlier_distance\":${ru.university.dronecv.tracking.LkParameters.INLIER_DISTANCE},\"retained_fraction\":${ru.university.dronecv.tracking.LkParameters.RETAINED_FRACTION},\"min_correlation\":${ru.university.dronecv.tracking.LkParameters.MIN_CORRELATION}},\"camera_context\":$extra}"
@@ -237,7 +243,7 @@ class LiveController<Frame : AutoCloseable>(
         if (closed || !active) return@publicationTransaction
         start()
         eventTime?.invoke()?.let {
-            diagnostics?.event(diagnostics?.currentToken(), "metadata", metadata(extra), it)
+            diagnostics?.event(diagnostics?.currentToken(), "metadata", metadata(extra), it, yoloExecution())
             timeline(it, "initial_snapshot", null)
         }
     }
@@ -247,7 +253,7 @@ class LiveController<Frame : AutoCloseable>(
             return@publicationTransaction
         }
         if (closed || !active) return@publicationTransaction
-        motion?.start()
+        motion?.start(recordLkFrequency = experimentalTrackingYolo && trackingEnabled)
         eventTime?.invoke()?.let {
             motion?.event(motion?.token(), "metadata", metadata(extra))
             timeline(it, "initial_snapshot", diagnosticToken = null)
@@ -539,7 +545,8 @@ class LiveController<Frame : AutoCloseable>(
             val signal = preparedSignal.copy(dispatchNs = publicationNs, resultReadyNs = readyNs)
             mutableState.value = mutableState.value.copy(tracking = signal, trackingFps = fps, revision = ++revision)
             if (!valid(token)) return@publicationTransaction
-            motion?.publication(token.motionToken, token.motionFrame, b, if (b == null) "clear" else "lk", publicationNs)
+            motion?.publication(token.motionToken, token.motionFrame, b, if (b == null) "clear" else "lk", publicationNs,
+                trackUpdate = kind == TrackingSampleKind.FRAME)
             val obs = signal.observation
             updateTimeline(publicationNs, obs.reason ?: if (kind == TrackingSampleKind.CORRECTION) "correction" else if (b == null) "searching" else "update",
                 motion?.token(), obs.key.sequence, token.motionFrame.takeIf { token.motionToken == motion?.token() }, obs.stamp,
@@ -716,7 +723,7 @@ class LiveController<Frame : AutoCloseable>(
                     onDiscard?.invoke(TrackingFailure.STALE_QUEUE)
                     return null
                 }
-                if (!forTracking && backend.warmUp(frame, request.second)) return null
+                if ((!forTracking || experimentalTrackingYolo) && backend.warmUp(frame, request.second)) return null
                 if (token != null) diagnostics?.received(token)
                 val rawResult = backend.infer(frame, request.second)
                 val result = rawResult.copy(detections = rawResult.detections.visibleDetections())
@@ -751,6 +758,10 @@ class LiveController<Frame : AutoCloseable>(
                             diagnostics?.completed(token, end, result.conversionMs, result.preprocessMs,
                                 result.inferenceMs, result.postprocessMs, processingMs, signal,
                                 detectionCount = result.detections.size)
+                        }
+                        if (experimentalTrackingYolo && forTracking && readyNs != null && ticket != null) {
+                            motion?.yoloTiming(ticket.motionToken, readyNs, ticket.motionFrame, result.conversionMs,
+                                result.preprocessMs, result.inferenceMs, result.postprocessMs, processingMs, result.detections.size)
                         }
                         // An unconfined signal subscriber may synchronously stop/reconfigure this controller.
                         if (!closed && active && generation == request.first) {
