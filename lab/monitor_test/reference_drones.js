@@ -515,7 +515,7 @@
     let variant = saved?.variant === 'clean' ? 'clean' : 'original';
     let latestTrial = null, panelTimer;
     let trialStartScale = scale, trialScaleSteps = 0;
-    let trialTargetRange = null, trialPhotoRequest = null;
+    let trialTarget = null, trialPhotoRequest = null;
     const trialScaleStep = 0.1;
     const savedPosition = saved?.paired_position_css_px;
     let pairedPosition = Array.isArray(savedPosition) && savedPosition.length === 2 && savedPosition.every(Number.isFinite)
@@ -643,8 +643,10 @@
       image = next;
     }
     function choosePhoto() {
-      photo = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
-      const p = photo, generation = ++loadGeneration;
+      const p = selected.photos.find(p => p.id === photoSelect.value) || selected.photos[0];
+      if (p !== photo) resetTrialScale();
+      photo = p;
+      const generation = ++loadGeneration;
       if (!p.variants?.[variant]) variant = 'original';
       const file = p.variants?.[variant].file ?? p.file;
       loaded = false; loadState = file ? 'loading' : 'missing'; targetError = '';
@@ -822,10 +824,20 @@
         camera_label: camera + '×', background: displayedBackground, range_mode: activeMode, geometry_status: m.geometry_status ?? null, assumed_extent_mm: m.assumed_extent_mm ?? null, assumption: m.assumption ?? null,
         display_width_cm: m.display_width_cm, display_axis_cm: m.display_axis_cm, equivalent_distance_m: m.equivalent_distance_m, calibration_id: cal?.id ?? null };
     }
-    function setScale(value) {
+    function resetTrialScale(target = null) {
+      trialTarget = target;
+      trialStartScale = scale;
+      trialScaleSteps = 0;
+    }
+    function setScale(value, manual = false) {
       const n = Number(value);
       if (!positive(n) || n < 0.01 || n > 1000) { $('referenceScaleNumber').setCustomValidity('Введите масштаб от 0,01 до 1000 %.'); update(); return; }
-      $('referenceScaleNumber').setCustomValidity(''); scale = n; persist(); return update();
+      const changed = scale !== n;
+      $('referenceScaleNumber').setCustomValidity('');
+      scale = n;
+      if (manual && changed) resetTrialScale();
+      persist();
+      return update();
     }
     $('referenceSegmentToggle').onchange = update;
     $('referenceRangeMode').onchange = e => { mode = e.target.value === 'strict' ? 'strict' : 'approximate'; persist(); update(); };
@@ -836,10 +848,10 @@
       variant = e.target.value;
       choosePhoto();
     };
-    $('referenceScale').oninput = e => setScale(e.target.value);
-    $('referenceScaleNumber').oninput = e => setScale(e.target.value);
-    $('referenceHalf').onclick = () => setScale(Math.max(0.01, scale / 2));
-    $('referenceDouble').onclick = () => setScale(Math.min(1000, scale * 2));
+    $('referenceScale').oninput = e => setScale(e.target.value, true);
+    $('referenceScaleNumber').oninput = e => setScale(e.target.value, true);
+    $('referenceHalf').onclick = () => setScale(Math.max(0.01, scale / 2), true);
+    $('referenceDouble').onclick = () => setScale(Math.min(1000, scale * 2), true);
     // OS work area and window coordinates change in macOS fullscreen; they are not pixel-scale invariants.
     const physicalKeys = ['dpr', 'width', 'height', 'visual_scale'];
     function calibrationEnvironmentMatches(before, after, referenceActive = false) {
@@ -954,6 +966,9 @@
         getDistance(), mmPerCssPx, geometry);
       return unit.equivalent_distance_m / target * 100;
     }
+    function seriesTarget(range, state) {
+      return { range, screenDistanceCm: state.screen_distance_cm, mmPerCssPx: state.mm_per_css_px };
+    }
     $('referenceApplyTarget').onclick = () => {
       targetError = '';
       const target = Number($('referenceTarget').value.trim().replace(',', '.'));
@@ -968,12 +983,14 @@
         else if (needed < 0.01 || needed > 1000) targetError = 'Заданная дальность требует масштаба вне диапазона 0,01–1000 %.';
         else {
           const previous = scale;
-          setScale(needed);
-          const actual = update();
+          const actual = setScale(needed);
           if (!positive(actual.equivalent_distance_m) || !actual.fullscreen_fits) {
             setScale(previous);
             targetError = 'Требуемый объект не помещается на экране в полноэкранном режиме. Увеличьте заданную дальность или уменьшите масштаб.';
-          } else targetError = 'Масштаб рассчитан. Фактическая дальность показана ниже с учётом CSS-размера; предварительные размеры остаются оценкой. Вместимость окончательно проверяется при входе в полноэкранный режим.';
+          } else {
+            resetTrialScale(seriesTarget(target, actual));
+            targetError = 'Масштаб рассчитан. Фактическая дальность показана ниже с учётом CSS-размера; предварительные размеры остаются оценкой. Вместимость окончательно проверяется при входе в полноэкранный режим.';
+          }
         }
       }
       update();
@@ -987,9 +1004,7 @@
       if (!state.fullscreen_fits) { targetError = 'Объект не помещается на экране в полноэкранном режиме. Уменьшите масштаб.'; update(); return; }
       if (!viewport.requestFullscreen) { targetError = 'Браузер не поддерживает полноэкранный режим. Измерения сохранены.'; update(); return; }
       latestTrial = null;
-      trialTargetRange = null;
-      trialStartScale = scale;
-      trialScaleSteps = 0;
+      // The series target and uncommitted scale steps survive fullscreen transitions.
       // The exemption starts before requestFullscreen: resize may precede fullscreenchange/promise resolution.
       beginSettling('entering');
       try { await viewport.requestFullscreen(); }
@@ -1108,7 +1123,9 @@
       if (trialPhase !== 'active') return;
       // Keep the series distance if the scale controls returned to their starting point.
       // Reusing every frame's rounded CSS measurement would accumulate error at each switch.
-      const target = trialScaleSteps === 0 && trialTargetRange !== null ? trialTargetRange : state.equivalent_distance_m;
+      const sameSetup = trialTarget && trialTarget.screenDistanceCm === state.screen_distance_cm &&
+        trialTarget.mmPerCssPx === state.mm_per_css_px;
+      const target = trialScaleSteps === 0 && sameSetup ? trialTarget.range : state.equivalent_distance_m;
       const nextScale = scaleForDistance(p, target, state.mm_per_css_px);
       if (!error && (!positive(nextScale) || nextScale < 0.01 || nextScale > 1000)) error = 'Дальность недоступна для этого ракурса.';
       if (!error && !fitsTrialScale(p, nextScale)) error = 'Кадр не помещается при текущей дальности и позиции.';
@@ -1118,9 +1135,6 @@
         showScalePanel(true);
         return;
       }
-      trialTargetRange = target;
-      trialStartScale = nextScale;
-      trialScaleSteps = 0;
       ++loadGeneration;
       photo = p;
       photoSelect.value = p.id;
@@ -1130,7 +1144,9 @@
       describePhoto(p);
       scaleStatus.textContent = '';
       if (!scalePanel.hidden) showScalePanel(true);
-      capturePilotConditions(setScale(nextScale));
+      const nextState = setScale(nextScale);
+      resetTrialScale(seriesTarget(target, nextState));
+      capturePilotConditions(nextState);
     }
     viewport.addEventListener('click', e => {
       if (trialPhase === 'active' && document.fullscreenElement === viewport && photo.variants && !scalePanel.contains(e.target)) {
