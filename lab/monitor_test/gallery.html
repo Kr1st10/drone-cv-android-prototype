@@ -24,9 +24,20 @@
   #screenLineCaption { text-align: center; }
   #referenceViewport { position: relative; height: min(360px, 45vh); overflow: hidden; background: #fff; color: #111; }
   #referenceViewport.reference-sky { background: #91c5e8 url('reference_assets/sky.svg') center / cover no-repeat; }
-  #referenceViewport:fullscreen { width: 100vw; height: 100vh; margin: 0; padding: 0; border: 0; background-color: #fff; cursor: none; }
+  #referenceViewport:fullscreen { width: 100vw; height: 100vh; margin: 0; padding: 0; border: 0; background-color: #fff; }
   #referenceViewport.reference-gray { background: #808080; }
-  #referenceViewport:fullscreen > :not(#referenceDisplay) { display: none !important; }
+  #referenceViewport.reference-forest { background: #25342a url('reference_assets/forest_40_let_pobedy_full_v1.jpg') center / contain no-repeat; }
+  #referenceViewport:fullscreen > :not(#referenceDisplay, #referenceTrialScalePanel) { display: none !important; }
+  #referenceViewport:fullscreen, #referenceViewport:fullscreen button {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M5 5V51L16 40L25 58L34 53L25 35H45Z' fill='%23fff' stroke='%23000' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E") 5 5, default;
+  }
+  #referenceTrialScalePanel { position: absolute; z-index: 1; bottom: 1rem; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 2rem); max-height: calc(100% - 2rem); overflow: auto; box-sizing: border-box; padding: .5rem; background: #202124; color: #fff; border-radius: .5rem; text-align: center; }
+  .reference-trial-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .35rem; }
+  .reference-trial-actions button { min-width: clamp(64px, min(16vh, 17vw), 128px); min-height: clamp(64px, 16vh, 128px); padding: .25em .5em; margin: 0; font-size: clamp(24px, min(6.25vh, 7vw), 52px); font-weight: 700; }
+  .reference-trial-navigation { margin-top: .35rem; }
+  #referenceTrialDistance { min-width: 7ch; font-size: clamp(32px, min(8.2vh, 10vw), 68px); font-weight: 700; font-variant-numeric: tabular-nums; }
+  #referenceTrialSequence, #referenceTrialScaleStatus { font-size: clamp(18px, 3.6vh, 32px); }
+  #referenceTrialScaleStatus:not(:empty) { display: block; margin-top: .25rem; }
   #referenceDisplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: none; }
   #referenceMissing { padding: 24px; }
   #referenceSection input[type=range] { width: min(240px, 40vw); vertical-align: middle; }

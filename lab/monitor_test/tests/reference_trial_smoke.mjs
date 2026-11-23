@@ -37,7 +37,9 @@ for(const id of ['cabinet_front','cabinet_oblique_candidate','cabinet_top',...Ob
  assert.match(await page.getAttribute('#referencePhotoSource a','href'),/cabinet\/IMG_27\d{2}\.jpg$/);
  await page.locator('#referenceSegmentReview').evaluate(e=>e.open=true);
  await page.check('#referenceSegmentToggle');
- const drawnCssPx=await page.locator('#referenceSegmentOverlay line').evaluate(line=>{
+ // The preview can replace this line when it redraws after scrolling.
+ const drawnCssPx=await page.evaluate(()=>{
+  const line=document.querySelector('#referenceSegmentOverlay line');
   const transform=line.getScreenCTM();
   const start=new DOMPoint(line.x1.baseVal.value,line.y1.baseVal.value).matrixTransform(transform);
   const end=new DOMPoint(line.x2.baseVal.value,line.y2.baseVal.value).matrixTransform(transform);
