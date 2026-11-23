@@ -57,7 +57,8 @@ class LiveTrackingIntegrationTest {
         }
     }
 
-    private class Fixture(trackingCapacity: Int = 10_000, journal: MotionJournal? = null) {
+    private class Fixture(trackingCapacity: Int = 10_000, journal: MotionJournal? = null,
+                          experimentalTrackingYolo: Boolean = false) {
         val vision = Queue()
         val ml = Queue()
         val diagnostic = DiagnosticFrames(trackingCapacity = trackingCapacity)
@@ -68,26 +69,37 @@ class LiveTrackingIntegrationTest {
         var calls = 0
         var backendCloses = 0
         var inferenceError = false
+        var htpSelected = false
+        var warmups = 0
+        var warmed = false
         var initializeFailure: TrackingFailure? = null
         var initializeThrows = false
         var replayLoses = false
         var onFailure: () -> Unit = {}
         val detector = object : LiveBackend<Snapshot> {
+            override fun warmUp(frame: Snapshot, confidence: Float): Boolean {
+                if (warmed) return false
+                warmed = true
+                warmups++
+                return true
+            }
+
             override fun infer(frame: Snapshot, confidence: Float): LiveInference {
                 check(frame.closes == 0)
                 calls++
                 if (inferenceError) error("test infer failure")
                 return LiveInference(listOf(Detection("drone", .8f, NormalizedBox(.2f, .2f, .4f, .4f))),
-                    100, 100, 2.0, 1.0, 1.0, 1.0)
+                    100, 100, 2.0, 1.0, 1.0, 1.0, htpProfileNodeEvents = if (htpSelected) 1 else null)
             }
-            override fun close() { backendCloses++ }
+            override fun close() { warmed = false; backendCloses++ }
         }
         val controller = LiveController(detector, ml, diagnostic, eventTime = { now },
             tracking = LiveTracking(vision, TrackingSession({ Flow().also {
                 it.initializeFailure = initializeFailure; it.initializeThrows = initializeThrows; it.lose = replayLoses; flows += it
             } })) { _, key, stamp ->
                 GrayFrame.copyOf(key, stamp, 100, 100, ByteArray(10000))
-            }, motion = journal, onFailure = { onFailure() }, nanoTime = { now })
+            }, motion = journal, onFailure = { onFailure() }, experimentalTrackingYolo = experimentalTrackingYolo,
+            nanoTime = { now })
 
         fun start() {
             sources = controller.newSource()
@@ -124,6 +136,60 @@ class LiveTrackingIntegrationTest {
             assertEquals(32.0, signal.center!!.x, 0.0001)
             assertEquals(71.0, signal.confirmationAgeMs!!, 0.0001)
             assertEquals(5.0, signal.captureToSignalMs!!, 0.0001)
+        }
+    }
+
+    @Test fun `tracking pilot warms each run and records backend, ORT and LK separately`() {
+        val file = kotlin.io.path.createTempFile("timeline-qnn-lk", ".ndjson").toFile()
+        var clock = 1_000_000_000L
+        val journal = MotionJournal(clock = { clock }, fileFactory = { file })
+        val f = Fixture(journal = journal, experimentalTrackingYolo = true)
+        try {
+            f.htpSelected = true
+            f.start()
+            fun flushYolo() {
+                f.ml.drain(); f.vision.drain()
+                f.ml.drain(); f.vision.drain()
+            }
+            f.frame(0); flushYolo()
+            assertEquals(1, f.warmups)
+            assertEquals(0, f.calls)
+            assertNull(f.controller.state.value.htpProfileNodeEvents)
+            f.frame(100); flushYolo()
+            assertEquals(1, f.calls)
+            assertEquals(TrackingSampleKind.CORRECTION, f.controller.state.value.tracking!!.kind)
+            f.controller.startDiagnostics { f.diagnostic.start(f.now) }
+            val diagnostics = f.diagnostic.stop(f.diagnostic.currentToken()!!, f.now, false, null)!!
+            assertEquals(ru.university.dronecv.diagnostics.YoloExecution.HTP, diagnostics.yoloExecution)
+
+            clock = f.now
+            f.controller.startRecording()
+            for (ms in 133L..700L step 27L) { f.frame(ms); flushYolo() }
+            clock = f.now
+            journal.stop()
+            journal.awaitFinished(file)
+            val report = file.readText()
+            assertTrue(report.contains("\"execution_provider\":\"QNNExecutionProvider\""))
+            assertTrue(report.contains("\"cpu_ep_fallback_disabled\":true"))
+            assertTrue(report.contains("\"ort_ms\":2.0"))
+            assertTrue(Regex("\"track_updates\":[1-9][0-9]*").containsMatchIn(report))
+            assertTrue(report.contains("\"updates_fps_session\":"))
+
+            f.controller.configure(false, .5f)
+            flushYolo()
+            f.htpSelected = false
+            f.controller.configure(true, .5f)
+            f.vision.drain()
+            f.frame(1000); flushYolo()
+            assertEquals(2, f.warmups)
+            f.frame(1100); flushYolo()
+            assertTrue(f.controller.exportMetadata().contains("\"execution_provider\":\"CPU\""))
+        } finally {
+            journal.stop()
+            journal.awaitFinished(file)
+            f.controller.close()
+            f.ml.drain(); f.vision.drain()
+            file.delete()
         }
     }
 

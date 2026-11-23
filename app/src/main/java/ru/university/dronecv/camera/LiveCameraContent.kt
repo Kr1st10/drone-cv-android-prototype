@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import ru.university.dronecv.BuildConfig
 import ru.university.dronecv.motion.MotionViewModel
 import ru.university.dronecv.tracking.ClassConfirmation
 import ru.university.dronecv.tracking.VisualPhase
@@ -194,7 +195,7 @@ private fun LiveControls(
             listOf("yolo" to "A: YOLO", "yolo_lk" to "B: YOLO + LK").forEach { (mode, label) ->
                 Button(onClick = {
                     if (controller.setTrackingEnabled(mode == "yolo_lk")) {
-                        pilot?.select(if (mode == "yolo") BenchmarkProvider.CPU else null)
+                        pilot?.select(if (mode == "yolo" || BuildConfig.QNN_CAMERA_LK) BenchmarkProvider.CPU else null)
                         motion.mode(mode)
                     }
                 },
@@ -203,7 +204,7 @@ private fun LiveControls(
             }
         }
         Text("Режим: ${if (motionUi.mode == "yolo") "A: YOLO" else "B: YOLO + LK"}", style = MaterialTheme.typography.bodySmall)
-        if (pilot != null && motionUi.mode == "yolo") {
+        if (pilot != null && (motionUi.mode == "yolo" || BuildConfig.QNN_CAMERA_LK)) {
             val provider by pilot.selection.collectAsStateWithLifecycle()
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 BenchmarkProvider.entries.forEach { option ->
@@ -216,7 +217,8 @@ private fun LiveControls(
                 }
             }
             val htpConfirmed = state.htpProfileNodeEvents != null
-            Text("Бэкенд A: ${provider?.title ?: "CPU"}" + if (htpConfirmed) " · HTP подтверждён" else "",
+            val mode = if (motionUi.mode == "yolo") "A" else "B"
+            Text("Бэкенд $mode: ${provider?.title ?: "CPU"}" + if (htpConfirmed) " · HTP подтверждён" else "",
                 style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("live-backend-status"))
         }
         if (motionUi.recording) Button(onClick = { motion.stop() }, modifier = Modifier.fillMaxWidth()) { Text("Завершить запись стенда") }

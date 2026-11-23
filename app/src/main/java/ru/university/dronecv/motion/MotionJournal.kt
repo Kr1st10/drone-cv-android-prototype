@@ -45,11 +45,24 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
     @Synchronized fun event(token: Long?, type: String, payload: () -> String) {
         if (token != null && valid(token)) writer?.record(type, payload)
     }
+    @Synchronized internal fun yoloTiming(token: Long?, completedNs: Long, frameId: Long?, conversionMs: Double?,
+                                         preprocessMs: Double?, ortMs: Double, postprocessMs: Double?,
+                                         pipelineMs: Double, detectionCount: Int) {
+        if (token == null || !valid(token)) return
+        val offsetNs = completedNs - start
+        writer?.record("diagnostic_frame", {
+            "{\"completed_ns\":\"$completedNs\",\"offset_ns\":\"$offsetNs\"," +
+                "\"motion_frame_id\":${frameId?.toString()?.let(::quote)},\"conversion_ms\":$conversionMs," +
+                "\"preprocess_ms\":$preprocessMs,\"ort_ms\":$ortMs,\"postprocess_ms\":$postprocessMs," +
+                "\"pipeline_ms\":$pipelineMs,\"detection_count\":$detectionCount}"
+        }, completedNs)
+    }
     data class Ui(val mode: String = "yolo_lk", val recording: Boolean = false, val report: String? = null, val issue: String? = null, val sessionId: Long = 0)
     private val mutableUi = MutableStateFlow(Ui())
     val ui = mutableUi.asStateFlow()
     private var epoch = 0L
     private var start = 0L
+    private var lkUpdates: Long? = null
     private var fileFrameId = 0L
     private var geometry: Pair<Int, Int>? = null
     private var image: String? = null
@@ -65,7 +78,7 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
         mutableUi.update { it.copy(mode = mode) }
         return true
     }
-    @Synchronized fun start() {
+    @Synchronized fun start(recordLkFrequency: Boolean = false) {
         if (mutableUi.value.recording) return
         val selected = reservation.also { reservation = null }
         if (requiresReservation && selected == null) {
@@ -73,6 +86,7 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
         }
         if (writer?.isFinished() == false) { mutableUi.update { it.copy(issue = "Ожидание завершения предыдущей записи") }; return }
         epoch++; start = clock(); geometry = null; image = null; fileFrameId = 0
+        lkUpdates = if (recordLkFrequency) 0L else null
         frames.clear(); detections.clear(); publications.clear(); truncated = false
         val sessionId = epoch
         mutableUi.value = mutableUi.value.copy(recording = true, report = null, issue = null, sessionId = sessionId)
@@ -114,8 +128,10 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
         if (writer != null) { writer?.record("detection", "{\"frame_id\":\"$frame\",\"published_ns\":\"$now\",\"bbox\":${box(value.box)},\"confidence\":${value.confidence}}", now); return }
         add(detections, "{\"frame_id\":$frame,\"published_ns\":${now-start},\"bbox\":${box(value.box)},\"confidence\":${value.confidence}}")
     }
-    @Synchronized fun publication(token: Long?, frame: Long?, value: NormalizedBox?, source: String, now: Long) {
+    @Synchronized fun publication(token: Long?, frame: Long?, value: NormalizedBox?, source: String, now: Long,
+                                  trackUpdate: Boolean = false) {
         if (token == null || !valid(token)) return
+        if (trackUpdate && value != null) lkUpdates = lkUpdates?.plus(1)
         if (writer != null) { writer?.record("publication", "{\"frame_id\":${frame?.let { "\"$it\"" } ?: "null"},\"published_ns\":\"$now\",\"bbox\":${value?.let(::box) ?: "null"},\"source\":${quote(source)}}", now); return }
         add(publications, "{\"frame_id\":$frame,\"published_ns\":${now-start},\"bbox\":${value?.let(::box) ?: "null"},\"source\":\"$source\"}")
     }
@@ -124,7 +140,14 @@ class MotionJournal(private val clock: () -> Long, private val limit: Int = 20_0
         if (!mutableUi.value.recording) return
         val now = clock()
         if (writer != null) {
-            writer?.finish(now, reason != null, reason)
+            val durationNs = now - start
+            val summary = lkUpdates?.let { count ->
+                "metadata" to {
+                    val fps = if (durationNs > 0) count * 1e9 / durationNs else null
+                    "{\"tracking\":{\"track_updates\":$count,\"updates_fps_session\":$fps}}"
+                }
+            }
+            writer?.finish(now, reason != null, reason, summary)
             epoch++
             mutableUi.update { it.copy(recording = false, report = "file") }
             return

@@ -65,7 +65,8 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
     val motion = motionModel.journal
     var running by rememberSaveable { mutableStateOf(false) }
     val pilot = remember {
-        if (BuildConfig.QNN_CAMERA) QnnCameraBackend(context, initialThreads, motion.ui.value.mode == "yolo") else null
+        if (BuildConfig.QNN_CAMERA) QnnCameraBackend(context, initialThreads,
+            motion.ui.value.mode == "yolo" || BuildConfig.QNN_CAMERA_LK) else null
     }
     val controller = remember {
         val tracking = LiveTracking<CameraFrameSnapshot>(VisionWorker.executor, TrackingSession(::OpenCvLkTracker)) { frame, key, stamp ->
@@ -74,6 +75,7 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
         LiveController(pilot ?: AndroidLiveBackend(context, initialThreads), DetectorWorker.executor, diagnostics.frames, initialThreads,
             eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking, motion = motion,
             experimentalYolo = pilot != null,
+            experimentalTrackingYolo = BuildConfig.QNN_CAMERA_LK,
             packagedMetadataFields = ru.university.dronecv.PackagedBuild.metadataFields,
             motionFrame = { frame, token, stamp -> recordMotionFrame(motion, frame, token, stamp) },
             onFailure = { diagnostics.stop(true, "Detector error: $it") })
