@@ -347,7 +347,7 @@
       } else if(row.type==='session_end') {footer=d;try {j.stop_ns=relative(d.stop_ns,'stop_ns');} catch (_) {broken=true;footer=null;}}
       else if(row.type==='recording_failure') broken=true;
       else if(row.type==='diagnostic_report') diagnosticReports++;
-      else if(!['state','resource','diagnostic_frame','tracking','frame_geometry','stale_discard','discard'].includes(row.type)) throw Error(`Неизвестная запись: ${row.type}`);
+      else if(!['state','resource','diagnostic_frame','tracking','frame_geometry','stale_discard','discard','dry_run'].includes(row.type)) throw Error(`Неизвестная запись: ${row.type}`);
     }
     function finish(partial=false) {
       if(start===null) throw Error('Отсутствует заголовок.');

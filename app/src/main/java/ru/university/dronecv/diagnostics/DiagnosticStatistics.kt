@@ -70,6 +70,7 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
     var timeline: ((String, () -> String, Long) -> Unit)? = null
         get() = synchronized(lock) { field }
         set(value) = synchronized(lock) { field = value }
+    @Volatile internal var dryRun: DryRunJournal? = null
     /** Test observer at the tracking serialization boundary. */
     internal var beforeTrackingSerialization: (() -> Unit)? = null
     init { require(capacity > 0 && trackingCapacity > 0) }
@@ -181,10 +182,15 @@ class DiagnosticFrames(private val capacity: Int = 100_000, private val tracking
         else unstoredSamples++
     }
 
-    fun stop(token: Long, nowNanos: Long, interrupted: Boolean, reason: String?): DiagnosticFrameSnapshot? = synchronized(lock) {
+    fun stop(token: Long, nowNanos: Long, interrupted: Boolean, reason: String?): DiagnosticFrameSnapshot? =
+        stop(token, nowNanos, interrupted, reason) {}
+
+    internal fun stop(token: Long, nowNanos: Long, interrupted: Boolean, reason: String?,
+                      sealTimeline: () -> Unit): DiagnosticFrameSnapshot? = synchronized(lock) {
         if (!recording || token != generation) return@synchronized null
         require(nowNanos >= startNanos)
         recording = false
+        sealTimeline()
         DiagnosticFrameSnapshot(nowNanos - startNanos, received, completed, truncated, interrupted, reason, frames.toList(), staleDiscarded,
             input.copy(fps = if (nowNanos > startNanos) input.received * 1_000_000_000.0 / (nowNanos - startNanos) else null),
             if (observedFrames + corrections > 0 || operationCounts.isNotEmpty())

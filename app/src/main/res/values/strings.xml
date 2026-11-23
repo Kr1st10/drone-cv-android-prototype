@@ -33,4 +33,5 @@
     <string name="photo_drone_label">Дрон</string>
     <string name="photo_detection_label">%1$d · %2$s %3$s%%</string>
     <string name="photo_image_description">Выбранная фотография. Обнаружено объектов: %1$d</string>
+    <string name="diagnostic_dry_run">Сухой прогон центрирования</string>
 </resources>

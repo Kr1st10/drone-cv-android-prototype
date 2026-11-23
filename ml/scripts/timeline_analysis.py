@@ -172,7 +172,8 @@ def read_timeline(path):
             elif kind == 'recording_failure':
                 failure = True
                 errors.append('recording failure: ' + str(data.get('reason')))
-            elif kind not in ('frame', 'detection', 'metadata', 'publication', 'resource', 'diagnostic_frame', 'diagnostic_report', 'tracking', 'frame_geometry', 'stale_discard', 'discard'):
+            elif kind not in ('frame', 'detection', 'metadata', 'publication', 'resource', 'diagnostic_frame', 'diagnostic_report', 'tracking', 'frame_geometry', 'stale_discard', 'discard',
+                             'dry_run'):
                 raise ValueError(f'unsupported timeline record type: {kind}')
     if header is None: raise ValueError('missing timeline header')
     try:

@@ -38,6 +38,28 @@ class TimelineAnalysisTest(unittest.TestCase):
         publication_timing(legacy)
         self.assertNotIn('state_publication_ns', legacy)
 
+    def test_optional_dry_run_does_not_change_legacy_tracking_intervals(self):
+        header = ('header', 100, {'start_ns': '100', 'clock': 'elapsed_realtime_ns'})
+        state = ('state', 110, {'publication_ns': '110', 'reason': 'update', 'box': [0, 0, .5, .5]})
+        dry_run = ('dry_run', 120, {'decision_ns': '120', 'action': 'STOP', 'reason': 'TRACKING_CLEARED'})
+        with tempfile.TemporaryDirectory() as tmp:
+            results = []
+            for extra in ([], [dry_run]):
+                rows = [header, state, *extra]
+                count = str(len(rows))
+                rows.append(('session_end', 130, dict(stop_ns='130', recording_complete=True,
+                    dropped_count='0', accepted_count=count, written_count=count)))
+                path = Path(tmp) / f'{count}.ndjson'
+                path.write_text(''.join(json.dumps(dict(schema='dronecv-session-timeline-1',
+                    session_id='s', event_id=str(i), event_ns=str(t), type=kind, data=data)) + '\n'
+                    for i, (kind, t, data) in enumerate(rows, 1)))
+                result = read_timeline(path)
+                self.assertTrue(result['recording_complete'], result['errors'])
+                results.append(result)
+            self.assertEqual(results[0]['intervals'], results[1]['intervals'])
+            self.assertNotIn('dry_run', results[0]['counts'])
+            self.assertEqual(results[1]['counts']['dry_run'], 1)
+
     def test_long_export_and_incomplete_tail(self):
         base = 90071992547409930
         with tempfile.TemporaryDirectory() as tmp:

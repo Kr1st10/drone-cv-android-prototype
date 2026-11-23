@@ -5,6 +5,7 @@ import java.util.concurrent.RejectedExecutionException
 import ru.university.dronecv.tracking.FrameKey
 import ru.university.dronecv.tracking.GrayFrame
 import ru.university.dronecv.tracking.TrackingObservation
+import ru.university.dronecv.tracking.VisualPhase
 import ru.university.dronecv.tracking.YoloRequest
 import ru.university.dronecv.tracking.TrackingFailure
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.detection.visibleDetections
 import ru.university.dronecv.detection.highestConfidenceVisibleDetection
+import ru.university.dronecv.centering.CenteringReason
+import ru.university.dronecv.centering.CenteringSession
 import ru.university.dronecv.diagnostics.DiagnosticFrames
 import ru.university.dronecv.motion.MotionJournal
 import ru.university.dronecv.detection.NormalizedBox
@@ -219,6 +222,10 @@ class LiveController<Frame : AutoCloseable>(
         eventTime?.invoke()?.let {
             diagnostics?.event(diagnostics?.currentToken(), "metadata", metadata(extra), it)
             timeline(it, "initial_snapshot", null)
+        }
+        if (tracking != null && trackingEnabled) diagnostics?.dryRun?.let { journal ->
+            journal.start(CenteringSession(generation, source))
+            mutableState.value.tracking?.let(journal::signal)
         }
     }
     fun startRecording(extra: String = "null"): Unit = publicationTransaction {
@@ -472,6 +479,20 @@ class LiveController<Frame : AutoCloseable>(
         live.inFlight = false
     }
 
+    private fun publishTrackingState(next: LiveState) {
+        val journal = diagnostics?.dryRun
+        val signal = next.tracking
+        if (journal != null) {
+            if (signal == null && mutableState.value.tracking != null) {
+                journal.clear(CenteringSession(generation, source))
+            } else if (signal?.observation?.phase == VisualPhase.LOST) {
+                journal.signal(signal)
+            }
+        }
+        mutableState.value = next
+        if (signal != null && signal.observation.phase != VisualPhase.LOST) journal?.signal(signal)
+    }
+
     private fun publishTracking(live: LiveTracking<Frame>, token: LiveFrameToken, observation: TrackingObservation,
                                 geometry: GrayFrame, kind: TrackingSampleKind, start: Long, extraMs: Double = 0.0) =
         publicationTransaction {
@@ -487,7 +508,7 @@ class LiveController<Frame : AutoCloseable>(
                 val hadBox = mutableState.value.tracking?.box != null
                 val cleared = mutableState.value.copy(tracking = null, trackingFps = null, revision = ++revision)
                 val clearedNs = checkNotNull(eventTime)()
-                mutableState.value = cleared
+                publishTrackingState(cleared)
                 if (!valid(token)) return@publicationTransaction
                 if (hadBox) {
                     motion?.publication(token.motionToken, null, null, "clear", clearedNs)
@@ -509,7 +530,7 @@ class LiveController<Frame : AutoCloseable>(
             if (observation.estimate != null && (publicationNs >= displayUntil ||
                     publicationNs - observation.stamp.analyzerEntryNs > maxAnalyzerAgeMs * 1e6 ||
                     observation.stamp.ageAt(publicationNs)?.let { it > maxAnalyzerAgeMs } == true)) {
-                mutableState.value = mutableState.value.copy(tracking = null, trackingFps = null, revision = ++revision)
+                publishTrackingState(mutableState.value.copy(tracking = null, trackingFps = null, revision = ++revision))
                 if (valid(token)) {
                     motion?.publication(token.motionToken, null, null, "clear", publicationNs)
                     clearTimeline(publicationNs, "stale_result")
@@ -517,7 +538,7 @@ class LiveController<Frame : AutoCloseable>(
                 return@publicationTransaction
             }
             val signal = preparedSignal.copy(dispatchNs = publicationNs, resultReadyNs = readyNs)
-            mutableState.value = mutableState.value.copy(tracking = signal, trackingFps = fps, revision = ++revision)
+            publishTrackingState(mutableState.value.copy(tracking = signal, trackingFps = fps, revision = ++revision))
             if (!valid(token)) return@publicationTransaction
             motion?.publication(token.motionToken, token.motionFrame, b, if (b == null) "clear" else "lk", publicationNs)
             val obs = signal.observation
@@ -595,6 +616,16 @@ class LiveController<Frame : AutoCloseable>(
         val clearReason = if (active && (enabled != active || threshold != confidence))
             if (!enabled) stopReason else "configuration_changed" else null
         val wasActive = active
+        val dryRun = if (tracking != null && trackingEnabled) diagnostics?.dryRun else null
+        if (wasActive && dryRun != null) {
+            val reason = when (stopReason) {
+                "camera_source_changed", "camera_configuration_changed" -> CenteringReason.SOURCE_CHANGED
+                "activity_paused" -> CenteringReason.CAMERA_PAUSED
+                "camera_error" -> CenteringReason.CAMERA_ERROR
+                else -> CenteringReason.CAMERA_STOPPED
+            }
+            dryRun.stop(CenteringSession(generation, source), reason)
+        }
         active = enabled
         confidence = threshold
         val configuredGeneration = ++generation
@@ -611,6 +642,7 @@ class LiveController<Frame : AutoCloseable>(
             val next = LiveState(phase = if (active) LivePhase.STARTING else LivePhase.STOPPED, revision = ++revision)
             val publicationNs = eventTime?.invoke()
             mutableState.value = next
+            if (enabled) dryRun?.start(CenteringSession(configuredGeneration, source))
             if (generation == configuredGeneration && clearReason != null) {
                 publicationNs?.let { clearTimeline(it, clearReason) }
                 motion?.stop(if (!enabled) stopReason else "Detection configuration changed")
@@ -658,7 +690,7 @@ class LiveController<Frame : AutoCloseable>(
         val reserved = maxOf(nextSource, source) + 1
         nextSource = reserved
         val change = {
-            configure(false, confidence)
+            configure(false, confidence, "camera_source_changed")
             source = reserved
         }
         deferredControls.addLast(change)
@@ -771,6 +803,7 @@ class LiveController<Frame : AutoCloseable>(
 
     private fun fail(id: Long, message: String, release: Boolean = true) = publicationTransaction {
         if (closed || !active || generation != id) return@publicationTransaction
+        diagnostics?.dryRun?.stop(CenteringSession(generation, source), CenteringReason.CAMERA_ERROR)
         val failureGeneration = ++generation
         invalidatePending()
         resetTracking(failureGeneration, source)
@@ -799,7 +832,7 @@ class LiveController<Frame : AutoCloseable>(
         if (tracking != null && trackingEnabled) {
             val next = current.copy(tracking = null, trackingFps = null)
             val now = eventTime?.invoke()
-            mutableState.value = next
+            publishTrackingState(next)
             if (generation != expiredGeneration) return@publicationTransaction
             if (current.tracking?.box != null && now != null) {
                 motion?.publication(motion.token(), null, null, "clear", now)
@@ -827,6 +860,7 @@ class LiveController<Frame : AutoCloseable>(
             return@publicationTransaction
         }
         if (closed) return@publicationTransaction
+        diagnostics?.dryRun?.stop(CenteringSession(generation, source), CenteringReason.CAMERA_STOPPED)
         closed = true
         active = false
         generation++

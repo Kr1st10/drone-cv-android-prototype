@@ -204,9 +204,10 @@ private fun LiveControls(
         motionStartIssue?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = onOpenJournals, modifier = Modifier.fillMaxWidth().testTag("open-journals")) { Text("Открыть журналы") }
         DiagnosticPanel(diagnostics, running && state.phase == LivePhase.RUNNING && !threadState.switching,
-            confidence, threadState.threads, state.completedFrames,
-            onStart = { diagnostics.start(confidence, threadState.threads, state.completedFrames,
-                activate = { start -> controller.startDiagnostics(cameraContext(probe), start) }) })
+            state.completedFrames, dryRunAvailable = motionUi.mode == "yolo_lk") { dryRun ->
+            diagnostics.start(confidence, threadState.threads, state.completedFrames, dryRun = dryRun,
+                activate = { start -> controller.startDiagnostics(cameraContext(probe), start) })
+        }
         Text("Камера ID: ${probe.logicalId ?: "неизвестно"}; физический запрос: ${probe.physicalId ?: "авто"} · запрошено ${probe.requestedZoom}× · текущий zoomRatio ${probe.actualZoom ?: "неизвестен"}", style = MaterialTheme.typography.bodySmall)
         Text("Последний Camera2 zoomRatio: ${probe.captureZoom ?: "не сообщён"} (не оптическая кратность)",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("camera-capture-zoom"))

@@ -7,10 +7,11 @@ const push=(type,data,time=base)=>p.push({schema:'dronecv-session-timeline-1',se
 push('header',{start_ns:String(base),mode:'yolo_lk'});
 for(let i=0;i<21001;i++)push('frame',{frame_id:String(base+BigInt(i)),analyzer_entry_ns:String(base+BigInt(i)),capture_ns:String(base+BigInt(i)),timebase:'elapsed_realtime',marker:null});
 push('publication',{frame_id:String(base+20000n),published_ns:String(base+21005n),bbox:[0,0,1,1],source:'lk'});
+push('dry_run',{decision_ns:String(base+21006n),action:'STOP',reason:'TRACKING_CLEARED'},base+21006n);
 push('session_end',{stop_ns:String(base+22000n),recording_complete:true,dropped_count:'0',accepted_count:String(id),written_count:String(id),experiment_status:'not_observed',interrupted:false});
 const j=p.finish();
 assert.equal(j.frames.length,21001);assert.equal(j.frames[20000].original_frame_id,String(base+20000n));
-assert.equal(j.publications[0].frame_id,20001);assert.equal(j.stop_ns,22000);assert.equal(j.complete,true);
+assert.equal(j.publications.length,1);assert.equal(j.publications[0].frame_id,20001);assert.equal(j.stop_ns,22000);assert.equal(j.complete,true);
 const incomplete=timelineImporter();incomplete.push({schema:'dronecv-session-timeline-1',session_id:'s',event_id:'1',event_ns:String(base),type:'header',data:{start_ns:String(base)}});assert.equal(incomplete.finish().complete,false);
 assert.throws(()=>timelineImporter().push({schema:'dronecv-session-timeline-2'}),/Неподдерживаемая/);
 
