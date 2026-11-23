@@ -31,9 +31,10 @@
   #referenceViewport:fullscreen.reference-controls-open { cursor: default; }
   #referenceTrialScalePanel { position: absolute; z-index: 1; bottom: 1rem; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 2rem); box-sizing: border-box; padding: .5rem; background: #202124; color: #fff; border-radius: .5rem; text-align: center; }
   .reference-trial-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .35rem; }
-  .reference-trial-actions button { min-width: 44px; min-height: 44px; margin: 0; }
+  .reference-trial-actions button { min-width: clamp(48px, 11vh, 88px); min-height: clamp(48px, 11vh, 88px); padding: .25em .6em; margin: 0; font-size: clamp(20px, 4.3vh, 36px); font-weight: 700; }
   .reference-trial-navigation { margin-top: .35rem; }
-  #referenceTrialDistance { min-width: 9ch; font-variant-numeric: tabular-nums; }
+  #referenceTrialDistance { min-width: 8ch; font-size: clamp(24px, 5.8vh, 48px); font-weight: 700; font-variant-numeric: tabular-nums; }
+  #referenceTrialSequence, #referenceTrialScaleStatus { font-size: clamp(16px, 2.8vh, 24px); }
   #referenceTrialScaleStatus:not(:empty) { display: block; margin-top: .25rem; }
   #referenceDisplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: none; }
   #referenceMissing { padding: 24px; }
