@@ -1,15 +1,21 @@
 package ru.university.dronecv.camera
 
 import java.util.concurrent.Executor
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
+import ru.university.dronecv.centering.CenteringConfig
 import ru.university.dronecv.detection.Detection
 import ru.university.dronecv.detection.NormalizedBox
 import ru.university.dronecv.diagnostics.DiagnosticFrames
 import ru.university.dronecv.diagnostics.DiagnosticReport
+import ru.university.dronecv.diagnostics.DryRunJournal
 import ru.university.dronecv.diagnostics.toJson
 import ru.university.dronecv.tracking.*
 import ru.university.dronecv.motion.MotionJournal
+import ru.university.dronecv.timeline.TimelineWriter
 
 class LiveTrackingIntegrationTest {
     private class Queue : Executor {
@@ -412,6 +418,74 @@ class LiveTrackingIntegrationTest {
         assertEquals(1L, snapshot.operations!!.counts[TrackingEventKind.REPLAY_SUCCEEDED])
         assertEquals(1L, snapshot.operations!!.counts[TrackingEventKind.CORRECTION_ACCEPTED])
         f.controller.close(); f.ml.drain(); f.vision.drain()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `live tracking and lifecycle write dry run to the diagnostic timeline off the publisher`() = runTest {
+        val file = kotlin.io.path.createTempFile("live-dry-run", ".ndjson").toFile()
+        val f = Fixture()
+        f.start()
+        f.acquire()
+        var decisionClockReads = 0
+        val writer = TimelineWriter(file, { f.now })
+        val journal = checkNotNull(DryRunJournal.open(true, writer, { decisionClockReads++; f.now },
+            config = CenteringConfig(deadZoneWidthPx = 20.0), dispatcher = StandardTestDispatcher(testScheduler)))
+        f.controller.startDiagnostics {
+            f.diagnostic.start(f.now)
+            writer.record("header", """{"start_ns":"${f.now}","clock":"elapsed_realtime_ns"}""", f.now)
+            f.diagnostic.timeline = { type, data, time -> writer.record(type, data, time) }
+            f.diagnostic.dryRun = journal
+        }
+        assertEquals(0, decisionClockReads)
+        testScheduler.runCurrent()
+        assertTrue(decisionClockReads > 0)
+
+        val oldSource = f.sources
+        f.controller.expire(f.controller.state.value.revision)
+        assertNull(f.controller.state.value.tracking)
+        testScheduler.runCurrent()
+        f.frame(99)
+        assertNotNull(f.controller.state.value.tracking?.box)
+        testScheduler.runCurrent()
+
+        f.start()
+        assertNull(f.controller.beginFrame(oldSource, FrameStamp(f.now, CaptureTimebase.ELAPSED_REALTIME, f.now)))
+        f.controller.configure(false, .5f, "activity_paused")
+        f.diagnostic.dryRun = null
+        journal.finish { stopNs -> writer.finish(stopNs, true, "Activity paused") }
+        testScheduler.runCurrent()
+        writer.awaitFinished()
+        assertNull(writer.integrityIssue())
+        val records = file.readLines().filter { it.contains("\"type\":\"dry_run\"") }
+        file.delete()
+        assertEquals(listOf("WAITING_FOR_BOX", "TARGET_OFFSET", "TRACKING_CLEARED", "TARGET_OFFSET",
+            "SOURCE_CHANGED", "WAITING_FOR_BOX", "CAMERA_PAUSED"),
+            records.map { it.substringAfter("\"reason\":\"").substringBefore('"') })
+        assertTrue(records[1].contains("\"source_id\":\"$oldSource\",\"frame_id\":\"3\""))
+        assertTrue(records[3].contains("\"source_id\":\"$oldSource\",\"frame_id\":\"4\""))
+        assertTrue(records.last().contains("\"source_id\":\"${f.sources}\",\"frame_id\":null"))
+    }
+
+    @Test fun `diagnostics without opt in records tracking without dry run events`() {
+        val file = kotlin.io.path.createTempFile("live-dry-run-disabled", ".ndjson").toFile()
+        val f = Fixture()
+        f.start()
+        val writer = TimelineWriter(file, { f.now })
+        f.controller.startDiagnostics {
+            f.diagnostic.start(f.now)
+            writer.record("header", """{"start_ns":"${f.now}","clock":"elapsed_realtime_ns"}""", f.now)
+            f.diagnostic.timeline = { type, data, time -> writer.record(type, data, time) }
+        }
+        f.acquire()
+        f.controller.expire(f.controller.state.value.revision)
+        f.controller.configure(false, .5f)
+        writer.finish(f.now, false, null)
+        writer.awaitFinished()
+        val rows = file.readLines()
+        file.delete()
+
+        assertTrue(rows.any { it.contains("\"type\":\"tracking\"") })
+        assertFalse(rows.any { it.contains("\"type\":\"dry_run\"") })
     }
 
     @Test fun `exported delayed correction keeps detector and coordinate frame times separate`() {

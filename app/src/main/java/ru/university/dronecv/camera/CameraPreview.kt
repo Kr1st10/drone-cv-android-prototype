@@ -94,8 +94,8 @@ internal fun CameraPreview(
     var cameraBlocked by remember { mutableStateOf(false) }
     var activationEpoch by remember { mutableLongStateOf(0L) }
 
-    fun suspendAnalysis() {
-        controller.configure(false, currentConfidence, "camera_interrupted_or_rebound")
+    fun suspendAnalysis(reason: String = "camera_interrupted_or_rebound") {
+        controller.configure(false, currentConfidence, reason)
         currentOnInterruption()
         activationEpoch++ // even pause/resume coalesced before recomposition needs a new analyzer token.
     }
@@ -104,7 +104,7 @@ internal fun CameraPreview(
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) resumed = true
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                suspendAnalysis() // invalidate synchronously, before a late worker completion.
+                suspendAnalysis("activity_paused") // invalidate synchronously, before a late worker completion.
                 resumed = false
             }
         }
@@ -116,7 +116,7 @@ internal fun CameraPreview(
             val next = IntSize(view.width, view.height)
             val nextRotation = view.display?.rotation ?: rotation
             if (next != viewSize || nextRotation != rotation) {
-                suspendAnalysis()
+                suspendAnalysis("camera_source_changed")
                 bound = false
                 viewSize = next
                 rotation = nextRotation
@@ -129,7 +129,7 @@ internal fun CameraPreview(
             override fun onDisplayChanged(displayId: Int) {
                 val display = previewView.display ?: return
                 if (displayId == display.displayId && rotation != display.rotation) {
-                    suspendAnalysis()
+                    suspendAnalysis("camera_source_changed")
                     bound = false
                     rotation = display.rotation // also handles 90 <-> 270 without a configuration change.
                 }
@@ -235,7 +235,7 @@ internal fun CameraPreview(
                 if (!disposed && probe.selectionEpoch == selectionEpoch) {
                     val error = state.error
                     cameraBlocked = error != null
-                    if (error != null) suspendAnalysis()
+                    if (error != null) suspendAnalysis("camera_error")
                     when {
                         error == null -> currentOnIssue(null)
                         error.type == CameraState.ErrorType.CRITICAL -> recover(CameraStateException(error.code))

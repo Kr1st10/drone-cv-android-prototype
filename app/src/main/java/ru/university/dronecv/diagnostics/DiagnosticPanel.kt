@@ -1,26 +1,58 @@
 package ru.university.dronecv.diagnostics
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
+import ru.university.dronecv.BuildConfig
+import ru.university.dronecv.R
 
 @Composable
-fun DiagnosticPanel(model: DiagnosticViewModel, liveReady: Boolean, confidence: Float, threads: Int, warmupFrames: Long, onStart: () -> Unit = { model.start(confidence, threads, warmupFrames) }) {
+internal fun DiagnosticPanel(
+    model: DiagnosticViewModel,
+    liveReady: Boolean,
+    warmupFrames: Long,
+    dryRunAvailable: Boolean,
+    onStart: (Boolean) -> Unit,
+) {
     val ui by model.ui.collectAsStateWithLifecycle()
+    val showDryRun = BuildConfig.DEBUG && dryRunAvailable
+    var dryRun by remember(showDryRun) { mutableStateOf(false) }
     Text("Диагностика", style = MaterialTheme.typography.titleSmall)
     Text("Прогрев до записи: $warmupFrames обработанных кадров; сессия начинается вручную.", style = MaterialTheme.typography.bodySmall)
     if (ui.recording) {
         Text("Сессия: ${ui.elapsedSeconds} с. При фоне или выключении экрана она будет помечена прерванной.", style = MaterialTheme.typography.bodySmall)
         Button(onClick = { model.stop() }, modifier = Modifier.fillMaxWidth().testTag("diagnostic-stop")) { Text("Завершить сессию") }
     } else {
-        Button(onClick = onStart, enabled = liveReady && !ui.starting,
+        if (showDryRun) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("diagnostic-dry-run")
+                    .toggleable(dryRun, enabled = !ui.starting, role = Role.Checkbox) { dryRun = it },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(dryRun, onCheckedChange = null, enabled = !ui.starting, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.diagnostic_dry_run), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Button(onClick = { onStart(showDryRun && dryRun) }, enabled = liveReady && !ui.starting,
             modifier = Modifier.fillMaxWidth().testTag("diagnostic-start")) { Text("Начать сессию") }
         if (!liveReady) Text("Сначала запустите детекцию и дождитесь кадра.", style = MaterialTheme.typography.bodySmall)
     }

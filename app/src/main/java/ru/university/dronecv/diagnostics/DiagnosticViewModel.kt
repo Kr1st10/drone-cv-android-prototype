@@ -47,6 +47,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     val ui = mutableUi.asStateFlow()
 
     fun start(confidence: Float, threads: Int = 2, warmupCompletedFrames: Long = 0,
+              dryRun: Boolean = false,
               activate: (() -> Unit) -> Unit = { it() }) {
         val revision = synchronized(lock) {
             if (token != null || mutableUi.value.starting) return
@@ -59,7 +60,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
                 reservation = archive.reserve(JournalKind.DIAGNOSTIC)
                 val selected = reservation
                 withContext(Dispatchers.Main.immediate) {
-                    activate { startReserved(confidence, threads, warmupCompletedFrames, selected, revision) }
+                    activate { startReserved(confidence, threads, warmupCompletedFrames, selected, revision, dryRun) }
                 }
             } catch (e: Exception) {
                 mutableUi.update { it.copy(exportStatus = "Запись не началась: ${e.message}") }
@@ -70,7 +71,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
         }
     }
     private fun startReserved(confidence: Float, threads: Int, warmupCompletedFrames: Long,
-                              reservation: JournalArchive.Recording, revision: Long) = synchronized(lock) {
+                              reservation: JournalArchive.Recording, revision: Long, dryRun: Boolean) = synchronized(lock) {
         if (startRevision != revision || token != null) return@synchronized
         if (timeline?.isFinished() == false) { mutableUi.update { it.copy(exportStatus = "Ожидание завершения предыдущей записи") }; return@synchronized }
         require(threads in setOf(1, 2, 4) && warmupCompletedFrames >= 0)
@@ -89,8 +90,10 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             return@synchronized
         }
         timeline = writer
-        writer.record("header", "{${ru.university.dronecv.PackagedBuild.identity.jsonFields()},\"start_ns\":\"$timelineStartNs\",\"started_epoch_ms\":\"$startedEpochMs\",\"clock\":\"elapsed_realtime_ns\",\"measurement_clock\":\"monotonic_nano_time\",\"device\":${quote("${Build.MANUFACTURER} ${Build.MODEL}")},\"android_release\":${quote(Build.VERSION.RELEASE)},\"model_asset\":${quote(BuildConfig.DRONE_MODEL_ASSET)},\"model_sha256\":${quote(BuildConfig.DRONE_MODEL_SHA256)},\"confidence\":$confidence,\"intra_op_threads\":$threads,\"diagnostic_report_required\":true,\"android_sdk\":${Build.VERSION.SDK_INT},\"warmup\":{\"method\":\"manual\",\"completed_frames_before_session\":$warmupCompletedFrames}}", timelineStartNs)
+        val dryRunEnabled = BuildConfig.DEBUG && dryRun
+        writer.record("header", "{${ru.university.dronecv.PackagedBuild.identity.jsonFields()},\"start_ns\":\"$timelineStartNs\",\"started_epoch_ms\":\"$startedEpochMs\",\"clock\":\"elapsed_realtime_ns\",\"measurement_clock\":\"monotonic_nano_time\",\"device\":${quote("${Build.MANUFACTURER} ${Build.MODEL}")},\"android_release\":${quote(Build.VERSION.RELEASE)},\"model_asset\":${quote(BuildConfig.DRONE_MODEL_ASSET)},\"model_sha256\":${quote(BuildConfig.DRONE_MODEL_SHA256)},\"confidence\":$confidence,\"intra_op_threads\":$threads,\"diagnostic_report_required\":true,\"dry_run_enabled\":$dryRunEnabled,\"android_sdk\":${Build.VERSION.SDK_INT},\"warmup\":{\"method\":\"manual\",\"completed_frames_before_session\":$warmupCompletedFrames}}", timelineStartNs)
         frames.timeline = { type, data, _ -> writer.record(type, data, SystemClock.elapsedRealtimeNanos()) }
+        frames.dryRun = DryRunJournal.open(dryRunEnabled, writer, SystemClock::elapsedRealtimeNanos)
         sampler = viewModelScope.launch(Dispatchers.Default) {
             while (true) {
                 val sample = sampleResources(startedNs)
@@ -109,15 +112,23 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
     fun stop(interrupted: Boolean = false, reason: String? = null) = synchronized(lock) {
         startRevision++
         val id = token ?: return@synchronized
+        val dryRun = frames.dryRun
         token = null; sampler?.cancel(); sampler = null
-        val stopNs = System.nanoTime()
-        val snapshot = frames.stop(id, stopNs, interrupted, reason) ?: return@synchronized
+        val reportStopNs = System.nanoTime()
+        var timelineStopNs = 0L
+        val snapshot = frames.stop(id, reportStopNs, interrupted, reason) {
+            timelineStopNs = dryRun?.seal() ?: SystemClock.elapsedRealtimeNanos()
+        } ?: return@synchronized
         frames.timeline = null
         val result = DiagnosticReport(startedEpochMs, "${Build.MANUFACTURER} ${Build.MODEL}", Build.VERSION.RELEASE,
             Build.VERSION.SDK_INT, BuildConfig.VERSION_NAME, BuildConfig.DRONE_MODEL_ASSET, BuildConfig.DRONE_MODEL_SHA256, threshold,
             snapshot, resources.toList(), intraThreads, BuildConfig.BUILD_TYPE, warmupFrames)
         report = result
-        timeline?.finishDiagnostic(result, SystemClock.elapsedRealtimeNanos())
+        frames.dryRun = null
+        timeline?.let { writer ->
+            if (dryRun == null) writer.finishDiagnostic(result, timelineStopNs)
+            else dryRun.finish { stopNs -> writer.finishDiagnostic(result, stopNs) }
+        }
         mutableUi.update { it.copy(recording = false, report = result) }
         viewModelScope.launch(Dispatchers.Default) {
             val pipeline = durationSummary(snapshot.frames.map { it.pipelineMs })

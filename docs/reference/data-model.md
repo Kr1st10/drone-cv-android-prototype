@@ -26,6 +26,18 @@
 
 `PhotoPhase` и `LivePhase` с переходами описаны в [жизненном цикле](../internals/detection-lifecycle.md). Persistent history отсутствует. `rememberSaveable` сохраняет отдельные UI-настройки через механизм Android state; bitmap и отчёт так на диск не сериализуются.
 
+## Журнал сухого прогона центрирования
+
+JVM-сценарий печатает решение в отдельной строке JSON с `mode: "dry_run"`. `time_ms` содержит время от начала прогона по монотонным часам. `generation` и `source_id` определяют сессию камеры. `dx_px` и `dy_px` содержат смещения в пикселях обработанного кадра или `null` для отсутствующих или устаревших координат.
+
+`box_state` описывает доступность рамки (`PRESENT`, `MISSING`, `STALE`). `yolo_state` сохраняет значение `TrackingObservation.classification`, а `confirmation_valid` показывает, действует ли последнее подтверждение в момент решения. Поэтому свежая рамка с исходом `MISSED` ещё может давать направление. `action` содержит `MOVE`, `HOLD` или `STOP`. Поля `horizontal` и `vertical` дают направления или `NONE`, поле `reason` содержит причину решения.
+
+В отладочном Android-журнале те же поля решения входят в `data` события `type: "dry_run"` в [потоке диагностической сессии](#поток-диагностической-сессии-dronecv-session-timeline-1). `decision_ns` совпадает с `event_ns` на шкале `elapsedRealtimeNanos`. `decision_ns`, `generation`, `source_id` и `frame_id` записываются десятичными строками. `frame_id` берётся из координатного кадра и равен `null` для событий жизненного цикла. Событие закрытия сохраняет последнее `yolo_state` сессии и устанавливает `confirmation_valid=false`. `header.dry_run_enabled` сообщает о выборе при запуске записи. Старые журналы могут не иметь этого поля. Читатели учитывают `dry_run` в числе событий. Интервалы сопровождения по-прежнему строятся по `state`.
+
+`STOP / TRACKING_CLEARED` ссылается на очищенный кадр. У `STOP / BOX_LOST` указан кадр наблюдения `LOST`. После завершения записи время решений ограничено зафиксированным `stop_ns`. `RECORDING_STOPPED` для открытой сессии использует эту границу, даже если отчёт записан позднее. `INPUT_OVERFLOW` содержит время обнаружения переполнения входной очереди. Если `Start` ещё не обработан, событие сохраняет поколение и источник из очереди, а `frame_id` равен `null`.
+
+[Контракт контроллера](api.md#сухой-прогон-центрирования-камеры) и [запуск и пример](../development/testing.md#сухой-прогон-центрирования-камеры).
+
 ## JSON производительности: schema_version 1
 
 Каноническая реализация — [DiagnosticReport.toJson](../../app/src/main/java/ru/university/dronecv/diagnostics/DiagnosticReport.kt), статистика/счётчики — [DiagnosticStatistics](../../app/src/main/java/ru/university/dronecv/diagnostics/DiagnosticStatistics.kt). Все перечисленные ключи serializer записывает; `null` означает недоступное/неприменимое значение. Формальной JSON Schema в репозитории нет. Новые поля конфигурации добавлены без смены schema_version; анализатор поддерживает исторические файлы без них, но не использует их для `--compare-threads`.

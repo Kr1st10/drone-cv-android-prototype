@@ -26,6 +26,28 @@ python3 ml/scripts/verify_apk_model.py app/build/outputs/apk/debug/app-debug.apk
 
 Отчёты: `app/build/test-results/testDebugUnitTest/TEST-*.xml`, `app/build/reports/tests/testDebugUnitTest/index.html`, `app/build/reports/lint-results-debug.xml` и `.html`. APK и AndroidTest APK — в `app/build/outputs/apk/`.
 
+## Сухой прогон центрирования камеры
+
+Запустите тесты из корня проекта на JDK 17. Для сборки нужны SDK и модель по [быстрому старту](../getting-started.md).
+
+```bash
+./gradlew --no-daemon :app:testDebugUnitTest \
+  --tests 'ru.university.dronecv.centering.CameraCenteringTest'
+```
+
+Сценарий `dryRunShiftCenterLoss` подаёт синтетические `TrackingSignal` для кадра 640 × 480 с зоной покоя 40 × 40 px. Он печатает строки `dry_run` в вывод Gradle и `system-out` отчёта `app/build/test-results/testDebugUnitTest/TEST-ru.university.dronecv.centering.CameraCenteringTest.xml`. В примере рамка смещена вправо и вверх, обновление LK возвращает её в центр, затем рамка пропадает при ещё действующем подтверждении YOLO.
+
+```jsonl
+{"mode":"dry_run","time_ms":0.0,"generation":1,"source_id":2,"dx_px":null,"dy_px":null,"box_state":"MISSING","yolo_state":"NONE","confirmation_valid":false,"action":"STOP","horizontal":"NONE","vertical":"NONE","reason":"WAITING_FOR_BOX"}
+{"mode":"dry_run","time_ms":0.0,"generation":1,"source_id":2,"dx_px":96.0,"dy_px":-56.0,"box_state":"PRESENT","yolo_state":"CONFIRMED","confirmation_valid":true,"action":"MOVE","horizontal":"RIGHT","vertical":"UP","reason":"TARGET_OFFSET"}
+{"mode":"dry_run","time_ms":100.0,"generation":1,"source_id":2,"dx_px":0.0,"dy_px":0.0,"box_state":"PRESENT","yolo_state":"CONFIRMED","confirmation_valid":true,"action":"HOLD","horizontal":"NONE","vertical":"NONE","reason":"IN_DEAD_ZONE"}
+{"mode":"dry_run","time_ms":180.0,"generation":1,"source_id":2,"dx_px":null,"dy_px":null,"box_state":"MISSING","yolo_state":"CONFIRMED","confirmation_valid":true,"action":"STOP","horizontal":"NONE","vertical":"NONE","reason":"BOX_LOST"}
+```
+
+Для проверки связки с файлом добавьте к Gradle-команде фильтры `--tests '*DryRunJournalTest'` и `--tests '*LiveTrackingIntegrationTest'`. `DryRunJournalTest` с подставными сигналами проверяет `MOVE`, `HOLD`, потерю и очистку рамки, повторный захват, таймер при молчащем потоке, отбрасывание результатов старого источника и запись с выключенным dry-run. Тест печатает фактический NDJSON из `TimelineWriter`. `LiveTrackingIntegrationTest` проверяет выдачу тех же сигналов живым контроллером с подставными кадрами и отсутствие вычисления на пути их публикации. [Контракт контроллера](../reference/api.md#сухой-прогон-центрирования-камеры).
+
+На Xiaomi 17 Pro в отладочной сборке выберите **B: YOLO + LK**, запустите детекцию, отметьте **Сухой прогон центрирования** в разделе «Диагностика» и начните сессию. После завершения экспортируйте файл из раздела «Журналы» и найдите строки `type: "dry_run"`. Зона покоя записи составляет 40 × 40 px обработанного кадра. На телефоне предстоит сверить направления с живым кадром при поворотах и подтвердить причины остановки при паузе и смене источника. Проверка направлений по осям и фактической остановки DJI RS 5 относится к этапу подключения управления.
+
 ## Выполнение device tests
 
 `BuildIdentityTest` проверяет адаптер существующих BuildConfig-полей, полный commit/dirty/null и изоляцию metadata между записями. `LiveControllerTest` проверяет конфигурацию разных сессий и измеренную геометрию, очищаемую при invalidation. `CameraInventoryInstrumentedTest` различает запросы и неизвестные результаты, `DiagnosticJsonInstrumentedTest` читает сохранённую metadata из JSON. `LiveCameraInstrumentedTest.cameraRunsRealModelAndStopClearsLateResults` проверяет видимость идентификатора и неизменность границ превью после результата и прокрутки. Компиляция этих тестов не означает их выполнение.
