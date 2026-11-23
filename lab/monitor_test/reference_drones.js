@@ -869,7 +869,6 @@
     function showScalePanel(visible) {
       clearTimeout(panelTimer);
       scalePanel.hidden = !visible;
-      viewport.classList.toggle('reference-controls-open', visible);
       if (visible) panelTimer = setTimeout(() => showScalePanel(false), 2000);
       else scaleStatus.textContent = '';
     }
