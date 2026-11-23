@@ -45,7 +45,8 @@ assert.ok(Math.abs((await snapshot()).review_segment_display_mm - 23.06309281124
 await page.locator('#referenceSegmentReview').evaluate(e => e.open = true);
 await page.check('#referenceSegmentToggle');
 await page.locator('#settings').evaluate(e => e.scrollTop = 0);
-const drawn = await page.locator('#referenceSegmentOverlay line').evaluate(line => {
+const drawn = await page.evaluate(() => {
+  const line = document.querySelector('#referenceSegmentOverlay line');
   const transform = line.getScreenCTM();
   const a = new DOMPoint(Number(line.getAttribute('x1')), Number(line.getAttribute('y1'))).matrixTransform(transform);
   const b = new DOMPoint(Number(line.getAttribute('x2')), Number(line.getAttribute('y2'))).matrixTransform(transform);
