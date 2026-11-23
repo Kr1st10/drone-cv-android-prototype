@@ -46,6 +46,7 @@ class DjiRsAttitudeCodecTest {
     }
 
     @Test fun rejectsInconsistentLengthsAndWrongHeaderFields() {
+        assertInvalid(InvalidReason.LENGTH, byteArrayOf())
         assertInvalid(InvalidReason.LENGTH, reply().copyOf(25))
         assertInvalid(InvalidReason.LENGTH, reply().copyOf(27))
         assertInvalid(InvalidReason.LENGTH, reply().also { it[1] = 25 })
@@ -53,6 +54,11 @@ class DjiRsAttitudeCodecTest {
         assertInvalid(InvalidReason.HEADER, reply().also { it[2] = 0x04 })
         assertInvalid(InvalidReason.HEADER, reply().also { it[3] = 0x03 })
         assertInvalid(InvalidReason.HEADER, reply().also { it[4] = 0x20 })
+    }
+
+    @Test fun rejectsAShortAcknowledgmentWithTheExpectedSequence() {
+        val acknowledgment = bytes("AA 13 00 20 00 00 00 00 34 12 94 B1 0E 00 00 FB EC 95 94")
+        assertInvalid(InvalidReason.LENGTH, acknowledgment)
     }
 
     @Test fun rejectsCorruptionInTheHeaderAndThePayload() {

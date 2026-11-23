@@ -75,10 +75,14 @@ internal object DjiRsAttitudeCodec {
         return frame
     }
 
-    /** Decodes one complete SDK reply for [expectedSequence]. Angles are returned in degrees. */
+    /**
+     * Checks the SDK header and declared length before matching [expectedSequence].
+     * A different sequence returns [InvalidReason.SEQUENCE] before attitude-specific checks.
+     * A matching packet must satisfy the attitude reply format. Angles are returned in degrees.
+     */
     fun decodeReply(frame: ByteArray, expectedSequence: Int): DjiRsAttitudeReply {
         require(expectedSequence in 0..SEQUENCE_MAX)
-        if (frame.size != REPLY_BYTES) return Invalid(InvalidReason.LENGTH)
+        if (frame.size < DATA_OFFSET + CRC32_BYTES) return Invalid(InvalidReason.LENGTH)
 
         val buffer = ByteBuffer.wrap(frame).order(ByteOrder.LITTLE_ENDIAN)
         val versionAndLength = buffer.getShort(LENGTH_OFFSET).toInt() and 0xFFFF
@@ -96,6 +100,7 @@ internal object DjiRsAttitudeCodec {
 
         val sequence = buffer.getShort(SEQUENCE_OFFSET).toInt() and 0xFFFF
         if (sequence != expectedSequence) return Invalid(InvalidReason.SEQUENCE)
+        if (frame.size != REPLY_BYTES) return Invalid(InvalidReason.LENGTH)
 
         val frameCrcOffset = frame.size - CRC32_BYTES
         val frameCrc = reflectedCrc(frame, frameCrcOffset, CRC32_POLYNOMIAL)

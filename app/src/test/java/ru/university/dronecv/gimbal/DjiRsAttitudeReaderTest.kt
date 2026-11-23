@@ -38,6 +38,18 @@ class DjiRsAttitudeReaderTest {
         assertEquals(1, transport.writes.size)
     }
 
+    @Test fun skipsAShortAcknowledgmentForAnotherCommand() {
+        val acknowledgment = bytes("AA 13 00 20 00 00 00 00 FF FF 03 CC 0E 00 00 97 AC 26 0A")
+        transport.replies.add(ReplyAfter(acknowledgment, 40))
+        transport.replies.add(ReplyAfter(matchingReply, 20))
+
+        val exchange = reader.readOnce(TIMEOUT)
+
+        assertEquals(Outcome.Reply(expectedAngles), exchange.outcome)
+        assertEquals(1, transport.writes.size)
+        assertEquals(listOf(TIMEOUT, 60L), transport.receiveTimeouts)
+    }
+
     @Test fun skipsAForeignReplyWithCorruptedPayload() {
         val corrupted = foreignReply.copyOf().also { it[16] = 0 }
         transport.replies.add(ReplyAfter(corrupted, 40))
