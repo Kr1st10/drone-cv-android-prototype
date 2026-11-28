@@ -127,3 +127,87 @@ for (const count of [0,1,2]) {
   append('session_end',{stop_ns:'200',recording_complete:true,dropped_count:'0',accepted_count:String(id),written_count:String(id),interrupted:false});
   assert.equal(reader.finish().recording_complete,count===1);
 }
+
+// One-turn audit events do not replace the canonical state timeline.
+{
+  const reader=timelineImporter();let id=0;
+  const append=(type,data)=>reader.push({schema:'dronecv-session-timeline-1',session_id:'one-turn',event_id:String(++id),event_ns:'100',type,data});
+  append('header',{start_ns:'100'});
+  append('one_turn',{schema_version:1,attempt_id:'test',kind:'result',status:'success'});
+  append('session_end',{stop_ns:'200',recording_complete:true,dropped_count:'0',accepted_count:String(id),written_count:String(id),interrupted:false});
+  assert.equal(reader.finish().recording_complete,true);
+}
+
+function simulationFixture(edit = rows => rows) {
+  const events = [
+    ['header', { start_ns: String(base), mode: 'centering_simulation', simulation: true }],
+    ['centering_simulation', { kind: 'frame', offset_percent: 38 }],
+    ['centering_simulation', { kind: 'step_requested', step: 1, offset_percent: 38 }],
+    ['centering_simulation', { kind: 'step_completed', step: 1 }],
+    ['centering_simulation', { kind: 'frame_ignored', offset_percent: 38 }],
+    ['centering_simulation', { kind: 'finished', completed_steps: 1, offset_percent: 0, reason: 'centered' }],
+    ['session_end', { stop_ns: String(base), recording_complete: true, interrupted: false,
+      accepted_count: '6', written_count: '6', dropped_count: '0', reason: 'centered' }],
+  ];
+  const rows = events.map(([type, data], i) => ({ schema: 'dronecv-session-timeline-1',
+    session_id: 'simulation', event_id: String(i + 1), event_ns: String(base), type, data }));
+  const importer = timelineImporter();
+  edit(rows).forEach(row => importer.push(row));
+  return importer.finish();
+}
+
+const simulation = simulationFixture();
+assert.deepEqual(simulation.centering_simulation, { label: 'Симуляция DJI', completed_steps: 1,
+  offset_percent: 0, stop_reason: 'centered', stop_label: 'Цель в зоне покоя', confirmed: true, integrity_errors: [] });
+assert.equal(simulation.recording_complete, true);
+assert.deepEqual(simulation.frames, []);
+const missingSimulationEvent = simulationFixture(rows => rows.filter(row => row.event_id !== '4'));
+assert.equal(missingSimulationEvent.recording_complete, false);
+assert.equal(missingSimulationEvent.event_integrity.missing_events, '1');
+assert.equal(missingSimulationEvent.centering_simulation.completed_steps, 0);
+assert.equal(simulationFixture(rows => rows.slice(0, -1)).recording_complete, false);
+assert.equal(simulationFixture(rows => {
+  rows.at(-1).data.dropped_count = '1';
+  return rows;
+}).recording_complete, false);
+assert.throws(() => simulationFixture(rows => {
+  rows[0].data.mode = 'yolo';
+  return rows;
+}), /Неизвестная запись: centering_simulation/);
+
+
+function completeEnvelope(rows) {
+  rows.forEach((row, index) => { row.event_id = String(index + 1); });
+  const footer = rows.at(-1).data;
+  footer.accepted_count = footer.written_count = String(rows.length - 1);
+  return rows;
+}
+const simulatedFailures = [
+  [rows => { rows.splice(-1, 0, structuredClone(rows.at(-3))); return rows; }, /Сразу после finished/],
+  [rows => { rows.splice(-1, 0, {...rows[0], type:'metadata', data:{}}); return rows; }, /Сразу после finished/],
+  [rows => rows.filter(row => row.data.kind !== 'finished'), /отсутствует событие finished/],
+  [rows => { rows.splice(-1, 0, structuredClone(rows.at(-2))); return rows; }, /несколько событий finished/],
+  [rows => { rows.at(-1).data.reason = 'stopped'; return rows; }, /Причины остановки .* различаются/],
+  [rows => { rows.at(-2).data.reason = ' '; return rows; }, /непустой reason/],
+  [rows => { rows.at(-2).data.completed_steps = 2; return rows; }, /не совпадает с числом событий step_completed/],
+  [rows => { rows.at(-2).data.completed_steps = -1; return rows; }, /целое неотрицательное число/],
+];
+for (const [edit, reason] of simulatedFailures) {
+  const brokenSimulation = simulationFixture(rows => completeEnvelope(edit(rows)));
+  assert.equal(brokenSimulation.event_integrity.sequence_broken, false);
+  assert.equal(brokenSimulation.event_integrity.missing_events, '0');
+  assert.equal(brokenSimulation.event_integrity.footer_present, true);
+  assert.equal(brokenSimulation.recording_complete, false);
+  assert.equal(brokenSimulation.centering_simulation.confirmed, false);
+  assert.equal(brokenSimulation.centering_simulation.integrity_errors.length, 1);
+  assert.match(brokenSimulation.centering_simulation.integrity_errors[0], reason);
+}
+const stoppedSimulation = simulationFixture(rows => {
+  for (const row of rows.slice(-2)) row.data.reason = 'stopped';
+  rows.at(-1).data.interrupted = true;
+  return rows;
+});
+assert.equal(stoppedSimulation.recording_complete, true);
+assert.equal(stoppedSimulation.complete, false);
+assert.equal(stoppedSimulation.centering_simulation.confirmed, true);
+assert.equal(stoppedSimulation.centering_simulation.stop_label, 'Остановлено');

@@ -16,6 +16,29 @@ import ru.university.dronecv.motion.MotionJournal
 import ru.university.dronecv.tracking.TrackingSession
 
 class LiveControllerTest {
+    @Test fun oneTurnObserverReceivesOnlyCurrentYoloPublicationAndInvalidation() {
+        val signals = mutableListOf<TargetSignal>()
+        var invalidations = 0
+        val backend = Backend()
+        val controller = LiveController(backend, Worker(), eventTime = { 100L },
+            onYoloSignal = signals::add, onInputInvalidated = { invalidations++ }, nanoTime = { 100L })
+        controller.setTrackingEnabled(false)
+        val source = controller.newSource()
+        controller.configure(true, .5f)
+        controller.analyze(Frame(), source, FrameStamp(10L, CaptureTimebase.ELAPSED_REALTIME, 50L))
+        assertEquals(1, signals.size)
+        assertEquals(controller.state.value.target, signals.single())
+        var armSource: Long? = null
+        assertTrue(controller.withActiveYoloSource { armSource = it })
+        assertEquals(source, armSource)
+        val beforeStop = invalidations
+        controller.configure(false, .5f)
+        assertTrue(invalidations > beforeStop)
+        assertFalse(controller.withActiveYoloSource { fail("stopped source must not arm") })
+        controller.analyze(Frame(), source, FrameStamp(10L, CaptureTimebase.ELAPSED_REALTIME, 50L))
+        assertEquals(1, signals.size)
+    }
+
     @Test fun inventoryGeometryIsMeasuredAndClearedOnInvalidation() {
         val worker = Worker()
         val backend = object : LiveBackend<CameraFrameSnapshot> {

@@ -109,32 +109,37 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
             }
         }
     }
-    fun stop(interrupted: Boolean = false, reason: String? = null) = synchronized(lock) {
-        startRevision++
-        val id = token ?: return@synchronized
-        val dryRun = frames.dryRun
-        token = null; sampler?.cancel(); sampler = null
-        val reportStopNs = System.nanoTime()
-        var timelineStopNs = 0L
-        val snapshot = frames.stop(id, reportStopNs, interrupted, reason) {
-            timelineStopNs = dryRun?.seal() ?: SystemClock.elapsedRealtimeNanos()
-        } ?: return@synchronized
-        frames.timeline = null
-        val result = DiagnosticReport(startedEpochMs, "${Build.MANUFACTURER} ${Build.MODEL}", Build.VERSION.RELEASE,
-            Build.VERSION.SDK_INT, BuildConfig.VERSION_NAME, BuildConfig.DRONE_MODEL_ASSET, BuildConfig.DRONE_MODEL_SHA256, threshold,
-            snapshot, resources.toList(), intraThreads, BuildConfig.BUILD_TYPE, warmupFrames)
-        report = result
-        frames.dryRun = null
-        timeline?.let { writer ->
-            if (dryRun == null) writer.finishDiagnostic(result, timelineStopNs)
-            else dryRun.finish { stopNs -> writer.finishDiagnostic(result, stopNs) }
-        }
-        mutableUi.update { it.copy(recording = false, report = result) }
-        viewModelScope.launch(Dispatchers.Default) {
-            val pipeline = durationSummary(snapshot.frames.map { it.pipelineMs })
-            val ort = durationSummary(snapshot.frames.map { it.inferenceMs })
-            synchronized(lock) {
-                if (report === result && token == null) mutableUi.update { it.copy(pipeline = pipeline, ort = ort) }
+    var onBeforeStop: (() -> Unit)? = null
+
+    fun stop(interrupted: Boolean = false, reason: String? = null) {
+        onBeforeStop?.invoke()
+        synchronized(lock) {
+            startRevision++
+            val id = token ?: return@synchronized
+            val dryRun = frames.dryRun
+            token = null; sampler?.cancel(); sampler = null
+            val reportStopNs = System.nanoTime()
+            var timelineStopNs = 0L
+            val snapshot = frames.stop(id, reportStopNs, interrupted, reason) {
+                timelineStopNs = dryRun?.seal() ?: SystemClock.elapsedRealtimeNanos()
+            } ?: return@synchronized
+            frames.timeline = null
+            val result = DiagnosticReport(startedEpochMs, "${Build.MANUFACTURER} ${Build.MODEL}", Build.VERSION.RELEASE,
+                Build.VERSION.SDK_INT, BuildConfig.VERSION_NAME, BuildConfig.DRONE_MODEL_ASSET, BuildConfig.DRONE_MODEL_SHA256, threshold,
+                snapshot, resources.toList(), intraThreads, BuildConfig.BUILD_TYPE, warmupFrames)
+            report = result
+            frames.dryRun = null
+            timeline?.let { writer ->
+                if (dryRun == null) writer.finishDiagnostic(result, timelineStopNs)
+                else dryRun.finish { stopNs -> writer.finishDiagnostic(result, stopNs) }
+            }
+            mutableUi.update { it.copy(recording = false, report = result) }
+            viewModelScope.launch(Dispatchers.Default) {
+                val pipeline = durationSummary(snapshot.frames.map { it.pipelineMs })
+                val ort = durationSummary(snapshot.frames.map { it.inferenceMs })
+                synchronized(lock) {
+                    if (report === result && token == null) mutableUi.update { it.copy(pipeline = pipeline, ort = ort) }
+                }
             }
         }
     }
@@ -153,6 +158,7 @@ class DiagnosticViewModel(private val app: Application) : AndroidViewModel(app) 
         return ResourceSample((now - start).coerceAtLeast(0), pss, thermal,
             if (level >= 0 && scale > 0) level * 100 / scale else null, status, temperature)
     }
+
     override fun onCleared() { stop(true, "ViewModel destroyed"); super.onCleared() }
 }
 

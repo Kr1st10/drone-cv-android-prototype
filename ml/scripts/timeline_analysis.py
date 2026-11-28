@@ -1,8 +1,19 @@
 """Read the streaming Android timeline without rounding Android Long values."""
 import hashlib
 import json
+import math
 
 SCHEMA = 'dronecv-session-timeline-1'
+CENTERING_STOP_LABELS = {
+    'centered': 'Цель в зоне покоя',
+    'target_lost': 'Цель потеряна',
+    'frame_timeout': 'Истекло время ожидания кадра',
+    'step_timeout': 'Истекло время ожидания шага',
+    'step_limit': 'Достигнут лимит шагов',
+    'source_changed': 'Источник или настройки камеры изменились',
+    'stopped': 'Остановлено',
+    'error': 'Ошибка сеанса или записи журнала',
+}
 
 
 def metadata_provenance(records):
@@ -81,6 +92,30 @@ def publication_timing(data):
         raise ValueError('state processing/publication time reversal')
 
 
+def _centering_errors(finished_count, finished, footer, steps, adjacent):
+    if finished_count == 0:
+        return ['До session_end отсутствует событие finished.']
+    if finished_count > 1:
+        return ['До session_end записано несколько событий finished.']
+    errors = []
+    if footer is not None and not adjacent:
+        errors.append('Сразу после finished должно идти событие session_end.')
+    reason = finished.get('reason')
+    footer_reason = footer.get('reason') if footer is not None else None
+    if (not isinstance(reason, str) or not reason.strip()
+            or (footer is not None and (not isinstance(footer_reason, str) or not footer_reason.strip()))):
+        errors.append('В finished и session_end должен быть указан непустой reason.')
+    elif footer is not None and reason != footer_reason:
+        errors.append('Причины остановки в finished и session_end различаются.')
+    declared = finished.get('completed_steps')
+    whole_number = type(declared) is int or (type(declared) is float and declared.is_integer())
+    if not whole_number or declared < 0:
+        errors.append('В finished.completed_steps ожидается целое неотрицательное число.')
+    elif declared != steps:
+        errors.append('Число шагов в finished.completed_steps не совпадает с числом событий step_completed.')
+    return errors
+
+
 def read_timeline(path):
     """Read intervals, rejecting incompatible publication clocks before using time.
 
@@ -101,6 +136,8 @@ def read_timeline(path):
     gaps = []
     records_before_end = 0
     metadata_records = []
+    simulation_steps, simulation_finished, simulation_end = 0, 0, {}
+    finished_line = footer_line = None
     with path.open('rb') as stream:
         for line_no, raw in enumerate(stream, 1):
             digest.update(raw)
@@ -166,14 +203,23 @@ def read_timeline(path):
                 else:
                     intervals.append({**current, 'end_ns': published, 'duration_ns': published-current['start_ns']})
                     current = {**data, 'start_ns': published}
+            elif kind == 'centering_simulation' and header.get('mode') == 'centering_simulation':
+                if end is None and data.get('kind') == 'step_completed':
+                    simulation_steps += 1
+                if end is None and data.get('kind') == 'finished':
+                    simulation_finished += 1
+                    if simulation_finished == 1:
+                        simulation_end = data
+                        finished_line = line_no
             elif kind == 'session_end':
                 if end is not None: errors.append('duplicate session_end')
+                else: footer_line = line_no
                 end = data
             elif kind == 'recording_failure':
                 failure = True
                 errors.append('recording failure: ' + str(data.get('reason')))
             elif kind not in ('frame', 'detection', 'metadata', 'publication', 'resource', 'diagnostic_frame', 'diagnostic_report', 'tracking', 'frame_geometry', 'stale_discard', 'discard',
-                             'dry_run'):
+                             'dry_run', 'one_turn'):
                 raise ValueError(f'unsupported timeline record type: {kind}')
     if header is None: raise ValueError('missing timeline header')
     try:
@@ -203,6 +249,12 @@ def read_timeline(path):
     else: errors.append('missing session_end')
     if header.get('diagnostic_report_required') is True and counts.get('diagnostic_report', 0) != 1:
         errors.append('missing or duplicate mandatory diagnostic_report')
+    is_simulation = header.get('mode') == 'centering_simulation'
+    simulation_errors = _centering_errors(
+        simulation_finished, simulation_end, end, simulation_steps,
+        finished_line is not None and footer_line == finished_line + 1,
+    ) if is_simulation else []
+    errors.extend(simulation_errors)
     complete = bool(end and end.get('recording_complete') is True and not errors)
     # Lost records can contain state changes, and their event clocks need not be
     # ordered. Without trustworthy transition bounds, none of the carried boxes
@@ -218,7 +270,7 @@ def read_timeline(path):
             interval['state_known'] = interval.get('reason') != 'initial_unknown'
         for key in ('start_ns', 'end_ns', 'duration_ns'):
             interval[key] = str(interval[key])
-    return {'schema': SCHEMA, 'file': path.as_posix(), 'sha256': digest.hexdigest(), 'session_id': session_id,
+    result = {'schema': SCHEMA, 'file': path.as_posix(), 'sha256': digest.hexdigest(), 'session_id': session_id,
             'header': header, 'end': end, 'recording_complete': complete,
             'provenance': metadata_provenance(metadata_records),
             'experiment_status': end.get('experiment_status') if end else 'unknown',
@@ -226,6 +278,20 @@ def read_timeline(path):
             'intervals': intervals, 'counts': counts, 'errors': errors,
             'missing_extent': 'entire_interval_conservative' if uncertain else None,
             'metric_eligibility': {'physical_tracking': False, 'reason': 'independent reference required'}}
+    if is_simulation:
+        final = simulation_end if simulation_finished == 1 else {}
+        reason = final.get('reason')
+        if reason is None and end:
+            reason = end.get('reason')
+        reason = reason if isinstance(reason, str) and reason.strip() else None
+        offset = final.get('offset_percent')
+        valid_offset = type(offset) is int or type(offset) is float and math.isfinite(offset)
+        result['centering_simulation'] = dict(
+            label='Симуляция DJI', completed_steps=simulation_steps, offset_percent=offset if valid_offset else None,
+            stop_reason=reason, stop_label=CENTERING_STOP_LABELS.get(reason, reason),
+            confirmed=complete, integrity_errors=simulation_errors,
+        )
+    return result
 
 
 REPORT_SCHEMA = 'dronecv-coordinate-continuity-1'
@@ -371,6 +437,10 @@ def analyze_timeline(path, *, max_coordinate_age_ns):
                                 scope='bounded_recording' if bounded else 'unavailable'),
                   metrics=None, coordinate_gaps=None, fresh_coordinate_gaps=None,
                   unavailable_reasons=[], unknown_reasons=[])
+    if 'centering_simulation' in timeline:
+        report['centering_simulation'] = timeline['centering_simulation']
+        report['unavailable_reasons'] = ['coordinate continuity is unavailable for a simulation']
+        return report
     if not bounded:
         report['unavailable_reasons'] = ['trustworthy recording boundaries unavailable; full-run metrics not computed']
         return report
@@ -414,6 +484,15 @@ def write_episode_csv(report, path):
                 writer.writerow({'gap_type': name, **{k: json.dumps(v, ensure_ascii=False) for k, v in e.items()}})
 
 
+def centering_summary_text(summary, errors):
+    offset = f"{summary['offset_percent']}%" if summary['offset_percent'] is not None else 'нет данных'
+    text = (f"{summary['label']}. Завершённых шагов: {summary['completed_steps']}. "
+            f"Итоговое смещение: {offset}. Причина остановки: {summary['stop_label'] or 'нет данных'}.")
+    if not summary['confirmed']:
+        text += '\nИтог не подтверждён. ' + (' '.join(errors) or 'Запись неполная или содержит пропуски.')
+    return text
+
+
 def main():
     """Run the standalone continuity CLI, preserving the legacy analyzer modes."""
     import argparse
@@ -437,7 +516,9 @@ def main():
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False)+'\n', encoding='utf-8')
     write_episode_csv(report, args.episodes_csv)
     print(f"Session {report['session_id']}: {report['interval']['scope']}; complete={report['recording_complete']}; experiment={report['experiment_status']}")
-    if report['metrics'] is None:
+    if 'centering_simulation' in report:
+        print(centering_summary_text(report['centering_simulation'], report['integrity_errors']))
+    elif report['metrics'] is None:
         print('; '.join(report['unavailable_reasons']))
     else:
         d = report['metrics']['duration_ns']

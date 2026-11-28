@@ -79,6 +79,8 @@ class LiveController<Frame : AutoCloseable>(
     private val motionFrame: ((Frame, Long, FrameStamp) -> Long?)? = null,
     private val onFailure: ((String) -> Unit)? = null,
     private val packagedMetadataFields: String? = null,
+    private val onYoloSignal: ((TargetSignal) -> Unit)? = null,
+    private val onInputInvalidated: (() -> Unit)? = null,
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     init {
@@ -119,6 +121,27 @@ class LiveController<Frame : AutoCloseable>(
 
     fun setTrackingEnabled(enabled: Boolean): Boolean = publicationTransaction {
         if (active || motion?.token() != null) false else { trackingEnabled = enabled; true }
+    }
+    /** Runs a short permit action under the same lock as source and mode invalidation. */
+    internal fun withActiveYoloSource(action: (Long) -> Unit): Boolean = publicationTransaction {
+        if (closed || !active || trackingEnabled || mutableState.value.phase != LivePhase.RUNNING) false
+        else { action(source); true }
+    }
+
+    private class YoloObserver(val signal: (TargetSignal) -> Unit, val invalidate: () -> Unit)
+    private var yoloObserver: YoloObserver? = null
+
+    /** Observe new results only. Callbacks must be short and run under the publication lock. */
+    internal fun observeActiveYolo(
+        onSignal: (TargetSignal) -> Unit,
+        onInvalidated: () -> Unit,
+    ): AutoCloseable? = publicationTransaction {
+        if (yoloObserver != null) return@publicationTransaction null
+        val observer = YoloObserver(onSignal, onInvalidated)
+        if (!withActiveYoloSource { yoloObserver = observer }) return@publicationTransaction null
+        AutoCloseable {
+            publicationTransaction { if (yoloObserver === observer) yoloObserver = null }
+        }
     }
     private var generation = 0L
     private var revision = 0L
@@ -567,6 +590,10 @@ class LiveController<Frame : AutoCloseable>(
     }
 
     private fun invalidatePending() {
+        val observer = yoloObserver
+        yoloObserver = null
+        observer?.invalidate?.invoke()
+        onInputInvalidated?.invoke()
         latestFrameGeometry = null
         pumpEpoch++
         pumpScheduled = false
@@ -781,6 +808,10 @@ class LiveController<Frame : AutoCloseable>(
                                     acceptedYoloFrame, acceptedYoloStamp, acceptedYoloNs, signal?.frameId, diagnostics?.currentToken(), readyNs, signal?.dispatchNs)
                             }
                             if (forTracking || ticket == null || eventTime == null) mutableState.value = next.copy(target = signal)
+                            if (!forTracking && signal != null && !closed && active && generation == request.first) {
+                                onYoloSignal?.invoke(signal)
+                                yoloObserver?.signal?.invoke(signal)
+                            }
                         }
                         result
                     } else null

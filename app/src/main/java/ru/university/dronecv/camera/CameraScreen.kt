@@ -55,9 +55,19 @@ import ru.university.dronecv.tracking.TrackingSession
 
 /** Главный экран: запрос разрешения, видеопревью и обработка ошибок камеры. */
 @Composable
-fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int) -> Unit, onOpenJournals: () -> Unit = {}, onConfidenceChange: (Float) -> Unit) {
+fun CameraScreen(
+    confidence: Float,
+    initialThreads: Int,
+    onThreadsChanged: (Int) -> Unit,
+    onConfidenceChange: (Float) -> Unit,
+) {
     val context = LocalContext.current
     val diagnostics: DiagnosticViewModel = viewModel()
+    val oneTurn: ru.university.dronecv.oneturn.OneTurnViewModel = viewModel()
+    DisposableEffect(diagnostics, oneTurn) {
+        diagnostics.onBeforeStop = oneTurn.controller::endDiagnostic
+        onDispose { oneTurn.controller.endDiagnostic(); diagnostics.onBeforeStop = null }
+    }
     val cameraProbe = rememberCameraProbeState()
     val motionModel: MotionViewModel = viewModel()
     val motion = motionModel.journal
@@ -70,7 +80,8 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
             eventTime = android.os.SystemClock::elapsedRealtimeNanos, tracking = tracking, motion = motion,
             packagedMetadataFields = ru.university.dronecv.PackagedBuild.metadataFields,
             motionFrame = { frame, token, stamp -> recordMotionFrame(motion, frame, token, stamp) },
-            onFailure = { diagnostics.stop(true, "Detector error: $it") })
+            onFailure = { diagnostics.stop(true, "Detector error: $it") },
+            onYoloSignal = oneTurn.controller::observe, onInputInvalidated = oneTurn.controller::invalidate)
     }
     DisposableEffect(controller) { onDispose { controller.close(); diagnostics.stop(true, "Camera screen disposed") } }
     val liveState by controller.state.collectAsStateWithLifecycle()
@@ -145,8 +156,8 @@ fun CameraScreen(confidence: Float, initialThreads: Int, onThreadsChanged: (Int)
                     threadState = threadState,
                     probe = cameraProbe,
                     diagnostics = diagnostics,
+                    oneTurn = oneTurn,
                     motionModel = motionModel,
-                    onOpenJournals = onOpenJournals,
                     running = running,
                     confidence = confidence,
                     onRunningChange = {

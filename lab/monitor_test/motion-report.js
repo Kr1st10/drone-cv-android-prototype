@@ -278,9 +278,42 @@
 
   // Long timestamps are subtracted as BigInt before converting to Number. Frame
   // IDs remain available as strings; the legacy evaluator uses dense indices.
+  const centeringStopLabels = {
+    centered: 'Цель в зоне покоя',
+    target_lost: 'Цель потеряна',
+    frame_timeout: 'Истекло время ожидания кадра',
+    step_timeout: 'Истекло время ожидания шага',
+    step_limit: 'Достигнут лимит шагов',
+    source_changed: 'Источник или настройки камеры изменились',
+    stopped: 'Остановлено',
+    error: 'Ошибка сеанса или записи журнала',
+  };
+
+  function centeringErrors(finishedCount, finished, footer, steps, adjacent) {
+    if (finishedCount === 0) return ['До session_end отсутствует событие finished.'];
+    if (finishedCount > 1) return ['До session_end записано несколько событий finished.'];
+    const errors = [];
+    if (footer && !adjacent) errors.push('Сразу после finished должно идти событие session_end.');
+    if (typeof finished.reason !== 'string' || !finished.reason.trim() ||
+        (footer && (typeof footer.reason !== 'string' || !footer.reason.trim()))) {
+      errors.push('В finished и session_end должен быть указан непустой reason.');
+    } else if (footer && finished.reason !== footer.reason) {
+      errors.push('Причины остановки в finished и session_end различаются.');
+    }
+    const declared = finished.completed_steps;
+    if (!Number.isInteger(declared) || declared < 0) {
+      errors.push('В finished.completed_steps ожидается целое неотрицательное число.');
+    } else if (declared !== steps) {
+      errors.push('Число шагов в finished.completed_steps не совпадает с числом событий step_completed.');
+    }
+    return errors;
+  }
+
   function timelineImporter() {
     let start=null, session=null, lastId=null, footer=null, broken=false, latest=0, accepted=0n, missing=0n, firstMissing=null, lastMissing=null;
     let diagnosticRequired=false, diagnosticReports=0;
+    let simulationSteps=0, simulationEnd=null, simulationFinished=0, sessionEnded=false;
+    let previousWasFinished=false, simulationEndAdjacent=false;
     const j={schema:'dronecv-motion-android-1',frames:[],detections:[],publications:[],complete:false,truncated:true};
     const ids=new Map(), states=[];
     j.source_schema='dronecv-session-timeline-1';j.metadata_records=[];
@@ -292,9 +325,11 @@
       if(!row.data || typeof row.data!=='object'||typeof row.session_id!=='string') throw Error('Некорректная запись журнала.');
       const id=integer(row.event_id,'event_id'); integer(row.event_ns,'event_ns');
       if(session===null) session=row.session_id;
-      if(session!==row.session_id||footer || (lastId===null && id!==1n)) broken=true;
+      if(session!==row.session_id||sessionEnded || (lastId===null && id!==1n)) broken=true;
       if(lastId!==null && id!==lastId+1n) {broken=true;if(id>lastId+1n){missing+=id-lastId-1n;firstMissing??=lastId+1n;lastMissing=id-1n;}}
       lastId=id; const d=row.data;
+      if (row.type==='session_end' && !sessionEnded) simulationEndAdjacent=previousWasFinished;
+      previousWasFinished=row.type==='centering_simulation' && d.kind==='finished';
       if(['header','metadata','diagnostic_report','frame_geometry'].includes(row.type)) {
         const data=Object.fromEntries(Object.entries(d).filter(([key])=>!['frames','resources','tracking','calibration_image'].includes(key)));
         if(d.calibration_image) data.calibration_image={width:d.calibration_image.width,height:d.calibration_image.height};
@@ -344,10 +379,13 @@
           observation_publication_ns:d.observation_publication_ns??null,
           source:d.box==null?'clear':d.result_source==='yolo'?'yolo':'lk',
           state_known:Object.hasOwn(d,'box'),initial_snapshot:initial});
-      } else if(row.type==='session_end') {footer=d;try {j.stop_ns=relative(d.stop_ns,'stop_ns');} catch (_) {broken=true;footer=null;}}
+      } else if(row.type==='centering_simulation' && j.mode==='centering_simulation') {
+        if(!sessionEnded && d.kind==='step_completed') simulationSteps++;
+        if(!sessionEnded && d.kind==='finished') {simulationFinished++;simulationEnd??=d;}
+      } else if(row.type==='session_end') {sessionEnded=true;footer=d;try {j.stop_ns=relative(d.stop_ns,'stop_ns');} catch (_) {broken=true;footer=null;}}
       else if(row.type==='recording_failure') broken=true;
       else if(row.type==='diagnostic_report') diagnosticReports++;
-      else if(!['state','resource','diagnostic_frame','tracking','frame_geometry','stale_discard','discard','dry_run'].includes(row.type)) throw Error(`Неизвестная запись: ${row.type}`);
+      else if(!['state','resource','diagnostic_frame','tracking','frame_geometry','stale_discard','discard','dry_run','one_turn'].includes(row.type)) throw Error(`Неизвестная запись: ${row.type}`);
     }
     function finish(partial=false) {
       if(start===null) throw Error('Отсутствует заголовок.');
@@ -375,8 +413,22 @@
       if(incomplete) j.detections=j.detections.filter(d=>d.frame_id!==null);
       if(!footer) j.stop_ns=latest;
       j.event_integrity={missing_events:String(missing),dropped_count:footer?.dropped_count??null,footer_present:!!footer,sequence_broken:broken};
-      j.complete=!incomplete && footer.interrupted===false;j.truncated=incomplete;
-      j.recording_complete=!incomplete;j.experiment_status=footer?.experiment_status??'unknown';j.session_id=session;
+      let simulationErrors=[];
+      if(j.mode==='centering_simulation') {
+        simulationErrors=centeringErrors(simulationFinished,simulationEnd,footer,simulationSteps,simulationEndAdjacent);
+        const final=simulationFinished===1?simulationEnd:null;
+        const reason=final?.reason ?? footer?.reason;
+        const stopReason=typeof reason==='string' && reason.trim() ? reason : null;
+        j.centering_simulation={
+          label:'Симуляция DJI',completed_steps:simulationSteps,
+          offset_percent:Number.isFinite(final?.offset_percent)?final.offset_percent:null,
+          stop_reason:stopReason,stop_label:Object.hasOwn(centeringStopLabels,stopReason)?centeringStopLabels[stopReason]:stopReason,
+          confirmed:!incomplete && simulationErrors.length===0,integrity_errors:simulationErrors,
+        };
+      }
+      j.recording_complete=!incomplete && simulationErrors.length===0;
+      j.complete=j.recording_complete && footer.interrupted===false;j.truncated=incomplete;
+      j.experiment_status=footer?.experiment_status??'unknown';j.session_id=session;
       return j;
     }
     return {push,finish};

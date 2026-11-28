@@ -24,23 +24,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 import ru.university.dronecv.BuildConfig
 import ru.university.dronecv.R
+import ru.university.dronecv.camera.LiveController
 
 @Composable
 internal fun DiagnosticPanel(
     model: DiagnosticViewModel,
     liveReady: Boolean,
-    warmupFrames: Long,
     dryRunAvailable: Boolean,
+    controller: LiveController<*>,
+    stopAllowed: Boolean = true,
     onStart: (Boolean) -> Unit,
 ) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val showDryRun = BuildConfig.DEBUG && dryRunAvailable
     var dryRun by remember(showDryRun) { mutableStateOf(false) }
-    Text("Диагностика", style = MaterialTheme.typography.titleSmall)
-    Text("Прогрев до записи: $warmupFrames обработанных кадров; сессия начинается вручную.", style = MaterialTheme.typography.bodySmall)
+    Text("Запись диагностики", style = MaterialTheme.typography.titleSmall)
     if (ui.recording) {
-        Text("Сессия: ${ui.elapsedSeconds} с. При фоне или выключении экрана она будет помечена прерванной.", style = MaterialTheme.typography.bodySmall)
-        Button(onClick = { model.stop() }, modifier = Modifier.fillMaxWidth().testTag("diagnostic-stop")) { Text("Завершить сессию") }
+        Button(onClick = { model.stop() }, enabled = stopAllowed, modifier = Modifier.fillMaxWidth().testTag("diagnostic-stop")) { Text("Завершить сессию") }
     } else {
         if (showDryRun) {
             Row(
@@ -54,7 +54,20 @@ internal fun DiagnosticPanel(
         }
         Button(onClick = { onStart(showDryRun && dryRun) }, enabled = liveReady && !ui.starting,
             modifier = Modifier.fillMaxWidth().testTag("diagnostic-start")) { Text("Начать сессию") }
-        if (!liveReady) Text("Сначала запустите детекцию и дождитесь кадра.", style = MaterialTheme.typography.bodySmall)
+        Text("Для записи запустите детекцию и дождитесь кадра.", style = MaterialTheme.typography.bodySmall)
+    }
+    DjiAttitudePanel()
+    CenteringSimulationPanel(controller, liveReady && !dryRunAvailable)
+}
+
+@Composable
+internal fun DiagnosticReadings(model: DiagnosticViewModel, warmupFrames: Long) {
+    val ui by model.ui.collectAsStateWithLifecycle()
+    if (ui.recording) {
+        Text("Сессия: ${ui.elapsedSeconds} с. При фоне или выключении экрана она будет помечена прерванной.",
+            style = MaterialTheme.typography.bodySmall)
+    } else {
+        Text("Прогрев до записи: $warmupFrames обработанных кадров", style = MaterialTheme.typography.bodySmall)
     }
     ui.report?.let { report ->
         val f = report.frames
@@ -66,7 +79,6 @@ internal fun DiagnosticPanel(
                 style = MaterialTheme.typography.bodySmall)
         }
         ui.ort?.let { Text("ORT: среднее ${fmt(it.mean)}, медиана ${fmt(it.median)} мс", style = MaterialTheme.typography.bodySmall) }
-
     }
     if (ui.starting) Text("Подготовка записи…", style = MaterialTheme.typography.bodySmall)
     ui.recordingIssue?.let { Text("Запись неполна: $it", style = MaterialTheme.typography.bodySmall) }

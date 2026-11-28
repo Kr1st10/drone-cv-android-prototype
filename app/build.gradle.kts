@@ -1,5 +1,6 @@
 import groovy.json.JsonSlurper
 import java.security.MessageDigest
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -31,6 +32,17 @@ val buildGitStatusInfo = runCatching {
 val (buildGitStatus, buildGitStatusKnown) = buildGitStatusInfo
 
 
+val localOneTurnToken = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+}.getProperty("oneTurn.token", "")
+require(localOneTurnToken.matches(Regex("[A-Za-z0-9_-]{0,128}")))
+
+kotlin {
+    sourceSets.named("debug") {
+        kotlin.srcDir(rootProject.file("lab/dji_rs_probe/src/shared/kotlin"))
+    }
+}
+
 android {
     namespace = "ru.university.dronecv"
     compileSdk = 35
@@ -43,6 +55,7 @@ android {
         versionName = "0.5.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "ONE_TURN_TOKEN", "\"\"")
         buildConfigField("String", "BUILD_GIT_SHA", "\"$buildGitSha\"")
         buildConfigField("boolean", "BUILD_GIT_DIRTY", buildGitStatus.isNotBlank().toString())
         buildConfigField("boolean", "BUILD_GIT_STATUS_KNOWN", buildGitStatusKnown.toString())
@@ -56,6 +69,7 @@ android {
     }
 
     buildTypes {
+        debug { buildConfigField("String", "ONE_TURN_TOKEN", "\"$localOneTurnToken\"") }
         release {
             isMinifyEnabled = false
             proguardFiles(
