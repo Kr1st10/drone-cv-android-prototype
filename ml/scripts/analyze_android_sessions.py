@@ -450,7 +450,7 @@ def archived_diagnostic(path, timeline):
 
 
 def main():
-    from timeline_analysis import read_timeline
+    from timeline_analysis import centering_summary_text, read_timeline
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('inputs', nargs='+', type=Path)
     p.add_argument('--output', type=Path, required=True)
@@ -474,6 +474,9 @@ def main():
             raise ValueError('Historical or motion timeline has no full diagnostic_report; performance and thread comparison unavailable')
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps({'schema': 'dronecv-timeline-analysis-1', 'sessions': timelines}, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
+        for timeline in timelines:
+            if 'centering_simulation' in timeline:
+                print(centering_summary_text(timeline['centering_simulation'], timeline['errors']))
         if any(not r['recording_complete'] for r in timelines):
             raise SystemExit('Incomplete timeline; see output')
         return

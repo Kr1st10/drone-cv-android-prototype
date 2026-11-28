@@ -47,8 +47,7 @@ fun DroneApp() {
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets)) {
             when (mode) {
                 0 -> PhotoScreen(photos)
-                1 -> CameraScreen(cameraConfidence, cameraThreads, { cameraThreads = it },
-                    onOpenJournals = { mode = 2 }) { cameraConfidence = it }
+                1 -> CameraScreen(cameraConfidence, cameraThreads, { cameraThreads = it }) { cameraConfidence = it }
                 else -> JournalArchiveScreen(archive)
             }
         }

@@ -49,9 +49,15 @@
     try{renderSelectedResult();}catch(e){status('Не удалось показать результат журнала: '+e.message);}
   }
   function renderSelectedResult(){
-    const j=journals[selected];
-    try{SyncCheckUI.renderJournal(j||null);}catch(e){$('syncCheckStatus').textContent='Не удалось показать журнал: '+e.message;}
+    const j=journals[selected],simulation=j?.data.centering_simulation;
+    try{SyncCheckUI.renderJournal(simulation?null:j||null);}catch(e){$('syncCheckStatus').textContent='Не удалось показать журнал: '+e.message;}
     if(!j){$('reportSyncStatus').textContent='Читаемость sync-кода: журнал не загружен.';$('reportTimingStatus').textContent='Временное сопоставление: журнал не загружен.';$('reportCalibrationStatus').textContent=$('motionCameraStatus').textContent='Камерой не проверено.';return;}
+    if(simulation){
+      $('reportSyncStatus').textContent=$('reportTimingStatus').textContent=$('reportCalibrationStatus').textContent='';
+      $('motionCameraStatus').textContent='Камерой не проверено.';
+      status(j.name+' · '+simulation.label);
+      return;
+    }
     try{const r=MotionJournalStatus.codeReadability(j.data);$('reportSyncStatus').textContent=`${j.name}: sync-код считан в ${r.read_frames} из ${r.total_frames} кадров; доля прочитанных кодов по всему файлу ${r.total_frames?(100*r.read_frames/r.total_frames).toFixed(1)+'%':'недостаточно данных'}; без кода ${r.missing_markers}; run_id: ${r.run_ids.join(', ')||'не обнаружены'}. ${r.recording_complete&&r.experiment_complete&&!r.truncated?'Запись и опыт завершены.':'Журнал или опыт неполный. '+(r.completeness_reason||'')}`;}catch(e){$('reportSyncStatus').textContent=`${j.name}: читаемость недоступна: ${e.message}`;}
     let run;
     try{run=match(j);const t=MotionJournalStatus.timing(run,j.data);$('reportTimingStatus').textContent=`${j.name}: сопоставлено ${t.matched_frames}, неизвестные шаги ${t.unknown_step_frames}, чужие ID ${t.foreign_run_frames}; порядок ${t.marker_order_invalid?'нарушен':'сохранён'}; без времени экспозиции ${t.untimed_frames}; зависших шагов ${t.stalled_step_ids.length}. Синхронизация: ${t.timing_status}; смещение ${ms(t.offset_lower_ms)}…${ms(t.offset_upper_ms)} мс, неопределённость ${ms(t.offset_uncertainty_ms)} мс. ${t.reason} ${t.completeness_reason?'Журнал или эталон неполный. '+t.completeness_reason:''}`;}catch(e){$('reportTimingStatus').textContent=`${j.name}: временное сопоставление недоступно: ${e.message}`;}
@@ -86,17 +92,44 @@
     (r.capture?`Первый захват: ${eventText(r.capture)}\nОчистка: ${eventText(r.cleanup)}\nПовторный захват: ${eventText(r.reacquisition)}\n`:'')+
     `Sync за весь журнал: сопоставлено ${r.matched_frames}/${r.total_frames}, без кода ${r.missing_markers}, чужие/неизвестные ${r.unmatched_markers}, порядок ${r.marker_order_invalid?'нарушен':'сохранён'}, синхронизация ${r.timing_status}\n`+
     `Ошибка центра (условно на доступных рамках): p50 ${ms(r.center_error?.p50_px)}, p95 ${ms(r.center_error?.p95_px)}. Подробности и покрытие в JSON. ${r.decision_reason||''}\n`).join('\n'):'';}
+  function simulationText(result){
+    const offset=result.offset_percent==null?'нет данных':result.offset_percent+'%';
+    return `${result.journal} · ${result.label}\nЗавершённых шагов: ${result.completed_steps}\n`+
+      `Итоговое смещение: ${offset}\nПричина остановки: ${result.stop_label??'нет данных'}\n`+
+      (result.confirmed?'Запись цела.':'Итог не подтверждён. '+
+        (result.integrity_errors.length?result.integrity_errors.join(' '):'Запись неполная или содержит пропуски.'));
+  }
   function calculate(){
-    invalidate();pending=[];const items=[];
+    invalidate();pending=[];const items=[],simulations=[];
     if(!journals.length){status('Загрузите журнал телефона.');return false;}
-    for(const j of journals){try{
-      const run=match(j);if(!j.processed)throw Error('Калибровка ещё обрабатывается.');if(j.image_error)throw Error(j.image_error);pointsFor(j,run);
-      const result=['dronecv-motion-run-2','dronecv-motion-run-3'].includes(run.schema)?MotionReportV4.analyze(run,j.data,j.points):MotionReport.analyze(run,j.data,j.points);
-      if(window.MotionABUI&&j.raw){const token=version;MotionABUI.capture(j,run,result,()=>token===version).catch(e=>MotionABUI.notice(e.message));}
-      items.push({run,result:{journal:j.name,calibration_points:j.points,calibration_method:j.manual?'manual':'automatic',calibration:j.calibration,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result}});
-    }catch(e){pending.push(`${j.name}: ${e.message}`);window.MotionABUI?.analysisError(j,e.message);}}
-    const results=items.map(i=>i.result);$('reportOutput').textContent=resultText(results)+(pending.length?'\nМетрики недоступны для:\n'+pending.join('\n'):'');
-    if(!pending.length){const legacyOnly=items.every(i=>i.run.schema==='dronecv-motion-run-1');output={schema:legacyOnly?'dronecv-motion-report-4':items.some(i=>i.run.schema==='dronecv-motion-run-3')?'dronecv-motion-scenario-report-2':'dronecv-motion-scenario-report-1',runs:results};if(legacyOnly){output.maxima=MotionReport.maxima(items);$('reportOutput').textContent+='\n'+output.maxima.map(m=>`ограничение скорости ${m.max_speed_px_s} px/с: ${m.max_acceleration_px_s2??'не определено'} px/с²`).join('\n');}$('reportExport').disabled=false;}
+    for(const j of journals){
+      if(j.data.centering_simulation){
+        simulations.push({journal:j.name,...j.data.centering_simulation,recording_complete:j.data.recording_complete,
+          event_integrity:j.data.event_integrity});
+        continue;
+      }
+      try{
+        const run=match(j);if(!j.processed)throw Error('Калибровка ещё обрабатывается.');if(j.image_error)throw Error(j.image_error);pointsFor(j,run);
+        const result=['dronecv-motion-run-2','dronecv-motion-run-3'].includes(run.schema)?MotionReportV4.analyze(run,j.data,j.points):MotionReport.analyze(run,j.data,j.points);
+        if(window.MotionABUI&&j.raw){const token=version;MotionABUI.capture(j,run,result,()=>token===version).catch(e=>MotionABUI.notice(e.message));}
+        items.push({run,result:{journal:j.name,calibration_points:j.points,calibration_method:j.manual?'manual':'automatic',calibration:j.calibration,scenario:run.scenario,photo:run.photo,conditions:run.conditions,...result}});
+      }catch(e){pending.push(`${j.name}: ${e.message}`);window.MotionABUI?.analysisError(j,e.message);}
+    }
+    const results=items.map(i=>i.result);
+    $('reportOutput').textContent=[resultText(results),...simulations.map(simulationText)].filter(Boolean).join('\n\n')+
+      (pending.length?'\nМетрики недоступны для:\n'+pending.join('\n'):'');
+    if(!pending.length){
+      const simulationOnly=items.length===0 && simulations.length>0,legacyOnly=items.every(i=>i.run.schema==='dronecv-motion-run-1');
+      const schema=simulationOnly?'dronecv-centering-simulation-report-1':legacyOnly?'dronecv-motion-report-4':
+        items.some(i=>i.run.schema==='dronecv-motion-run-3')?'dronecv-motion-scenario-report-2':'dronecv-motion-scenario-report-1';
+      output={schema,runs:results};
+      if(simulations.length)output.simulations=simulations;
+      if(legacyOnly&&!simulationOnly){
+        output.maxima=MotionReport.maxima(items);
+        $('reportOutput').textContent+='\n'+output.maxima.map(m=>`ограничение скорости ${m.max_speed_px_s} px/с: ${m.max_acceleration_px_s2??'не определено'} px/с²`).join('\n');
+      }
+      $('reportExport').disabled=false;
+    }
     renderSelected();return !!output;
   }
   async function loadImage(j){
@@ -107,7 +140,7 @@
     return img;
   }
   async function show(token=version){
-    const ticket=++viewVersion,j=journals[selected];image=null;canvas.width=canvas.height=0;renderSelected();if(!j)return;
+    const ticket=++viewVersion,j=journals[selected];image=null;canvas.width=canvas.height=0;renderSelected();if(!j||j.data.centering_simulation)return;
     try{const img=await loadImage(j);if(token!==version||ticket!==viewVersion||j!==journals[selected])return;image=img;canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;draw();}
     catch(e){if(token!==version||ticket!==viewVersion||j!==journals[selected])return;j.image_error=e.message;j.processed=true;calculate();renderSelected();}
   }
@@ -115,6 +148,7 @@
     processing=true;
     for(const j of journals){
       if(token!==version)return;
+      if(j.data.centering_simulation)continue;
       try{const img=await loadImage(j);if(token!==version)return;if(img.naturalWidth*img.naturalHeight>16777216)throw Error('Калибровочный кадр слишком большой.');const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const context=c.getContext('2d');context.drawImage(img,0,0);j.calibration=MotionCalibration.detect(context.getImageData(0,0,c.width,c.height));j.image_error=null;}
       catch(e){if(token!==version)return;j.image_error=e.message;}
       j.processed=true;calculate();if(j===journals[selected])await show(token);
@@ -133,7 +167,7 @@
     try{const ab=window.MotionABUI?.enabled(),files=[...e.target.files];if(ab&&files.reduce((n,f)=>n+f.size,0)>64*1024*1024)throw Error('A/B: пакет журналов больше 64 МиБ. Импортируйте меньше файлов.');const loaded=await Promise.all(files.map(async f=>{const data=await parseJournal(f);try{MotionJournalStatus.framesOf(data);}catch(e){throw Error(`${f.name}: ${e.message}`);}return {name:f.name,raw:ab?new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(await f.arrayBuffer()):null,data,points:[],manual:false,processed:false,calibration:null,image_error:null};}));if(token!==version)return;
       journals=loaded;const select=$('reportSelect');journals.forEach((j,i)=>{const o=document.createElement('option');o.value=i;o.textContent=j.name;select.append(o);});renderSelected();
       try{const stored=await MotionStore.list();if(token!==version)return;runs=stored;window.MotionABUI?.references(stored);}catch(e){if(token!==version)return;referenceNotice='Хранилище эталонов недоступно: '+e.message;}
-      if(ab)await MotionABUI.ingest(journals,()=>token===version);if(token!==version)return;
+      if(ab){const cameraJournals=journals.filter(j=>!j.data.centering_simulation);if(cameraJournals.length)await MotionABUI.ingest(cameraJournals,()=>token===version);}if(token!==version)return;
       await processAll(token);}
     catch(e){if(token===version){processing=false;status(e.message);}}
     finally{if(token===version)$('reportSelect').disabled=false;}

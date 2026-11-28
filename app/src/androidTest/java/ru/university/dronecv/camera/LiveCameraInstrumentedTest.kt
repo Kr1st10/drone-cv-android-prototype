@@ -15,7 +15,10 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -61,8 +64,16 @@ class LiveCameraInstrumentedTest {
 
     private fun openAndStart() {
         compose.onNodeWithText("Камера").performClick()
-        compose.onNodeWithText("Начать детекцию").performClick()
+        compose.onNodeWithText("Начать детекцию").performTouchInput { click() }
+        showDiagnostics()
         awaitResult()
+    }
+
+    private fun showDiagnostics() {
+        val panel = compose.onNodeWithTag("camera-diagnostics")
+        if (panel.fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription) != "Развёрнуто") {
+            panel.performClick()
+        }
     }
 
     private fun awaitResult() {
@@ -84,28 +95,59 @@ class LiveCameraInstrumentedTest {
         compose.waitForIdle()
     }
 
+    @Test fun expandedPanelsKeepPreviewBoundsAndLastSettingReachable() {
+        compose.onNodeWithText("Камера").performClick()
+        val preview = compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("camera-settings").performClick()
+        compose.onNodeWithTag("camera-panel-expand").performTouchInput { swipeUp() }
+        compose.onNodeWithText("Свернуть").assertIsDisplayed()
+        compose.onNodeWithTag("zoom-five").performScrollTo().assertIsDisplayed()
+        assertEquals(preview, compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("camera-panel-expand").performClick()
+        assertEquals(preview, compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("camera-diagnostics").performClick()
+        compose.onNodeWithTag("camera-panel-expand").performClick()
+        compose.onNodeWithTag("build-identity").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Свернуть").assertIsDisplayed()
+        compose.onNodeWithTag("physical-centering-toggle").assertIsDisplayed()
+        assertEquals(preview, compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("camera-panel-expand").performClick()
+        assertEquals(preview, compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot)
+    }
+
     @Test fun cameraRunsRealModelAndStopClearsLateResults() {
         compose.onNodeWithText("Камера").performClick()
-        compose.onNodeWithTag("build-identity").assertIsDisplayed()
-        compose.onNodeWithText(ru.university.dronecv.PackagedBuild.identity.label()).assertExists()
+        compose.onNodeWithTag("build-identity").assertDoesNotExist()
+        compose.onNodeWithText("Открыть журналы").assertDoesNotExist()
         val initialPreview = compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot
-        openAndStart()
+        val toggle = compose.onNodeWithTag("camera-detection-toggle")
+        val initialToggle = toggle.fetchSemanticsNode().boundsInRoot
+        toggle.assertIsDisplayed().performTouchInput { click() }
+        showDiagnostics()
+        awaitResult()
+        compose.onNodeWithTag("diagnostic-start").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("build-identity").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(ru.university.dronecv.PackagedBuild.identity.label()).assertExists()
+        assertEquals(initialToggle, toggle.fetchSemanticsNode().boundsInRoot)
         assertEquals(initialPreview, compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithTag("live-frame-ready").assertExists()
         // LK can publish a search observation without a box; YOLO completion does not imply a fresh signal.
         compose.waitUntil(30_000) {
             compose.onAllNodesWithTag("capture-to-signal").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithContentDescription("Порог уверенности детектора")
+        compose.onNodeWithTag("camera-settings").performClick()
+        compose.onNodeWithContentDescription("Порог уверенности детектора").performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0.8f) }
-        compose.onNodeWithText("Confidence: 80%").assertExists()
+        compose.onNodeWithText("Порог уверенности: 80%").assertExists()
+        showDiagnostics()
         awaitResult()
-        compose.onNodeWithText("Остановить").performClick()
+        assertEquals(initialToggle, toggle.fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithText("Остановить детекцию").performTouchInput { click() }
         drainNativeWork()
         compose.onNodeWithText("Детекция остановлена").assertExists()
         compose.onNodeWithTag("live-frame-ready").assertDoesNotExist()
         compose.onNodeWithTag("capture-to-signal").assertDoesNotExist()
-        compose.onNodeWithTag("build-identity").performScrollTo().assertIsDisplayed()
+        assertEquals(initialToggle, toggle.fetchSemanticsNode().boundsInRoot)
         assertEquals(initialPreview, compose.onNodeWithTag("live-preview-region").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithText("Начать детекцию").performClick()
         awaitResult()
@@ -115,32 +157,38 @@ class LiveCameraInstrumentedTest {
         compose.onNodeWithTag("live-frame-ready").assertDoesNotExist()
         compose.onNodeWithText("Выбрать фото").assertExists()
         compose.onNodeWithText("Камера").performClick()
-        compose.onNodeWithText("Confidence: 80%").assertExists()
+        compose.onNodeWithTag("camera-settings").performClick()
+        compose.onNodeWithText("Порог уверенности: 80%").assertExists()
         compose.onNodeWithText("Начать детекцию").assertExists()
     }
 
     @Test fun threadSwitchStopsBeforeRecreatingAndCameraRunsAgain() {
         openAndStart()
+        compose.onNodeWithTag("camera-settings").performClick()
         compose.onNodeWithTag("ort-threads-1").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithText("Остановить").performScrollTo().performClick()
+        compose.onNodeWithText("Остановить детекцию").performTouchInput { click() }
         drainNativeWork()
         for (threads in listOf(1, 4, 2)) {
             compose.onNodeWithTag("ort-threads-$threads").performScrollTo().performClick()
             drainNativeWork()
             compose.onNodeWithText("Потоки ORT: $threads").assertExists()
-            compose.onNodeWithText("Начать детекцию").performScrollTo().performClick()
+            compose.onNodeWithText("Начать детекцию").performTouchInput { click() }
+            showDiagnostics()
             awaitResult()
-            compose.onNodeWithText("Остановить").performScrollTo().performClick()
+            compose.onNodeWithText("Остановить детекцию").performTouchInput { click() }
             drainNativeWork()
+            compose.onNodeWithTag("camera-settings").performClick()
         }
     }
 
     @Test fun zoomRequestKeepsCameraRunningAndCanReturnToOne() {
         openAndStart()
+        compose.onNodeWithTag("camera-settings").performClick()
         compose.onNodeWithTag("zoom-five").performScrollTo().performClick()
         // 5x may be unsupported on the emulator; either an explanation or a successful rebind is valid.
         compose.waitUntil(90_000) { compose.onAllNodesWithText("Переключение камеры…").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag("zoom-one").performScrollTo().performClick()
+        showDiagnostics()
         awaitResult()
         compose.onNodeWithTag("live-frame-ready").assertExists()
     }
@@ -173,6 +221,7 @@ class LiveCameraInstrumentedTest {
         drainNativeWork()
         compose.onNodeWithTag("live-frame-ready").assertDoesNotExist()
         compose.onNodeWithText("Камера").performClick()
+        showDiagnostics()
         compose.onNodeWithText("Прервана:", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("diagnostic-stop").assertDoesNotExist()
 
@@ -212,13 +261,16 @@ class LiveCameraInstrumentedTest {
                 compose.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
                     compose.activity.window.decorView.display.rotation != oldRotation
             }
+            showDiagnostics()
             awaitResult()
         }
         compose.activityRule.scenario.recreate()
+        showDiagnostics()
         awaitResult()
-        compose.onNodeWithText("Остановить").performClick()
+        compose.onNodeWithText("Остановить детекцию").performTouchInput { click() }
         compose.activityRule.scenario.recreate()
         drainNativeWork()
+        showDiagnostics()
         compose.onNodeWithText("Детекция остановлена").assertExists()
         compose.onNodeWithTag("live-frame-ready").assertDoesNotExist()
         assertEquals(Configuration.ORIENTATION_LANDSCAPE, compose.activity.resources.configuration.orientation)

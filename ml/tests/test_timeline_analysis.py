@@ -1,3 +1,4 @@
+from copy import deepcopy
 import json
 import sys
 import tempfile
@@ -5,10 +6,100 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from timeline_analysis import read_timeline, publication_timing
+from timeline_analysis import analyze_timeline, read_timeline, publication_timing
 
 
 class TimelineAnalysisTest(unittest.TestCase):
+    def test_centering_simulation_uses_shared_timeline_integrity(self):
+        events = [
+            ('header', {'start_ns': '100', 'mode': 'centering_simulation', 'simulation': True}),
+            ('centering_simulation', {'kind': 'frame', 'offset_percent': 38}),
+            ('centering_simulation', {'kind': 'step_requested', 'step': 1, 'offset_percent': 38}),
+            ('centering_simulation', {'kind': 'step_completed', 'step': 1}),
+            ('centering_simulation', {'kind': 'frame_ignored', 'offset_percent': 38}),
+            ('centering_simulation', {'kind': 'finished', 'completed_steps': 1, 'offset_percent': 0,
+                                      'reason': 'centered'}),
+            ('session_end', {'stop_ns': '200', 'recording_complete': True, 'dropped_count': '0',
+                             'accepted_count': '6', 'written_count': '6', 'reason': 'centered'}),
+        ]
+        rows = [dict(schema='dronecv-session-timeline-1', session_id='sim', event_id=str(i),
+                     event_ns='100', type=kind, data=data) for i, (kind, data) in enumerate(events, 1)]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'simulation.ndjson'
+
+            def read(records):
+                path.write_text(''.join(json.dumps(row) + '\n' for row in records))
+                return read_timeline(path)
+
+            result = read(rows)
+            self.assertTrue(result['recording_complete'])
+            self.assertEqual(result['centering_simulation'], dict(label='Симуляция DJI', completed_steps=1,
+                             offset_percent=0, stop_reason='centered', stop_label='Цель в зоне покоя',
+                             confirmed=True, integrity_errors=[]))
+            report = analyze_timeline(path, max_coordinate_age_ns=1)
+            self.assertEqual(report['centering_simulation'], result['centering_simulation'])
+            self.assertIsNone(report['metrics'])
+            cases = [
+                ('missing', 'отсутствует событие finished'),
+                ('duplicate', 'несколько событий finished'),
+                ('simulation after finished', 'Сразу после finished'),
+                ('metadata after finished', 'Сразу после finished'),
+                ('reason', 'Причины остановки в finished и session_end различаются'),
+                ('empty reason', 'непустой reason'),
+                ('steps', 'не совпадает с числом событий step_completed'),
+                ('fractional steps', 'целое неотрицательное число'),
+                ('boolean steps', 'целое неотрицательное число'),
+            ]
+            for case, expected in cases:
+                with self.subTest(case=case):
+                    edited = deepcopy(rows)
+                    if case == 'missing':
+                        edited.pop(-2)
+                    elif case == 'duplicate':
+                        edited.insert(-1, deepcopy(edited[-2]))
+                    elif case == 'simulation after finished':
+                        edited.insert(-1, deepcopy(edited[-3]))
+                    elif case == 'metadata after finished':
+                        edited.insert(-1, dict(edited[0], type='metadata', data={}))
+                    elif case == 'reason':
+                        edited[-1]['data']['reason'] = 'stopped'
+                    elif case == 'empty reason':
+                        edited[-2]['data']['reason'] = ' '
+                    else:
+                        edited[-2]['data']['completed_steps'] = {
+                            'steps': 2, 'fractional steps': 0.5, 'boolean steps': True,
+                        }[case]
+                    for i, row in enumerate(edited, 1):
+                        row['event_id'] = str(i)
+                    footer = edited[-1]['data']
+                    footer['accepted_count'] = footer['written_count'] = str(len(edited) - 1)
+                    invalid = read(edited)
+                    summary = invalid['centering_simulation']
+                    self.assertFalse(invalid['recording_complete'])
+                    self.assertFalse(summary['confirmed'])
+                    self.assertEqual(invalid['errors'], summary['integrity_errors'])
+                    self.assertEqual(len(invalid['errors']), 1)
+                    self.assertIn(expected, invalid['errors'][0])
+
+            stopped = deepcopy(rows)
+            stopped[-2]['data']['reason'] = stopped[-1]['data']['reason'] = 'stopped'
+            stopped[-1]['data']['interrupted'] = True
+            stopped_summary = read(stopped)
+            self.assertTrue(stopped_summary['recording_complete'])
+            self.assertTrue(stopped_summary['centering_simulation']['confirmed'])
+            self.assertEqual(stopped_summary['centering_simulation']['stop_label'], 'Остановлено')
+
+            missing = read(rows[:3] + rows[4:])
+            self.assertFalse(missing['recording_complete'])
+            self.assertIn('event ID gap or reversal', missing['errors'])
+            self.assertEqual(missing['centering_simulation']['completed_steps'], 0)
+            self.assertIn('missing session_end', read(rows[:-1])['errors'])
+            rows[-1]['data']['dropped_count'] = '1'
+            self.assertFalse(read(rows)['recording_complete'])
+            rows[0]['data']['mode'] = 'yolo'
+            with self.assertRaisesRegex(ValueError, 'unsupported timeline record type: centering_simulation'):
+                read(rows)
+
     def test_assignment_times_and_late_snapshot_preserve_observation(self):
         base = 90071992547409930
         data = dict(timing_semantics='stateflow_assignment_v1', reason='update',
@@ -59,6 +150,28 @@ class TimelineAnalysisTest(unittest.TestCase):
             self.assertEqual(results[0]['intervals'], results[1]['intervals'])
             self.assertNotIn('dry_run', results[0]['counts'])
             self.assertEqual(results[1]['counts']['dry_run'], 1)
+
+    def test_optional_one_turn_does_not_change_legacy_tracking_intervals(self):
+        header = ('header', 100, {'start_ns': '100', 'clock': 'elapsed_realtime_ns'})
+        state = ('state', 110, {'publication_ns': '110', 'reason': 'update', 'box': [0, 0, .5, .5]})
+        one_turn = ('one_turn', 120, {'decision_ns': '120', 'action': 'STOP', 'reason': 'TRACKING_CLEARED'})
+        with tempfile.TemporaryDirectory() as tmp:
+            results = []
+            for extra in ([], [one_turn]):
+                rows = [header, state, *extra]
+                count = str(len(rows))
+                rows.append(('session_end', 130, dict(stop_ns='130', recording_complete=True,
+                    dropped_count='0', accepted_count=count, written_count=count)))
+                path = Path(tmp) / f'{count}.ndjson'
+                path.write_text(''.join(json.dumps(dict(schema='dronecv-session-timeline-1',
+                    session_id='s', event_id=str(i), event_ns=str(t), type=kind, data=data)) + '\n'
+                    for i, (kind, t, data) in enumerate(rows, 1)))
+                result = read_timeline(path)
+                self.assertTrue(result['recording_complete'], result['errors'])
+                results.append(result)
+            self.assertEqual(results[0]['intervals'], results[1]['intervals'])
+            self.assertNotIn('one_turn', results[0]['counts'])
+            self.assertEqual(results[1]['counts']['one_turn'], 1)
 
     def test_long_export_and_incomplete_tail(self):
         base = 90071992547409930
